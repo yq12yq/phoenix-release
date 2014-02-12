@@ -30,6 +30,18 @@
     <module>phoenix-pherf</module>
   </modules>
 
+  <distributionManagement>
+    <repository>
+        <id>${repoid}</id>
+        <name>${reponame}</name>
+        <url>${repourl}</url>
+    </repository>
+    <snapshotRepository>
+      <id>snapshot-repo</id>
+      <url>https://github.com/forcedotcom/phoenix/tree/maven-artifacts/raw/master/snapshots</url>
+    </snapshotRepository>
+  </distributionManagement>
+
   <repositories>
     <repository>
       <id>apache release</id>
