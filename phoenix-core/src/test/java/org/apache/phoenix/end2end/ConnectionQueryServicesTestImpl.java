@@ -20,15 +20,10 @@
 package org.apache.phoenix.end2end;
 
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.IntegrationTestingUtility;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -44,41 +39,20 @@ import org.apache.phoenix.query.QueryServices;
  * @since 0.1
  */
 public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl {
-    protected int NUM_SLAVES_BASE = 1; // number of slaves for the cluster
-    
-    private IntegrationTestingUtility util;
+    private HBaseTestingUtility util;
 
     public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info) throws SQLException {
         super(services, info);
     }
 
     private Configuration setupServer(Configuration config) throws Exception {
-        util =  new IntegrationTestingUtility(config);
-        util.initializeCluster(this.NUM_SLAVES_BASE);
+        util = new HBaseTestingUtility(config);
+        util.startMiniCluster();
         return util.getConfiguration();
     }
     
-    public boolean isDistributedCluster() {
-        Configuration conf = util.getConfiguration();
-        boolean isDistributedCluster = false;
-        isDistributedCluster = Boolean.parseBoolean(System.getProperty(util.IS_DISTRIBUTED_CLUSTER, "false"));
-        if (!isDistributedCluster) {
-          isDistributedCluster = conf.getBoolean(util.IS_DISTRIBUTED_CLUSTER, false);
-        }
-        return isDistributedCluster;
-    }
-    
     private void teardownServer() throws Exception {
-        if(isDistributedCluster()){
-            // remove all hbase tables
-            HBaseAdmin admin = util.getHBaseAdmin();
-            HTableDescriptor[] tables = admin.listTables();
-            for(HTableDescriptor table : tables){
-                util.deleteTable(table.getName());
-            }
-        } else {
-            util.restoreCluster();
-        }
+        util.shutdownMiniCluster();
     }
     
     @Override
