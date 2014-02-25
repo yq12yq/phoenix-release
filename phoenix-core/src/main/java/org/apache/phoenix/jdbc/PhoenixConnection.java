@@ -66,6 +66,7 @@ import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
@@ -79,6 +80,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -95,6 +98,8 @@ import org.apache.phoenix.util.SQLCloseables;
  * @since 0.1
  */
 public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {
+    private static final Logger logger = LoggerFactory.getLogger(PhoenixConnection.class);
+	
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
@@ -629,6 +634,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // we could modify this metadata in place since it's not shared.
         if (scn == null || scn > table.getTimeStamp()) {
             metaData = metaData.addTable(table);
+            logger.info("Table " + table + " has been added into metaData");
         }
         //Cascade through to connectionQueryServices too
         getQueryServices().addTable(table);

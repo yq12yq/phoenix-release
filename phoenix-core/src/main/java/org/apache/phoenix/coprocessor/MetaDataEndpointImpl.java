@@ -1101,7 +1101,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Map<ImmutableBytesPtr, PTable> metaDataCache =
                         GlobalCache.getInstance(this.env).getMetaDataCache();
                 PTable table = metaDataCache.get(cacheKey);
-                if (logger.isDebugEnabled()) {
+                if (true) {
                     if (table == null) {
                         logger.debug("Table " + Bytes.toStringBinary(key)
                                 + " not found in cache. Will build through scan");
@@ -1401,6 +1401,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         Map<ImmutableBytesPtr, PTable> metaDataCache =
                 GlobalCache.getInstance(this.env).getMetaDataCache();
         metaDataCache.clear();
+        logger.info("cache has been cleared for env:" + this.env);
     }
 
     @Override

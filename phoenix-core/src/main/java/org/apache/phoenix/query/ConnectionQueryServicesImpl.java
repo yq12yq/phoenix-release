@@ -315,6 +315,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         synchronized(latestMetaDataLock) {
             latestMetaData = latestMetaData.addTable(table);
+        	logger.info("Table " + table + " has been added into latestMetaData");
             latestMetaDataLock.notifyAll();
             return latestMetaData;
         }
@@ -1097,9 +1098,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             try {
                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                logger.info("Table " + QueryConstants.CREATE_SEQUENCE_METADATA + " is created");
             } catch (NewerTableAlreadyExistsException ignore) {
                 // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+            	logger.info("Table " + QueryConstants.CREATE_SEQUENCE_METADATA + 
+            			" already exists. Got NewerTableAlreadyExistsException", ignore);
             }
         } catch (SQLException e) {
             sqlE = e;
