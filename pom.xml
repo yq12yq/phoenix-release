@@ -244,8 +244,8 @@
             </includes>
             <replacements>
                 <replacement>
-                    <token>@phoenix.version@</token>
-                    <value>${project.version}</value>
+                    <token>@final.name@</token>
+                    <value>phoenix-${project.version}</value>
                 </replacement>
             </replacements>
         </configuration>
