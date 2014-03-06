@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -37,6 +36,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -114,6 +114,19 @@ public class MutableIndexTest extends BaseMutableIndexTest {
             assertEquals(1, rs.getInt(1));
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
+            assertFalse(rs.next());
+            
+            query = "SELECT date_col from " + DATA_TABLE_FULL_NAME + " order by date_col" ;
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+            
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(date, rs.getDate(1));
+            assertTrue(rs.next());
+            assertEquals(new Date(date.getTime() + TestUtil.MILLIS_IN_DAY), rs.getDate(1));
+            assertTrue(rs.next());
+            assertEquals(new Date(date.getTime() + 2 * TestUtil.MILLIS_IN_DAY), rs.getDate(1));
             assertFalse(rs.next());
         } finally {
             conn.close();
@@ -766,6 +779,43 @@ public class MutableIndexTest extends BaseMutableIndexTest {
 	        String query = "SELECT COUNT(COL1) FROM TEST WHERE COL1 IN (1,25,50,75,100)"; 
 	        ResultSet rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testIndexWithDecimalCol() throws Exception {
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            Date date = new Date(System.currentTimeMillis());
+            
+            createTestTable();
+            populateTestTable(date);
+            String ddl = "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+            
+            String query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + DATA_TABLE_FULL_NAME ;
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + INDEX_TABLE_FULL_NAME, QueryUtil.getExplainPlan(rs));
+            
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(new BigDecimal("1.1"), rs.getBigDecimal(1));
+            assertEquals(new BigDecimal("2.1"), rs.getBigDecimal(2));
+            assertEquals(new BigDecimal("3.1"), rs.getBigDecimal(3));
+            assertTrue(rs.next());
+            assertEquals(new BigDecimal("2.2"), rs.getBigDecimal(1));
+            assertEquals(new BigDecimal("3.2"), rs.getBigDecimal(2));
+            assertEquals(new BigDecimal("4.2"), rs.getBigDecimal(3));
+            assertTrue(rs.next());
+            assertEquals(new BigDecimal("3.3"), rs.getBigDecimal(1));
+            assertEquals(new BigDecimal("4.3"), rs.getBigDecimal(2));
+            assertEquals(new BigDecimal("5.3"), rs.getBigDecimal(3));
+            assertFalse(rs.next());
         } finally {
             conn.close();
         }

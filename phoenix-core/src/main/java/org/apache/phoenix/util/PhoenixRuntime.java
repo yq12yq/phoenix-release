@@ -1,6 +1,4 @@
 /*
- * Copyright 2014 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -46,6 +44,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 
@@ -147,7 +146,7 @@ public class PhoenixRuntime {
             String tableName = null;
             List<String> columns = null;
             boolean isStrict = false;
-            List<String> delimiter = new ArrayList<String>();
+            List<String> customMetaCharacters = new ArrayList<String>();
 
             int i = 0;
             for (; i < args.length; i++) {
@@ -175,7 +174,7 @@ public class PhoenixRuntime {
                 } else if (CSV_OPTION.equals(args[i])) {
                     for(int j=0; j < 3; j++) {
                         if(args[++i].length()==1){
-                            delimiter.add(args[i]);
+                            customMetaCharacters.add(args[i]);
                         } else {
                             usageError();
                         }
@@ -200,7 +199,8 @@ public class PhoenixRuntime {
                     if (tableName == null) {
                         tableName = fileName.substring(fileName.lastIndexOf(File.separatorChar) + 1, fileName.length()-CSV_FILE_EXT.length());
                     }
-                    CSVLoader csvLoader = new CSVLoader(conn, tableName, columns, isStrict, delimiter);
+                    CSVCommonsLoader csvLoader = 
+                    		new CSVCommonsLoader(conn, tableName, columns, isStrict, customMetaCharacters);
                     csvLoader.upsert(fileName);
                 } else {
                     usageError();
@@ -228,6 +228,8 @@ public class PhoenixRuntime {
             System.exit(0);
         }
     }
+
+    public static final String PHOENIX_TEST_DRIVER_URL_PARAM = "test=true";
 
     private PhoenixRuntime() {
     }
@@ -321,7 +323,7 @@ public class PhoenixRuntime {
         PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         try {
-            table = pconn.getPMetaData().getTable(name);
+            table = pconn.getMetaDataCache().getTable(new PTableKey(pconn.getTenantId(), name));
         } catch (TableNotFoundException e) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
             String tableName = SchemaUtil.getTableNameFromFullName(name);
