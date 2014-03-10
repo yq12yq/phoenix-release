@@ -93,7 +93,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -124,6 +123,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -176,9 +176,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
     private static final String OLD_DEFAULT_COLUMN_FAMILY = "_0";
     private static final byte[] OLD_DEFAULT_COLUMN_FAMILY_BYTES = Bytes.toBytes(OLD_DEFAULT_COLUMN_FAMILY);
-    private static final byte[] SYSTEM_TABLE_NAME_BYTES = SchemaUtil.getTableNameAsBytes("SYSTEM", "TABLE");
+    private static final byte[] OLD_SYSTEM_TABLE_NAME_BYTES = SchemaUtil.getTableNameAsBytes("SYSTEM", "TABLE");
     // Don't use SYSTEM as the schema name, otherwise we'll treat it as a system table
-    private static final String SYSTEM_TABLE_AS_VIEW_NAME = SchemaUtil.getTableName("META", "\"TABLE\"");
+    private static final String OLD_SYSTEM_TABLE_AS_VIEW_NAME = SchemaUtil.getTableName("META", "\"TABLE\"");
     
     public static final String UPGRADE_TO_3_0 = "UpgradeTo30";
     public static final String UPGRADE_TO_2_2 = "UpgradeTo22";
@@ -528,6 +528,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private static final String OLD_PACKAGE = "com.salesforce.";
     private static final String NEW_PACKAGE = "org.apache.";
+    private static final String OLD_INDEXER_CLASS_NAME = "com.salesforce.hbase.index.Indexer";
     
     private HTableDescriptor generateTableDescriptor(byte[] tableName, HTableDescriptor existingDesc, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
         String defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);                
@@ -574,20 +575,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType) throws SQLException {
         // The phoenix jar must be available on HBase classpath
         try {
+            // Hack to detect that we're installing view on old SYSTEM.TABLE for conversion.
+            // In this case, we do not want to uninstall the old coprocessors.
+            boolean isOldSysTable = Bytes.compareTo(OLD_SYSTEM_TABLE_NAME_BYTES,tableName) == 0;
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                descriptor.removeCoprocessor(ScanRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(ScanRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                descriptor.removeCoprocessor(UngroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(UngroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                descriptor.removeCoprocessor(GroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(GroupedAggregateRegionObserver.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, 1, null);
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                descriptor.removeCoprocessor(ServerCachingEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(ServerCachingEndpointImpl.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                }
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
             
@@ -595,14 +607,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             descriptor.removeCoprocessor("com.salesforce.phoenix.join.HashJoiningRegionObserver");
             // Remove indexing coprocessor if on VIEW or INDEX, as we may have added this by mistake in 2.x versions
             if (tableType == PTableType.INDEX || tableType == PTableType.VIEW) {
-                descriptor.removeCoprocessor(Indexer.class.getName());
-                descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(Indexer.class.getName());
+                    descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
+                }
             }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
-                descriptor.removeCoprocessor(Indexer.class.getName().replace(NEW_PACKAGE, OLD_PACKAGE));
+                if (!isOldSysTable) {
+                    descriptor.removeCoprocessor(OLD_INDEXER_CLASS_NAME);
+                }
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
@@ -916,6 +932,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw new SQLException(t);
         }
     }
+    
+    // Our property values are translated using toString, so we need to "string-ify" this.
+    private static final String TRUE_BYTES_AS_STRING = Bytes.toString(PDataType.TRUE_BYTES);
 
     private void ensureViewIndexTableCreated(byte[] physicalTableName, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, long timestamp) throws SQLException {
         Long maxFileSize = (Long)tableProps.get(HTableDescriptor.MAX_FILESIZE);
@@ -934,7 +953,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         long indexMaxFileSize = maxFileSize * indexMaxFileSizePerc / 100;
         tableProps.put(HTableDescriptor.MAX_FILESIZE, indexMaxFileSize);
-        tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, PDataType.TRUE_BYTES);
+        tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
         // Only use splits if table is salted, otherwise it may not be applicable
         HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits, false);
         if (desc != null) {
@@ -1248,14 +1267,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
         if (result.getMutationCode() == MutationCode.COLUMN_NOT_FOUND) { // Success
             // Flush the table if transitioning DISABLE_WAL from TRUE to FALSE
-            if (Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(
-                    MetaDataUtil.getMutationKVByteValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)))) {
+            if (  MetaDataUtil.getMutationValue(m,PhoenixDatabaseMetaData.DISABLE_WAL_BYTES, kvBuilder, ptr)
+               && Boolean.FALSE.equals(PDataType.BOOLEAN.toObject(ptr))) {
                 flushTable(table.getPhysicalName().getBytes());
             }
             
             if (tableType == PTableType.TABLE) {
                 // If we're changing MULTI_TENANT to true or false, create or drop the view index table
-                if (MetaDataUtil.getMutationKeyValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
+                if (MetaDataUtil.getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, kvBuilder, ptr)){
                     long timestamp = MetaDataUtil.getClientTimeStamp(m);
                     if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()))) {
                         this.ensureViewIndexTableCreated(table, timestamp);
@@ -1503,7 +1522,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, int cacheSize, long timestamp) 
+    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long timestamp) 
             throws SQLException {
         SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
         Sequence newSequences = new Sequence(sequenceKey);
@@ -1878,7 +1897,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     
     private static void addViewForSystemTable(Connection conn) throws SQLException {
-        conn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + SYSTEM_TABLE_AS_VIEW_NAME + "(\n" +
+        conn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME + "(\n" +
                 "TABLE_SCHEM VARCHAR NULL,\n" + 
                 "TABLE_NAME VARCHAR NOT NULL,\n" + 
                 "COLUMN_NAME VARCHAR NULL,\n" + 
@@ -1926,6 +1945,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
+    private static final Integer DEFAULT_PRECISION = PDataType.MAX_PRECISION;
+    private static final Integer DEFAULT_SCALE = PDataType.DEFAULT_SCALE;
+    
     private void upgradeMetaDataTo3_0(String url, Properties props) throws SQLException {
         if (upgradeWhiteList == null) {
             return;
@@ -1964,7 +1986,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     KEY_SEQ + "," +
                     LINK_TYPE + ")\n" + 
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            StringBuilder buf = new StringBuilder("SELECT * FROM " + SYSTEM_TABLE_AS_VIEW_NAME + "\n");
+            StringBuilder buf = new StringBuilder("SELECT * FROM " + OLD_SYSTEM_TABLE_AS_VIEW_NAME + "\n");
             boolean createdView = false;
             try {
                 addWhereClauseForUpgrade3_0(upgradeWhiteList, buf);
@@ -2010,28 +2032,46 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     /* 
                      * Convert from old to new format:
+                     * - sql date types to unsigend date types
+                     * - don't persist maxLength and scale for non decimal numbers
+                     * - don't persist default precision for decimal
                      */
-                    // Convert sqlDataType if data/time type
-                    Integer dataType = (Integer)rs.getObject(DATA_TYPE);
-                    if (dataType != null) {
-                        switch (PDataType.fromTypeId(dataType)) {
+                    Integer maxLength = (Integer)rs.getObject(COLUMN_SIZE);
+                    Integer scale = (Integer)rs.getObject(DECIMAL_DIGITS);
+                    Integer dataTypeNum = (Integer)rs.getObject(DATA_TYPE);
+                    if (dataTypeNum != null) {
+                        PDataType dataType = PDataType.fromTypeId(dataTypeNum);
+                        switch (dataType) {
+                            case DECIMAL:
+                                if (DEFAULT_PRECISION.equals(maxLength) && DEFAULT_SCALE.equals(scale)) {
+                                    maxLength = null;
+                                    scale = null;
+                                }
+                                break;
                             case DATE:
-                                dataType = PDataType.UNSIGNED_DATE.getSqlType();
+                                dataTypeNum = PDataType.UNSIGNED_DATE.getSqlType();
                                 break;
                             case TIME:
-                                dataType = PDataType.UNSIGNED_TIME.getSqlType();
+                                dataTypeNum = PDataType.UNSIGNED_TIME.getSqlType();
                                 break;
                             case TIMESTAMP:
-                                dataType = PDataType.UNSIGNED_TIMESTAMP.getSqlType();
+                                dataTypeNum = PDataType.UNSIGNED_TIMESTAMP.getSqlType();
                                 break;
                             case BINARY:
                                 // From way-back-when, we introduced VARBINARY after BINARY
                                 rs.getInt(COLUMN_SIZE);
                                 if (rs.wasNull()) {
-                                    dataType = PDataType.VARBINARY.getSqlType();
+                                    dataTypeNum = PDataType.VARBINARY.getSqlType();
                                 }
                                 break;
                             default:
+                                // Don't store precision and scale for int, long, etc, as
+                                // there's no value (we actually lose information and need
+                                // more special cases b/c we don't know that it wasn't set).
+                                if (dataType.isCoercibleTo(PDataType.LONG)) {
+                                    maxLength = null;
+                                    scale = null;
+                                }
                                 break;
                         }
                     }
@@ -2046,7 +2086,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     stmt.setString(5,familyName);
                     stmt.setObject(6, rs.getObject(TABLE_SEQ_NUM));
                     stmt.setString(7, rs.getString(TABLE_TYPE));
-                    stmt.setObject(8, dataType);
+                    stmt.setObject(8, dataTypeNum);
                     stmt.setString(9, pkName);
                     stmt.setObject(10, rs.getObject(COLUMN_COUNT));
                     stmt.setObject(11, rs.getObject(SALT_BUCKETS));
@@ -2054,8 +2094,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     stmt.setString(13, rs.getString(INDEX_STATE));
                     stmt.setObject(14, rs.getObject(IMMUTABLE_ROWS));
                     stmt.setString(15, defaultColumnFamily); // previous DEFAULT_COLUMN_FAMILY_NAME
-                    stmt.setObject(16, rs.getObject(COLUMN_SIZE));
-                    stmt.setObject(17, rs.getObject(DECIMAL_DIGITS));
+                    stmt.setObject(16, maxLength);
+                    stmt.setObject(17, scale);
                     stmt.setObject(18, rs.getObject(NULLABLE));
                     stmt.setObject(19, rs.getObject(ORDINAL_POSITION));
                     stmt.setObject(20, rs.getObject("COLUMN_MODIFIER")); // old column name
@@ -2077,13 +2117,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (createdView) {
                     Long scn = JDBCUtil.getCurrentSCN(url, props);
                     if (scn == null) {
-                        conn.createStatement().execute("DROP VIEW IF EXISTS " + SYSTEM_TABLE_AS_VIEW_NAME);                        
+                        conn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
                     } else {
                         Properties newProps = new Properties(props);
                         newProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scn + 1));
                         Connection newConn = DriverManager.getConnection(url, newProps);
                         try {
-                            newConn.createStatement().execute("DROP VIEW IF EXISTS " + SYSTEM_TABLE_AS_VIEW_NAME);                        
+                            newConn.createStatement().execute("DROP VIEW IF EXISTS " + OLD_SYSTEM_TABLE_AS_VIEW_NAME);                        
                         } finally {
                             newConn.close();
                         }
@@ -2126,7 +2166,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             scan.setFilter(filter);
             HTableInterface table = null;
             try {
-                table = getTable(SYSTEM_TABLE_NAME_BYTES);
+                table = getTable(OLD_SYSTEM_TABLE_NAME_BYTES);
                 ResultScanner scanner = table.getScanner(scan);
                 Result result = null;
                 while ((result = scanner.next()) != null) {

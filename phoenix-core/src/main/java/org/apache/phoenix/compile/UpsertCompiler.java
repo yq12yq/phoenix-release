@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -127,30 +128,30 @@ public class UpsertCompiler {
             Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(batchSize);
             PTable table = tableRef.getTable();
             ResultSet rs = new PhoenixResultSet(iterator, projector, statement);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             while (rs.next()) {
                 for (int i = 0; i < values.length; i++) {
                     PColumn column = table.getColumns().get(columnIndexes[i]);
-                    byte[] byteValue = rs.getBytes(i+1);
+                    byte[] bytes = rs.getBytes(i+1);
+                    ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
                     Object value = rs.getObject(i+1);
                     int rsPrecision = rs.getMetaData().getPrecision(i+1);
                     Integer precision = rsPrecision == 0 ? null : rsPrecision;
                     int rsScale = rs.getMetaData().getScale(i+1);
                     Integer scale = rsScale == 0 ? null : rsScale;
-                    if (column.getSortOrder() == SortOrder.DESC) {
-                        byte[] tempByteValue = Arrays.copyOf(byteValue, byteValue.length);
-                        byteValue = SortOrder.invert(byteValue, 0, tempByteValue, 0, byteValue.length);
-                    }
                     // We are guaranteed that the two column will have compatible types,
                     // as we checked that before.
-                    if (!column.getDataType().isSizeCompatible(column.getDataType(),
-                            value, byteValue,
-                            precision, column.getMaxLength(), 
-                            scale, column.getScale())) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_INCOMPATIBLE_WITH_TYPE)
-                            .setColumnName(column.getName().getString()).build().buildException();
+                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
+                            precision, scale,
+                            column.getMaxLength(),column.getScale())) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY)
+                            .setColumnName(column.getName().getString())
+                            .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build().buildException();
                     }
-                    values[i] = column.getDataType().coerceBytes(byteValue, value, column.getDataType(),
-                            precision, scale, column.getMaxLength(), column.getScale());
+                    column.getDataType().coerceBytes(ptr, value, column.getDataType(),
+                            precision, scale, SortOrder.getDefault(),
+                            column.getMaxLength(), column.getScale(), column.getSortOrder());
+                    values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation);
                 rowCount++;
@@ -500,8 +501,8 @@ public class UpsertCompiler {
                      */
                     final StatementContext context = queryPlan.getContext();
                     final Scan scan = context.getScan();
-                    scan.setAttribute(UngroupedAggregateRegionObserver.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserver.serialize(projectedTable));
-                    scan.setAttribute(UngroupedAggregateRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
+                    scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserver.serialize(projectedTable));
+                    scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
                     // Ignore order by - it has no impact
                     final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, aggProjector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                     return new MutationPlan() {
@@ -674,39 +675,32 @@ public class UpsertCompiler {
                     PColumn column = allColumns.get(columnIndexes[nodeIndex]);
                     constantExpression.evaluate(tuple, ptr);
                     Object value = null;
-                    byte[] byteValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     if (constantExpression.getDataType() != null) {
-                        // If SortOrder from expression in SELECT doesn't match the
-                        // column being projected into then invert the bits.
-                        if (constantExpression.getSortOrder() != column.getSortOrder()) {
-                            byte[] tempByteValue = Arrays.copyOf(byteValue, byteValue.length);
-                            byteValue = SortOrder.invert(byteValue, 0, tempByteValue, 0, byteValue.length);
-                        }
-                        value = constantExpression.getDataType().toObject(byteValue);
+                        value = constantExpression.getDataType().toObject(ptr, constantExpression.getSortOrder(), constantExpression.getMaxLength(), constantExpression.getScale());
                         if (!constantExpression.getDataType().isCoercibleTo(column.getDataType(), value)) { 
                             throw TypeMismatchException.newException(
                                 constantExpression.getDataType(), column.getDataType(), "expression: "
                                         + constantExpression.toString() + " in column " + column);
                         }
-                        if (!column.getDataType().isSizeCompatible(constantExpression.getDataType(),
-                                value, byteValue, constantExpression.getMaxLength(),
-                                column.getMaxLength(), constantExpression.getScale(), column.getScale())) { 
+                        if (!column.getDataType().isSizeCompatible(ptr, value, constantExpression.getDataType(),
+                                constantExpression.getMaxLength(), constantExpression.getScale(), 
+                                column.getMaxLength(), column.getScale())) { 
                             throw new SQLExceptionInfo.Builder(
-                                SQLExceptionCode.DATA_INCOMPATIBLE_WITH_TYPE).setColumnName(column.getName().getString())
+                                SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
                                 .setMessage("value=" + constantExpression.toString()).build().buildException();
                         }
                     }
-                    byteValue = column.getDataType().coerceBytes(byteValue, value,
-                            constantExpression.getDataType(), constantExpression.getMaxLength(), constantExpression.getScale(),
-                            column.getMaxLength(), column.getScale());
+                    column.getDataType().coerceBytes(ptr, value,
+                            constantExpression.getDataType(), constantExpression.getMaxLength(), constantExpression.getScale(), constantExpression.getSortOrder(),
+                            column.getMaxLength(), column.getScale(),column.getSortOrder());
                     byte[] viewValue = overlapViewColumns.get(column);
-                    if (viewValue != null && Bytes.compareTo(byteValue, viewValue) != 0) {
+                    if (viewValue != null && Bytes.compareTo(ptr.get(), ptr.getOffset(), ptr.getLength(), viewValue, 0, viewValue.length) != 0) {
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN)
                                 .setColumnName(column.getName().getString())
                                 .setMessage("value=" + constantExpression.toString()).build().buildException();
                     }
-                    values[nodeIndex] = byteValue;
+                    values[nodeIndex] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     nodeIndex++;
                 }
                 // Add columns based on view

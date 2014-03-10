@@ -30,7 +30,7 @@
     <format>zip</format>
   </formats>
   <includeBaseDirectory>true</includeBaseDirectory>
-
+  
   <fileSets>
     <!-- Top level directories -->
     <fileSet>
@@ -159,7 +159,6 @@
         <include>org.apache.zookeeper:zookeeper</include>
         <include>log4j:log4j</include>
         <include>org.apache.hbase:hbase*</include>
-        <include>net.sf.opencsv:opencsv</include>
         <include>org.antlr:antlr</include>
         <include>org.cloudera.htrace:htrace-core</include>
         <include>io.netty:netty</include>

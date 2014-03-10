@@ -37,14 +37,12 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.client.ClientKeyValueBuilder;
-import org.apache.phoenix.client.GenericKeyValueBuilder;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PTable;
@@ -85,14 +83,6 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
     private void testIndexRowKeyBuilding(String schemaName, String tableName, String dataColumns, String pk, String indexColumns, Object[] values, String includeColumns, String dataProps, String indexProps) throws Exception {
         KeyValueBuilder builder = GenericKeyValueBuilder.INSTANCE;
         testIndexRowKeyBuilding(schemaName, tableName, dataColumns, pk, indexColumns, values, includeColumns, dataProps, indexProps, builder);
-
-        //do the same, but with the client key-value builder, to ensure that works the same
-        
-        String hbaseVersion = VersionInfo.getVersion();
-        if (KeyValueBuilder.get(hbaseVersion) == ClientKeyValueBuilder.INSTANCE) {
-            builder = ClientKeyValueBuilder.INSTANCE;
-            testIndexRowKeyBuilding(schemaName, tableName, dataColumns, pk, indexColumns, values, includeColumns, dataProps, indexProps, builder);
-        }
     }
 
     private void testIndexRowKeyBuilding(String schemaName, String tableName, String dataColumns,
@@ -256,5 +246,45 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
         testIndexRowKeyBuilding("k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2", "v2 DESC, k2 DESC, v1", new Object [] {"a",1,2.2,"bb"}, "v3, v4", "", "SALT_BUCKETS=4");
     }
  
-
+    @Test
+    public void tesIndexWithBigInt() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BIGINT, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1 DESC, k2 DESC", new Object[] { "a", 1, 2.2, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithAscBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1, k2 DESC", new Object[] { "a", 1, true, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithAscNullBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1, k2 DESC", new Object[] { "a", 1, null, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithAscFalseBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1, k2 DESC", new Object[] { "a", 1, false, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithDescBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1 DESC, k2 DESC", new Object[] { "a", 1, true, "bb" });
+    }
+    
+    @Test
+    public void tesIndexWithDescFalseBoolean() throws Exception {
+        testIndexRowKeyBuilding(
+                "k1 CHAR(1) NOT NULL, k2 INTEGER NOT NULL, v1 BOOLEAN, v2 CHAR(2), v3 BIGINT, v4 CHAR(10)", "k1, k2",
+                "v1 DESC, k2 DESC", new Object[] { "a", 1, false, "bb" });
+    }
 }

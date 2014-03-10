@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix.schema.tuple;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.ResultUtil;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.util.KeyValueUtil;
 
 
 public class ResultTuple extends BaseTuple {
@@ -44,7 +46,7 @@ public class ResultTuple extends BaseTuple {
     
     @Override
     public void getKey(ImmutableBytesWritable ptr) {
-        ResultUtil.getKey(result, ptr);
+        ptr.set(result.getRow());
     }
 
     @Override
@@ -54,7 +56,9 @@ public class ResultTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(byte[] family, byte[] qualifier) {
-        return result.getColumnLatest(family, qualifier);
+        Cell cell = KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, 
+          result.rawCells(), family, qualifier);
+        return org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
     }
 
     @Override
@@ -67,13 +71,14 @@ public class ResultTuple extends BaseTuple {
       }
       sb.append("{");
       boolean moreThanOne = false;
-      for(KeyValue kv : this.result.list()) {
+      for(Cell kv : this.result.listCells()) {
         if(moreThanOne) {
           sb.append(", \n");
         } else {
           moreThanOne = true;
         }
-        sb.append(kv.toString()+"/value="+Bytes.toString(kv.getValue()));
+        sb.append(kv.toString()+"/value="+Bytes.toString(kv.getValueArray(), 
+          kv.getValueOffset(), kv.getValueLength()));
       }
       sb.append("}\n");
       return sb.toString();
@@ -86,7 +91,8 @@ public class ResultTuple extends BaseTuple {
 
     @Override
     public KeyValue getValue(int index) {
-        return result.raw()[index];
+        return  org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(
+          result.rawCells()[index]);
     }
 
     @Override
@@ -95,7 +101,7 @@ public class ResultTuple extends BaseTuple {
         KeyValue kv = getValue(family, qualifier);
         if (kv == null)
             return false;
-        ptr.set(kv.getBuffer(), kv.getValueOffset(), kv.getValueLength());
+        ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
     }
 }

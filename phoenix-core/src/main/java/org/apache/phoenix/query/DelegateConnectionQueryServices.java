@@ -29,10 +29,10 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
@@ -172,8 +172,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
     @Override
     public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith,
-            long incrementBy, int batchSize, long timestamp) throws SQLException {
-        return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, batchSize, timestamp);
+            long incrementBy, long cacheSize, long timestamp) throws SQLException {
+        return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize, timestamp);
     }
 
     @Override

@@ -49,13 +49,6 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-
-import org.apache.phoenix.client.KeyValueBuilder;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.expression.Expression;
@@ -63,23 +56,30 @@ import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.join.ScanProjector;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 
 /**
@@ -89,7 +89,6 @@ import org.apache.phoenix.util.SchemaUtil;
  * @since 0.1
  */
 public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver {
-	private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
 
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
@@ -99,12 +98,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public static final String DELETE_CQ = "DeleteCQ";
     public static final String DELETE_CF = "DeleteCF";
     public static final String EMPTY_CF = "EmptyCF";
+    private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
     
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
-        this.kvBuilder = KeyValueBuilder.get(e.getHBaseVersion());
+        // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
+        // be able to get a single backing buffer for a KeyValue.
+        this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
     private static void commitBatch(HRegion region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
@@ -120,12 +122,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
     
     public static void serializeIntoScan(Scan scan) {
-        scan.setAttribute(UNGROUPED_AGG, QueryConstants.TRUE);
+        scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        byte[] isUngroupedAgg = scan.getAttribute(UNGROUPED_AGG);
+        byte[] isUngroupedAgg = scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG);
         if (isUngroupedAgg == null) {
             return s;
         }
@@ -141,7 +143,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         PTable projectedTable = null;
         List<Expression> selectExpressions = null;
-        byte[] upsertSelectTable = scan.getAttribute(UPSERT_SELECT_TABLE);
+        byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
         boolean isDelete = false;
         byte[] deleteCQ = null;
@@ -152,17 +154,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            selectExpressions = deserializeExpressions(scan.getAttribute(UPSERT_SELECT_EXPRS));
+            selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
             ptr = new ImmutableBytesWritable();
         } else {
-            byte[] isDeleteAgg = scan.getAttribute(DELETE_AGG);
+            byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
             isDelete = isDeleteAgg != null && Bytes.compareTo(PDataType.TRUE_BYTES, isDeleteAgg) == 0;
             if (!isDelete) {
-                deleteCF = scan.getAttribute(DELETE_CF);
-                deleteCQ = scan.getAttribute(DELETE_CQ);
+                deleteCF = scan.getAttribute(BaseScannerRegionObserver.DELETE_CF);
+                deleteCQ = scan.getAttribute(BaseScannerRegionObserver.DELETE_CQ);
             }
-            emptyCF = scan.getAttribute(EMPTY_CF);
+            emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
         
         int batchSize = 0;
@@ -175,7 +177,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             batchSize = c.getEnvironment().getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         }
         Aggregators aggregators = ServerAggregators.deserialize(
-                scan.getAttribute(GroupedAggregateRegionObserver.AGGREGATORS), c.getEnvironment().getConfiguration());
+                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), c.getEnvironment().getConfiguration());
         Aggregator[] rowAggregators = aggregators.getAggregators();
         boolean hasMore;
         boolean hasAny = false;
@@ -197,7 +199,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     result.setKeyValues(results);
                     try {
                         if (isDelete) {
-                            @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
                             // FIXME: the version of the Delete constructor without the lock args was introduced
                             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version
                             // of the client.
@@ -226,23 +227,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 Expression expression = selectExpressions.get(i);
                                 if (expression.evaluate(result, ptr)) {
                                     PColumn column = projectedColumns.get(i);
-                                    byte[] bytes = ptr.copyBytes();
-                                    Object value = expression.getDataType().toObject(bytes, column.getSortOrder());
-                                    // If SortOrder from expression in SELECT doesn't match the
-                                    // column being projected into then invert the bits.
-                                    if (expression.getSortOrder() != column.getSortOrder()) {
-                                        SortOrder.invert(bytes, 0, bytes, 0, bytes.length);
-                                    }
+                                    Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
                                     // We are guaranteed that the two column will have the same type.
-                                    if (!column.getDataType().isSizeCompatible(column.getDataType(),
-                                            value, bytes,
-                                            expression.getMaxLength(), column.getMaxLength(), 
-                                            expression.getScale(), column.getScale())) {
+                                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
+                                            expression.getMaxLength(),  expression.getScale(), 
+                                            column.getMaxLength(), column.getScale())) {
                                         throw new ValueTypeIncompatibleException(column.getDataType(),
                                                 column.getMaxLength(), column.getScale());
                                     }
-                                    bytes = column.getDataType().coerceBytes(bytes, value, expression.getDataType(),
-                                            expression.getMaxLength(), expression.getScale(), column.getMaxLength(), column.getScale());
+                                    column.getDataType().coerceBytes(ptr, value, expression.getDataType(),
+                                            expression.getMaxLength(), expression.getScale(), expression.getSortOrder(), 
+                                            column.getMaxLength(), column.getScale(), column.getSortOrder());
+                                    byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                                     row.setValue(column, bytes);
                                 }
                             }

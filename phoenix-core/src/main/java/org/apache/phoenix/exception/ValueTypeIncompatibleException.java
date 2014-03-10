@@ -23,14 +23,14 @@ import org.apache.phoenix.schema.PDataType;
 
 public class ValueTypeIncompatibleException extends IllegalDataException {
     private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.DATA_INCOMPATIBLE_WITH_TYPE;
+    private static SQLExceptionCode code = SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY;
 
     public ValueTypeIncompatibleException(PDataType type, Integer precision, Integer scale) {
         super(new SQLExceptionInfo.Builder(code).setMessage(getTypeDisplayString(type, precision, scale))
-                .build().toString());
+                .build().buildException());
     }
 
     private static String getTypeDisplayString(PDataType type, Integer precision, Integer scale) {
-        return type.toString() + "(" + precision + "," + scale + ")";
+        return type.toString() + "(" + precision + (scale == null ? "" : ("," + scale + ")"));
     }
 }
