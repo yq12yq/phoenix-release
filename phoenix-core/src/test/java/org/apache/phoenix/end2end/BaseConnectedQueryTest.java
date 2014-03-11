@@ -72,6 +72,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
@@ -82,6 +83,7 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 
@@ -114,12 +116,8 @@ public abstract class BaseConnectedQueryTest extends BaseTest {
       }
       // reconstruct url when running against a live cluster
       if (isDistributedCluster) {
-        return JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + conf.get(HConstants.ZOOKEEPER_QUORUM, LOCALHOST) 
-            + JDBC_PROTOCOL_SEPARATOR
-            + conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT)
-            + JDBC_PROTOCOL_SEPARATOR
-            + conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT)
-            + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    	// Get all info from hbase-site.xml
+        return JDBC_PROTOCOL;
       } else {
         return TestUtil.PHOENIX_JDBC_URL;
       }
