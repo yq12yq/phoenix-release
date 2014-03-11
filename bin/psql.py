@@ -21,26 +21,14 @@
 
 import os
 import subprocess
-import fnmatch
 import sys
-
-
-def find(pattern, path):
-    # remove * if it's at the end of path
-    if ((path is not None) and (len(path) > 0) and (path[-1] == '*')) :
-        path = path[:-1]
-
-    for root, dirs, files in os.walk(path):
-        for name in files:
-            if fnmatch.fnmatch(name, pattern):
-                return os.path.join(root, name)
-    return ""
+import phoenix_utils
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
                              os.path.join(current_dir, "..", "phoenix-assembly",
                                 "target"))
-phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
+phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
