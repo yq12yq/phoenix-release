@@ -102,6 +102,12 @@ function Install(
         Write-Log "Setting the PHOENIX_HOME environment variable at machine scope to `"$phoenixInstallPath`""
         [Environment]::SetEnvironmentVariable("PHOENIX_HOME", $phoenixInstallPath, [EnvironmentVariableTarget]::Machine)
         $ENV:PHOENIX_HOME = "$phoenixInstallPath"
+		###
+        ### Copying PHOENIX jars to HBASE lib
+        ###
+        Write-Log "Copying PHOENIX jars to HBASE lib"
+        $xcopy_cmd = "xcopy /EIYF `"$ENV:PHOENIX_HOME\lib\phoenix-core-*.jar`" `"$ENV:HBASE_HOME\lib`""
+        Invoke-Cmd $xcopy_cmd
 		
 		Write-log "$env:HADOOP_NODE_INSTALL_ROOT"
 		
