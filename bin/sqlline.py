@@ -53,7 +53,7 @@ sqlfile = ""
 if len(sys.argv) > 2:
     sqlfile = "--run=" + sys.argv[2]
 
-java_cmd = 'java -cp ".:' + phoenix_client_jar + \
+java_cmd = 'java -cp ".' + os.pathsep + phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \

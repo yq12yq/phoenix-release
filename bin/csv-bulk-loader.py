@@ -53,7 +53,7 @@ phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly",
                                 "target")
 phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
 
-java_cmd = 'java -cp ".:' + phoenix_client_jar +\
+java_cmd = 'java -cp ".' + os.pathsep + phoenix_client_jar +\
     '" org.apache.phoenix.map.reduce.CSVBulkLoader ' +\
     ' '.join(sys.argv[1:])
 

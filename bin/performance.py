@@ -88,10 +88,10 @@ testjar = find("phoenix-*-tests.jar", phoenix_test_jar_path)
 # HBase/Phoenix client side property override
 hbase_config_path = os.getenv('HBASE_CONF_DIR', current_dir)
 
-execute = ('java -cp "%s:%s" -Dlog4j.configuration=file:' +
+execute = ('java -cp "%s%s%s" -Dlog4j.configuration=file:' +
            os.path.join(current_dir, "log4j.properties") +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
-    (hbase_config_path, phoenix_client_jar, table, zookeeper)
+    (hbase_config_path, os.pathsep, phoenix_client_jar, table, zookeeper)
 
 # Create Table DDL
 createtable = "CREATE TABLE IF NOT EXISTS %s (HOST CHAR(2) NOT NULL,\
