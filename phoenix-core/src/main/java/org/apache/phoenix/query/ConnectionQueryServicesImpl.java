@@ -1449,7 +1449,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Clears the Phoenix meta data cache on each region server
      * @throws SQLException
      */
-    protected void clearCache() throws SQLException {
+    public void clearCache() throws SQLException {
         try {
             SQLException sqlE = null;
             HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);

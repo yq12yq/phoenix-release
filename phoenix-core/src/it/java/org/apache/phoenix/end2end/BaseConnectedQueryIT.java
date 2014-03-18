@@ -79,7 +79,9 @@ import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Logger;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
@@ -123,7 +125,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
       // reconstruct url when running against a live cluster
       if (isDistributedCluster) {
     	// Get all info from hbase-site.xml
-        return JDBC_PROTOCOL;
+        return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
       } else {
         return TestUtil.PHOENIX_JDBC_URL;
       }
@@ -143,8 +145,12 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
-        Connection conn = null;
-        conn = DriverManager.getConnection(getUrl(), props);
+        String url = getUrl();
+        PhoenixTestDriver driver = (PhoenixTestDriver) DriverManager.getDriver(url);
+        ConnectionQueryServicesImpl connQueryService= 
+            (ConnectionQueryServicesImpl) driver.getConnectionQueryServices(url, props);
+        connQueryService.clearCache();
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             deletePriorTables(ts, conn);
             deletePriorSequences(ts, conn);
