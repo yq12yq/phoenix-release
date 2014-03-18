@@ -422,7 +422,7 @@ public abstract class BaseTest {
 
     @AfterClass
     public static void stopServer() throws Exception {
-        assertTrue(destroyDriver());
+        destroyDriver();
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {

@@ -700,6 +700,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         HRegion region = env.getRegion();
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
+
         // We always cache the latest version - fault in if not in cache
         if (table != null || (table = buildTable(key, cacheKey, region, asOfTimeStamp)) != null) {
             return table;
@@ -985,7 +986,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
             } else {
                 return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
-                        EnvironmentEdgeManager.currentTimeMillis(), table);
+                        EnvironmentEdgeManager.currentTimeMillis(), null);
             }
         }
         if (table == null && buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
