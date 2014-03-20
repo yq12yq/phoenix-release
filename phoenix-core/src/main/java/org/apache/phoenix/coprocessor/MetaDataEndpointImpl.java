@@ -989,9 +989,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
         }
-        if (table == null && buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
-            return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
+        if (table == null) {
+            if(buildDeletedTable(key, cacheKey, region, clientTimeStamp) != null) {
+                return new MetaDataMutationResult(MutationCode.NEWER_TABLE_FOUND,
                     EnvironmentEdgeManager.currentTimeMillis(), null);
+            } else {
+                return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
+                  EnvironmentEdgeManager.currentTimeMillis(), null);
+            }
         }
         // Get mutations for main table.
         Scan scan = newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);

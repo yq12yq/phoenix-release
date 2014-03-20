@@ -77,15 +77,19 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.log4j.Logger;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -96,6 +100,8 @@ import org.junit.BeforeClass;
  * @since 0.1
  */
 public abstract class BaseConnectedQueryIT extends BaseTest {
+    private static final org.slf4j.Logger logger = LoggerFactory.getLogger(BaseConnectedQueryIT.class);
+    
     protected static byte[][] getDefaultSplits(String tenantId) {
         return new byte[][] { 
             Bytes.toBytes(tenantId + "00A"),
@@ -173,7 +179,13 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
                     conn = DriverManager.getConnection(getUrl(), props);
                     lastTenantId = tenantId;
                 }
-                conn.createStatement().executeUpdate(ddl);
+                try {
+                    conn.createStatement().executeUpdate(ddl);
+                } catch (NewerTableAlreadyExistsException ex) {
+                    logger.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                } catch (TableNotFoundException ex) {
+                    logger.info("Table " + fullTableName + " is already deleted.");
+                }
             }
             if (lastTenantId != null) {
                 conn.close();
