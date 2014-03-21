@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
@@ -38,7 +37,6 @@ import static org.apache.phoenix.util.TestUtil.ENTITYHISTID9;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_SALTED_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
-import static org.apache.phoenix.util.TestUtil.LOCALHOST;
 import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
@@ -93,7 +91,6 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.slf4j.LoggerFactory;
 
-
 /**
  * 
  * Base class for tests that need to be connected to an HBase server
@@ -124,8 +121,8 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
       }
       // reconstruct url when running against a live cluster
       if (isDistributedCluster) {
-    	// Get all info from hbase-site.xml
-        return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        // Get all info from hbase-site.xml
+        return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;      
       } else {
         return TestUtil.PHOENIX_JDBC_URL;
       }
@@ -145,12 +142,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
-        String url = getUrl();
-        PhoenixTestDriver driver = (PhoenixTestDriver) DriverManager.getDriver(url);
-        ConnectionQueryServicesImpl connQueryService= 
-            (ConnectionQueryServicesImpl) driver.getConnectionQueryServices(url, props);
-        connQueryService.clearCache();
-        Connection conn = DriverManager.getConnection(url, props);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             deletePriorTables(ts, conn);
             deletePriorSequences(ts, conn);

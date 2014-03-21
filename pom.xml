@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.0.0-incubating-SNAPSHOT</version>
+  <version>4.0.0-incubating</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -184,8 +184,9 @@
             <excludes>
               <exclude>CHANGES.txt</exclude>
               <exclude>README.md</exclude>
-	            <exclude>dev/phoenix.importorder</exclude>
+	      <exclude>dev/phoenix.importorder</exclude>
               <exclude>**/target/**</exclude>
+              <exclude>**/resources/*.Driver</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
               <exclude>docs/**</exclude>
@@ -247,7 +248,7 @@
           <version>${maven-failsafe-plugin.version}</version>
           <configuration>
             <encoding>UTF-8</encoding>
-            <argLine>-enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom</argLine>
+            <argLine>-enableassertions -Xmx3000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
             <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
           </configuration>
@@ -303,7 +304,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
-          <argLine>-enableassertions -Xmx2250m
+          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
             -Djava.security.egd=file:/dev/./urandom</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
         </configuration>
