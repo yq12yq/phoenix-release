@@ -142,7 +142,12 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String url = getUrl();
+        PhoenixTestDriver driver = (PhoenixTestDriver) DriverManager.getDriver(url);
+        ConnectionQueryServicesImpl connQueryService=
+            (ConnectionQueryServicesImpl) driver.getConnectionQueryServices(url, props);
+        connQueryService.clearCache();
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             deletePriorTables(ts, conn);
             deletePriorSequences(ts, conn);
