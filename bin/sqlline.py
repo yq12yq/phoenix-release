@@ -30,6 +30,9 @@ phoenix_jar_path = os.getenv('PHOENIX_LIB_DIR',
                                 "target"))
 phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_jar_path)
 
+if phoenix_client_jar == "":
+    phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", os.path.join(current_dir, ".."))
+
 if len(sys.argv) < 2:
     print "Zookeeper not specified. \nUsage: sqlline.sh <zookeeper> \
 <optional_sql_file> \nExample: \n 1. sqlline.sh localhost \n 2. sqlline.sh \
