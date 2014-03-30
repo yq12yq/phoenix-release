@@ -140,9 +140,7 @@ public abstract class BasicQueryPlan implements QueryPlan {
         // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
         Long scn = connection.getSCN();
-        // Add one to server time since max of time range is exclusive
-        // and we need to account of OSs with lower resolution clocks.
-        ScanUtil.setTimeRange(scan, scn == null ? context.getCurrentTime() + 1: scn);
+        ScanUtil.setTimeRange(scan, scn == null ? HConstants.LATEST_TIMESTAMP : scn);
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
         ResultIterator iterator = newIterator();
         return dependencies.isEmpty() ? 
