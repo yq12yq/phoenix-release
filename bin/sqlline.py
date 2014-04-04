@@ -34,9 +34,9 @@ if phoenix_client_jar == "":
     phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", os.path.join(current_dir, ".."))
 
 if len(sys.argv) < 2:
-    print "Zookeeper not specified. \nUsage: sqlline.sh <zookeeper> \
-<optional_sql_file> \nExample: \n 1. sqlline.sh localhost \n 2. sqlline.sh \
-localhost ../examples/stock_symbol.sql"
+    print "Zookeeper not specified. \nUsage: sqlline.py <zookeeper> \
+<optional_sql_file> \nExample: \n 1. sqlline.py localhost:2181:/hbase \n 2. sqlline.py \
+localhost:2181:/hbase ../examples/stock_symbol.sql"
     sys.exit()
 
 sqlfile = ""

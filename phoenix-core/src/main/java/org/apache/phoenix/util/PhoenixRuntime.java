@@ -111,7 +111,7 @@ public class PhoenixRuntime {
     private static final String CSV_FILE_EXT = ".csv";
 
     private static void usageError() {
-        System.err.println("Usage: psql [-t table-name] [-h comma-separated-column-names | in-line] [-d field-delimiter-char quote-char escape-char]<zookeeper>  <path-to-sql-or-csv-file>...\n" +
+        System.err.println("Usage: psql [zookeeper] [-t table-name] [-h comma-separated-column-names | in-line] [-d field-delimiter-char quote-char escape-char]<zookeeper>  <path-to-sql-or-csv-file>...\n" +
                 "  By default, the name of the CSV file (case insensitive) is used to determine the Phoenix table into which the CSV data is loaded\n" +
                 "  and the ordinal value of the columns determines the mapping.\n" +
                 "  -t overrides the table into which the CSV data is loaded and is case sensitive.\n" +
@@ -123,8 +123,8 @@ public class PhoenixRuntime {
                 "     number is NOT usually a delimiter and shall be taken as 1 -> ctrl A, 2 -> ctrl B ... 9 -> ctrl I. \n" +
                 "  -a define the array element separator, defaults to ':'\n" +
                 "Examples:\n" +
-                "  psql localhost my_ddl.sql\n" +
-                "  psql localhost my_ddl.sql my_table.csv\n" +
+                "  psql localhost:2181:/hbase my_ddl.sql\n" +
+                "  psql localhost:2181:/hbase my_ddl.sql my_table.csv\n" +
                 "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
                 "  psql -t MY_TABLE -h COL1,COL2,COL3 my_cluster:1825 my_table2012-Q3.csv\n" +
                 "  psql -t MY_TABLE -h COL1,COL2,COL3 -d 1 2 3 my_cluster:1825 my_table2012-Q3.csv\n"
