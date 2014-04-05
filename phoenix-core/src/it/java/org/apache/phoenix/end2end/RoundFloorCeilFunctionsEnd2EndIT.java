@@ -30,9 +30,12 @@ import java.sql.ResultSet;
 import java.sql.Time;
 import java.sql.Timestamp;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.RoundFunction;
@@ -50,6 +53,7 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     private static long millisPart = 660;
     private static int nanosPart = 500100;
     private static BigDecimal decimalUpserted = BigDecimal.valueOf(1.264);
+    private Connection conn = null;
     
     @BeforeClass
     public static void initTable() throws Exception {
@@ -81,9 +85,18 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
         }
     }
 
+    @Before
+    public void before() throws Exception {
+       this.conn = DriverManager.getConnection(getUrl());
+    }
+    
+    @After
+    public void after() throws Exception {
+      this.conn.close();
+    }
+
     @Test
     public void testRoundingUpDate() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(dt, 'day'), ROUND(dt, 'hour', 1), ROUND(dt, 'minute', 1), ROUND(dt, 'second', 1), ROUND(dt, 'millisecond', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Date expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
@@ -98,14 +111,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testRoundingUpDateInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE ROUND(dt, 'day') = to_date('2012-01-02 00:00:00')");
         assertTrue(rs.next());
     }
     
     @Test
     public void testFloorDate() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(dt, 'day', 1), FLOOR(dt, 'hour', 1), FLOOR(dt, 'minute', 1), FLOOR(dt, 'second', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Date expectedDate = DateUtil.parseDate("2012-01-01 00:00:00");
@@ -120,14 +131,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testFloorDateInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE FLOOR(dt, 'hour') = to_date('2012-01-01 14:00:00')");
         assertTrue(rs.next());
     }
     
     @Test
     public void testCeilDate() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(dt, 'day', 1), CEIL(dt, 'hour', 1), CEIL(dt, 'minute', 1), CEIL(dt, 'second', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         //Date upserted is 2012-01-01 14:25:28.660. So we will end up bumping up in every case.
@@ -143,14 +152,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCeilDateInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE CEIL(dt, 'second') = to_date('2012-01-01 14:25:29')");
         assertTrue(rs.next());
     }
     
     @Test
     public void testRoundingUpTimestamp() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(ts, 'day'), ROUND(ts, 'hour', 1), ROUND(ts, 'minute', 1), ROUND(ts, 'second', 1), ROUND(ts, 'millisecond', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
@@ -171,14 +178,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testRoundingUpTimestampInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE ROUND(ts, 'second') = to_date('2012-01-01 14:25:29')");
         assertTrue(rs.next());
     }
     
     @Test
     public void testFloorTimestamp() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(ts, 'day'), FLOOR(ts, 'hour', 1), FLOOR(ts, 'minute', 1), FLOOR(ts, 'second', 1), FLOOR(ts, 'millisecond', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
@@ -198,14 +203,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testFloorTimestampInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE FLOOR(ts, 'second') = to_date('2012-01-01 14:25:28')");
         assertTrue(rs.next());
     }
     
     @Test
     public void testCeilTimestamp() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(ts, 'day'), CEIL(ts, 'hour', 1), CEIL(ts, 'minute', 1), CEIL(ts, 'second', 1), CEIL(ts, 'millisecond', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Timestamp expectedTimestamp;
@@ -226,14 +229,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCeilTimestampInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE CEIL(ts, 'second') = to_date('2012-01-01 14:25:29')");
         assertTrue(rs.next());
     }
     
     @Test
     public void testRoundingUpTime() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(t, 'day', 1), ROUND(t, 'hour', 1), ROUND(t, 'minute', 1), ROUND(t, 'second', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Time expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
@@ -248,7 +249,6 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testFloorTime() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(t, 'day', 1), FLOOR(t, 'hour', 1), FLOOR(t, 'minute', 1), FLOOR(t, 'second', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Time expectedTime = new Time(DateUtil.parseDate("2012-01-01 00:00:00").getTime());
@@ -263,7 +263,6 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCeilTime() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(t, 'day', 1), CEIL(t, 'hour', 1), CEIL(t, 'minute', 1), CEIL(t, 'second', 1) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         Time expectedTime = new Time(DateUtil.parseDate("2012-01-02 00:00:00").getTime());
@@ -278,7 +277,6 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testRoundingUpDecimal() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT ROUND(dec), ROUND(dec, 1), ROUND(dec, 2), ROUND(dec, 3) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         BigDecimal expectedBd = BigDecimal.valueOf(1);
@@ -293,14 +291,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testRoundingUpDecimalInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE ROUND(dec, 2) = 1.26");
         assertTrue(rs.next());
     }
     
     @Test
     public void testFloorDecimal() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT FLOOR(dec), FLOOR(dec, 1), FLOOR(dec, 2), FLOOR(dec, 3) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         BigDecimal expectedBd = BigDecimal.valueOf(1);
@@ -315,14 +311,12 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testFloorDecimalInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE FLOOR(dec, 2) = 1.26");
         assertTrue(rs.next());
     }
     
     @Test
     public void testCeilDecimal() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT CEIL(dec), CEIL(dec, 1), CEIL(dec, 2), CEIL(dec, 3) FROM ROUND_DATE_TIME_TS_DECIMAL");
         assertTrue(rs.next());
         BigDecimal expectedBd = BigDecimal.valueOf(2);
@@ -337,7 +331,6 @@ public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testCeilDecimalInWhere() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM ROUND_DATE_TIME_TS_DECIMAL WHERE CEIL(dec, 2) = 1.27");
         assertTrue(rs.next());
     }
