@@ -48,11 +48,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -99,6 +101,11 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             }
             conn.close();
         }
+    }
+    
+    @After
+    public void after() throws Exception {
+        deletePriorTables(HConstants.LATEST_TIMESTAMP);
     }
     
     @Parameters(name="{0}")
