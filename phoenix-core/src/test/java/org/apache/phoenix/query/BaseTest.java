@@ -68,6 +68,9 @@ import org.junit.AfterClass;
 import com.google.common.collect.ImmutableMap;
 
 public abstract class BaseTest {
+    // TIME_CLOCK_SKEW_THRESHOLD is used in tests to compensate tests where local time are used to
+    // compare time from another server
+    public static long TIME_CLOCK_SKEW_THRESHOLD = 3000;
     private static final Map<String,String> tableDDLMap;
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
