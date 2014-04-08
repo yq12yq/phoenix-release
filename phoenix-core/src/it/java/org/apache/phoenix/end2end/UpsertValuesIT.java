@@ -104,9 +104,10 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         Date date = DateUtil.parseDate(dateString);
         assertEquals(date,rs.getDate(1));
         assertTrue(rs.next());
-        // Compensate clock skew from different servers when running against a live cluster
-        assertTrue(rs.getDate(1).after(new Date(now.getTime() - TIME_CLOCK_SKEW_THRESHOLD)) && 
-          rs.getDate(1).before(new Date(then.getTime() + TIME_CLOCK_SKEW_THRESHOLD)));
+        // 2000 below is to compensate clock skew from different servers when running against a live
+        // cluster
+        assertTrue(rs.getDate(1).after(new Date(now.getTime() - 2000)) && 
+          rs.getDate(1).before(new Date(then.getTime() + 2000)));
         assertFalse(rs.next());
     }
     

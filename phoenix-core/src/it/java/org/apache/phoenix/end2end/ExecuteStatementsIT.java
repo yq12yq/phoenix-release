@@ -77,8 +77,8 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
             "    SELECT date+1, val*10, host FROM " + PTSDB_NAME + ";";
         
         // Compensate time clock skew if tests run in a multi-node cluster
-        Date now = new Date(isDistributedCluster() ? 
-            System.currentTimeMillis() - TIME_CLOCK_SKEW_THRESHOLD : System.currentTimeMillis());
+        Date now = new Date(isDistributedCluster() ? System.currentTimeMillis() - 1000 : 
+          System.currentTimeMillis());
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
         List<Object> binds = Arrays.<Object>asList("a","j","s", 6);

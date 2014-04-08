@@ -271,7 +271,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         }
         // compensate time clock skew when running tests in a multi-node cluster
         if(isDistributedCluster()) {
-            Thread.sleep(TIME_CLOCK_SKEW_THRESHOLD);
+            Thread.sleep(1000);
         }
     }
     
@@ -362,7 +362,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
          
          // compensate time clock skew when running tests in a multi-node cluster
          if(isDistributedCluster()) {
-             Thread.sleep(TIME_CLOCK_SKEW_THRESHOLD);
+             Thread.sleep(1000);
          }
     }
     
@@ -572,7 +572,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         }
         // compensate time clock skew when running tests in a multi-node cluster
         if(isDistributedCluster()) {
-            Thread.sleep(TIME_CLOCK_SKEW_THRESHOLD);
+            Thread.sleep(1000);
         }
     }
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits) throws Exception {
@@ -688,7 +688,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         
         // compensate time clock skew when running tests in a multi-node cluster
         if(isDistributedCluster()) {
-            Thread.sleep(TIME_CLOCK_SKEW_THRESHOLD);
+            Thread.sleep(1000);
         }
     }
     
@@ -796,7 +796,7 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         }
         // compensate time clock skew when running tests in a multi-node cluster
         if(isDistributedCluster()) {
-            Thread.sleep(TIME_CLOCK_SKEW_THRESHOLD);
+            Thread.sleep(1000);
         }
     }
 
