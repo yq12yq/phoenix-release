@@ -83,6 +83,7 @@ import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -159,6 +160,8 @@ public abstract class BaseConnectedQueryIT extends BaseTest {
         try {
             deletePriorTables(ts, conn);
             deletePriorSequences(ts, conn);
+        } catch (SequenceNotFoundException e) {
+            //ignore when there is no sequence to be deleted
         }
         finally {
             conn.close();
