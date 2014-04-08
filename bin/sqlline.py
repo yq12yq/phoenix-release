@@ -44,12 +44,17 @@ sqlfile = ""
 if len(sys.argv) > 2:
     sqlfile = "--run=" + sys.argv[2]
 
+colorSetting = "true"
+# disable color setting for windows OS
+if os.name == 'nt':
+    colorSetting = "false"
+
 java_cmd = 'java -cp ".' + os.pathsep + phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
 -u jdbc:phoenix:" + sys.argv[1] + \
-    " -n none -p none --color=true --fastConnect=false --verbose=true \
+    " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true \
 --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 subprocess.call(java_cmd, shell=True)
