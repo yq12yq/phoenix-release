@@ -35,8 +35,8 @@ public class BindTableNode extends ConcreteTableNode {
     }
 
     @Override
-    public void accept(TableNodeVisitor visitor) throws SQLException {
-        visitor.visit(this);
+    public <T> T accept(TableNodeVisitor<T> visitor) throws SQLException {
+        return visitor.visit(this);
     }
 
 }
