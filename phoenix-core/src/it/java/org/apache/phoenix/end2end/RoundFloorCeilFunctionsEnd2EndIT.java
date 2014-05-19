@@ -40,6 +40,9 @@ import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.util.DateUtil;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
@@ -51,6 +54,8 @@ import com.google.common.primitives.Floats;
  * 
  * @since 3.0.0
  */
+
+@Category(ClientManagedTimeTest.class)
 public class RoundFloorCeilFunctionsEnd2EndIT extends BaseClientManagedTimeIT {
     
     private static long millisPart = 660;

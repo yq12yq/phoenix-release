@@ -36,7 +36,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(HBaseManagedTimeTest.class)
 public class DeleteIT extends BaseHBaseManagedTimeIT {
     private static final int NUMBER_OF_ROWS = 20;
     private static final int NTH_ROW_NULL = 5;
