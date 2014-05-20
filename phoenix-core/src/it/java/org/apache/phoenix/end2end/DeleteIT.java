@@ -59,11 +59,6 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
         conn.commit();
     }
     
-    @After
-    public void after() throws Exception {
-      deletePriorTables(HConstants.LATEST_TIMESTAMP);
-    }
-
     @Test
     public void testDeleteFilterNoAutoCommit() throws Exception {
         testDeleteFilter(false);

@@ -59,12 +59,6 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
     public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
 
-
-    @After
-    public void after() throws Exception {
-      deletePriorTables(HConstants.LATEST_TIMESTAMP);
-    }
-
     @Test
     public void testAlterTableWithVarBinaryKey() throws Exception {
         Properties props = new Properties(TEST_PROPERTIES);

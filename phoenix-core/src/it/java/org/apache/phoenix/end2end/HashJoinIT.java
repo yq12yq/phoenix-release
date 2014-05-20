@@ -92,7 +92,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     
     @Before
     public void initTable() throws Exception {
-        deletePriorTables(HConstants.LATEST_TIMESTAMP);
+        deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());
         initTableValues();
         if (indexDDL != null && indexDDL.length > 0) {
             Properties props = new Properties(TEST_PROPERTIES);

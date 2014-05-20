@@ -63,6 +63,10 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
         return new Configuration(config);
     }
     
+    protected static boolean isDistributedClusterModeEnabled() {
+        return isDistributedClusterModeEnabled(config);
+    }
+    
     @Before
     public void cleanUpBeforeTest() throws Exception {
         deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());    

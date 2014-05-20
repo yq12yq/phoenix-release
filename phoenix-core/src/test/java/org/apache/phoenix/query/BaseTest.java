@@ -104,6 +104,7 @@ import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
@@ -112,7 +113,6 @@ import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -451,7 +451,7 @@ public abstract class BaseTest {
         }
     }
     
-    private static boolean isDistributedClusterModeEnabled(Configuration conf) {
+    protected static boolean isDistributedClusterModeEnabled(Configuration conf) {
         boolean isDistributedCluster = false;
         //check if the distributed mode was specified as a system property.
         isDistributedCluster = Boolean.parseBoolean(System.getProperty(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, "false"));
@@ -535,7 +535,7 @@ public abstract class BaseTest {
         conf.setInt("dfs.namenode.handler.count", 1);
         conf.setInt("dfs.namenode.service.handler.count", 1);
         conf.setInt("dfs.datanode.handler.count", 1);
-        conf.setInt("hadoop.http.max.threads", 1);
+        conf.setInt("hadoop.http.max.threads", 10);
         conf.setInt("ipc.server.read.threadpool.size", 2);
         conf.setInt("ipc.server.handler.threadpool.size", 2);
         conf.setInt("hbase.hconnection.threads.max", 2);
@@ -547,7 +547,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.threads.max", 5);
         return conf;
     }
-
+    
     /**
      * Create a {@link PhoenixTestDriver} and register it.
      * @return an initialized and registered {@link PhoenixTestDriver} 
@@ -651,7 +651,7 @@ public abstract class BaseTest {
             Bytes.toBytes(tenantId + "00C"),
             };
     }
-    
+
     protected static void deletePriorTables(long ts, String url) throws Exception {
         deletePriorTables(ts, (String)null, url);
     }

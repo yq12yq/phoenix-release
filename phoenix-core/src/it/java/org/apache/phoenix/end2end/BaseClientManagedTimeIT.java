@@ -64,6 +64,10 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
         return new Configuration(config);
     }
     
+    protected static boolean isDistributedClusterModeEnabled() {
+      return isDistributedClusterModeEnabled(config);
+    }
+    
     @Before
     public void cleanUpBeforeTest() throws Exception {
         long ts = nextTimestamp();
