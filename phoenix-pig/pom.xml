@@ -47,6 +47,10 @@
       <artifactId>pig</artifactId>
     </dependency>
     <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>
     </dependency>
@@ -85,6 +89,12 @@
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-testing-util</artifactId>
           <version>${hbase-hadoop1.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
@@ -92,6 +102,12 @@
           <version>${hbase-hadoop1.version}</version>
           <type>test-jar</type>
           <scope>test</scope>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
@@ -111,10 +127,36 @@
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-core</artifactId>
+          <version>${hadoop-one.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>hsqldb</groupId>
+              <artifactId>hsqldb</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>net.sf.kosmosfs</groupId>
+              <artifactId>kfs</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.eclipse.jdt</groupId>
+              <artifactId>core</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>net.java.dev.jets3t</groupId>
+              <artifactId>jets3t</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>oro</groupId>
+              <artifactId>oro</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-test</artifactId>
+          <version>${hadoop-one.version}</version>
+          <optional>true</optional>
+          <scope>test</scope>
         </dependency>
       </dependencies>
     </profile>
@@ -133,6 +175,12 @@
           <groupId>org.apache.hbase</groupId>
           <artifactId>hbase-testing-util</artifactId>
           <version>${hbase-hadoop2.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
@@ -140,6 +188,12 @@
           <version>${hbase-hadoop2.version}</version>
           <type>test-jar</type>
           <scope>test</scope>
+          <exclusions>
+            <exclusion>
+              <groupId>org.jruby</groupId>
+              <artifactId>jruby-complete</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.hbase</groupId>
