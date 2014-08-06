@@ -64,6 +64,10 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
+import org.apache.phoenix.trace.TracingCompat;
+import org.apache.phoenix.trace.util.NullSpan;
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
 
 import com.google.common.collect.Multimap;
 
@@ -312,12 +316,24 @@ public class Indexer extends BaseRegionObserver {
     // don't worry which one we get
     WALEdit edit = miniBatchOp.getWalEdit(0);
 
+        // get the current span, or just use a null-span to avoid a bunch of if statements
+        Span current = Trace.startSpan("Starting to build index updates").getSpan();
+        if (current == null) {
+            current = NullSpan.INSTANCE;
+        }
+
     // get the index updates for all elements in this batch
     Collection<Pair<Mutation, byte[]>> indexUpdates =
         this.builder.getIndexUpdate(miniBatchOp, mutations.values());
 
+        current.addTimelineAnnotation("Built index updates, doing preStep");
+        TracingCompat.addAnnotation(current, "index update count", indexUpdates.size());
+
     // write them, either to WAL or the index tables
     doPre(indexUpdates, edit, durability);
+
+        // close the span
+        current.stop();
   }
 
   private class MultiMutation extends Mutation {
@@ -458,16 +474,24 @@ public class Indexer extends BaseRegionObserver {
       return;
     }
 
+        // get the current span, or just use a null-span to avoid a bunch of if statements
+        Span current = Trace.startSpan("Completing index writes").getSpan();
+        if (current == null) {
+            current = NullSpan.INSTANCE;
+        }
+
     // there is a little bit of excess here- we iterate all the non-indexed kvs for this check first
     // and then do it again later when getting out the index updates. This should be pretty minor
     // though, compared to the rest of the runtime
     IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
+
     /*
      * early exit - we have nothing to write, so we don't need to do anything else. NOTE: we don't
      * release the WAL Rolling lock (INDEX_UPDATE_LOCK) since we never take it in doPre if there are
      * no index updates.
      */
     if (ikv == null) {
+            current.stop();
       return;
     }
 
@@ -483,6 +507,7 @@ public class Indexer extends BaseRegionObserver {
       // references originally - therefore, we just pass in a null factory here and use the ones
       // already specified on each reference
       try {
+                current.addTimelineAnnotation("Actually doing index update for first time");
           writer.writeAndKillYourselfOnFailure(indexUpdates);
       } finally {
         // With a custom kill policy, we may throw instead of kill the server.
@@ -492,6 +517,10 @@ public class Indexer extends BaseRegionObserver {
         // mark the batch as having been written. In the single-update case, this never gets check
         // again, but in the batch case, we will check it again (see above).
         ikv.markBatchFinished();
+
+                // finish the span
+
+                current.stop();
       }
     }
   }
@@ -570,7 +599,7 @@ public class Indexer extends BaseRegionObserver {
      * hopes they come up before the primary table finishes.
      */
     Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-    recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates);
+    recoveryWriter.write(indexUpdates);
   }
 
   /**

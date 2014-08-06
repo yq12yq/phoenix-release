@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -37,7 +38,7 @@ public class SaltingUtil {
     public static final String SALTED_ROW_KEY_NAME = "_SALTED_KEY";
     public static final PColumnImpl SALTING_COLUMN = new PColumnImpl(
             PNameFactory.newName(SALTING_COLUMN_NAME), null, PDataType.BINARY, 1, 0, false, 0, SortOrder.getDefault(), 0, null, false);
-    public static final RowKeySchema VAR_BINARY_SALTED_SCHEMA = new RowKeySchemaBuilder(1)
+    public static final RowKeySchema VAR_BINARY_SALTED_SCHEMA = new RowKeySchemaBuilder(2)
         .addField(SALTING_COLUMN, false, SortOrder.getDefault())
         .addField(SchemaUtil.VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
 
@@ -104,5 +105,20 @@ public class SaltingUtil {
             upperRange = newUpperRange;
         }
         return KeyRange.getKeyRange(lowerRange, upperRange);
+    }
+
+    public static void addRegionStartKeyToScanStartAndStopRows(byte[] startKey, byte[] endKey, Scan scan) {
+        if (startKey.length == 0 && endKey.length == 0) return;
+        byte[] prefixBytes = startKey.length != 0 ? startKey : new byte[endKey.length];
+        byte[] newStartRow = new byte[scan.getStartRow().length + prefixBytes.length];
+        System.arraycopy(prefixBytes, 0, newStartRow, 0, prefixBytes.length);
+        System.arraycopy(scan.getStartRow(), 0, newStartRow, prefixBytes.length, scan.getStartRow().length);
+        scan.setStartRow(newStartRow);
+        if (scan.getStopRow().length != 0) {
+            byte[] newStopRow = new byte[scan.getStopRow().length + prefixBytes.length];
+            System.arraycopy(prefixBytes, 0, newStopRow, 0, prefixBytes.length);
+            System.arraycopy(scan.getStopRow(), 0, newStopRow, prefixBytes.length, scan.getStopRow().length);
+            scan.setStopRow(newStopRow);
+        }
     }
 }

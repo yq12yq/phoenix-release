@@ -19,6 +19,8 @@ package org.apache.phoenix.expression;
 
 import java.util.Map;
 
+import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
@@ -26,20 +28,28 @@ import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
+import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
+import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
+import org.apache.phoenix.expression.function.LastValueFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
+import org.apache.phoenix.expression.function.LpadFunction;
 import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileDiscAggregateFunction;
@@ -51,6 +61,7 @@ import org.apache.phoenix.expression.function.RoundDateExpression;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
+import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
@@ -58,14 +69,13 @@ import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
+import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.expression.function.ToDateFunction;
 import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
-import org.apache.phoenix.expression.function.TimezoneOffsetFunction;
-import org.apache.phoenix.expression.function.DecodeFunction;
 
 import com.google.common.collect.Maps;
 
@@ -78,6 +88,8 @@ import com.google.common.collect.Maps;
  *
  * @since 0.1
  */
+//Important : When you want to add new Types make sure to add those towards the end, not changing the existing type's
+//ordinal
 public enum ExpressionType {
     ReverseFunction(ReverseFunction.class),
     RowKey(RowKeyColumnExpression.class),
@@ -156,8 +168,19 @@ public enum ExpressionType {
     ArrayConstructorExpression(ArrayConstructorExpression.class),
     SQLViewTypeFunction(SQLViewTypeFunction.class),
     ExternalSqlTypeIdFunction(ExternalSqlTypeIdFunction.class),
+    ConvertTimezoneFunction(ConvertTimezoneFunction.class),
     DecodeFunction(DecodeFunction.class),
-    TimezoneOffsetFunction(TimezoneOffsetFunction.class);
+    TimezoneOffsetFunction(TimezoneOffsetFunction.class),
+    EncodeFunction(EncodeFunction.class),
+    LpadFunction(LpadFunction.class),
+    NthValueFunction(NthValueFunction.class),
+    FirstValueFunction(FirstValueFunction.class),
+    LastValueFunction(LastValueFunction.class),
+    ArrayAnyComparisonExpression(ArrayAnyComparisonExpression.class),
+    ArrayAllComparisonExpression(ArrayAllComparisonExpression.class),
+    InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
+    SQLIndexTypeFunction(SQLIndexTypeFunction.class),
+    ModulusExpression(ModulusExpression.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
     }

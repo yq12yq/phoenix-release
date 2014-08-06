@@ -34,7 +34,9 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -55,11 +57,21 @@ import com.google.common.collect.Lists;
  */
 public class ScanUtil {
 
+    public static final int[] SINGLE_COLUMN_SLOT_SPAN = new int[1];
+
     private ScanUtil() {
     }
 
     public static void setTenantId(Scan scan, byte[] tenantId) {
         scan.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+    }
+
+    public static void setLocalIndex(Scan scan) {
+        scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX, PDataType.TRUE_BYTES);
+    }
+
+    public static boolean isLocalIndex(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX) != null;
     }
 
     // Use getTenantId and pass in column name to match against
@@ -101,6 +113,10 @@ public class ScanUtil {
 
     public static boolean intersectScanRange(Scan scan, byte[] startKey, byte[] stopKey, boolean useSkipScan) {
         boolean mayHaveRows = false;
+        int offset = 0;
+        if (ScanUtil.isLocalIndex(scan)) {
+            offset = startKey.length != 0 ? startKey.length : stopKey.length;
+        }
         byte[] existingStartKey = scan.getStartRow();
         byte[] existingStopKey = scan.getStopRow();
         if (existingStartKey.length > 0) {
@@ -119,7 +135,19 @@ public class ScanUtil {
         }
         scan.setStartRow(startKey);
         scan.setStopRow(stopKey);
-        
+        if (offset > 0 && useSkipScan) {
+            byte[] temp = null;
+            if (startKey.length != 0) {
+                temp =new byte[startKey.length - offset];
+                System.arraycopy(startKey, offset, temp, 0, startKey.length - offset);
+                startKey = temp;
+            }
+            if (stopKey.length != 0) {
+                temp = new byte[stopKey.length - offset];
+                System.arraycopy(stopKey, offset, temp, 0, stopKey.length - offset);
+                stopKey = temp;
+            }
+        }
         mayHaveRows = mayHaveRows || Bytes.compareTo(scan.getStartRow(), scan.getStopRow()) < 0;
         
         // If the scan is using skip scan filter, intersect and replace the filter.
@@ -134,21 +162,21 @@ public class ScanUtil {
                 // Intersect found: replace skip scan with intersected one
                 scan.setFilter(newFilter);
             } else if (filter instanceof FilterList) {
-                FilterList filterList = (FilterList)filter;
-                Filter firstFilter = filterList.getFilters().get(0);
-                if (firstFilter instanceof SkipScanFilter) {
-                    SkipScanFilter oldFilter = (SkipScanFilter)firstFilter;
-                    SkipScanFilter newFilter = oldFilter.intersect(startKey, stopKey);
-                    if (newFilter == null) {
-                        return false;
+                FilterList oldList = (FilterList)filter;
+                FilterList newList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
+                for (Filter f : oldList.getFilters()) {
+                    if (f instanceof SkipScanFilter) {
+                        SkipScanFilter newFilter = ((SkipScanFilter)f).intersect(startKey, stopKey);
+                        if (newFilter == null) {
+                            return false;
+                        }
+                        newList.addFilter(newFilter);
+                    } else {
+                        newList.addFilter(f);
                     }
-                    // Intersect found: replace skip scan with intersected one
-                    List<Filter> allFilters = new ArrayList<Filter>(filterList.getFilters().size());
-                    allFilters.addAll(filterList.getFilters());
-                    allFilters.set(0, newFilter);
-                    scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,allFilters));
                 }
-            }
+                scan.setFilter(newList);
+           }
         }
         return mayHaveRows;
     }
@@ -197,15 +225,15 @@ public class ScanUtil {
         }
     }
 
-    public static byte[] getMinKey(RowKeySchema schema, List<List<KeyRange>> slots) {
-        return getKey(schema, slots, Bound.LOWER);
+    public static byte[] getMinKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
+        return getKey(schema, slots, slotSpan, Bound.LOWER);
     }
 
-    public static byte[] getMaxKey(RowKeySchema schema, List<List<KeyRange>> slots) {
-        return getKey(schema, slots, Bound.UPPER);
+    public static byte[] getMaxKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
+        return getKey(schema, slots, slotSpan, Bound.UPPER);
     }
 
-    private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, Bound bound) {
+    private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, Bound bound) {
         if (slots.isEmpty()) {
             return null;
         }
@@ -214,10 +242,10 @@ public class ScanUtil {
         for (int i = 0; i < position.length; i++) {
             position[i] = bound == Bound.LOWER ? 0 : slots.get(i).size()-1;
             KeyRange range = slots.get(i).get(position[i]);
-            maxLength += range.getRange(bound).length + (schema.getField(i).getDataType().isFixedWidth() ? 0 : 1);
+            maxLength += range.getRange(bound).length + (schema.getField(i + slotSpan[i]).getDataType().isFixedWidth() ? 0 : 1);
         }
         byte[] key = new byte[maxLength];
-        int length = setKey(schema, slots, position, bound, key, 0, 0, position.length);
+        int length = setKey(schema, slots, slotSpan, position, bound, key, 0, 0, position.length);
         if (length == 0) {
             return null;
         }
@@ -243,21 +271,28 @@ public class ScanUtil {
      *  single         inclusive      lower         no
      *  single         inclusive      upper         yes, at the end if it is the last slots.
      */
-    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] position, Bound bound,
-            byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex) {
-        return setKey(schema, slots, position, bound, key, byteOffset, slotStartIndex, slotEndIndex, slotStartIndex);
+    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, int[] position,
+            Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex) {
+        return setKey(schema, slots, slotSpan, position, bound, key, byteOffset, slotStartIndex, slotEndIndex, slotStartIndex);
     }
 
-    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] position, Bound bound,
-            byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex, int schemaStartIndex) {
+    public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan, int[] position,
+            Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex, int schemaStartIndex) {
         int offset = byteOffset;
         boolean lastInclusiveUpperSingleKey = false;
         boolean anyInclusiveUpperRangeKey = false;
-        for (int i = slotStartIndex; i < slotEndIndex; i++) {
+        // The index used for slots should be incremented by 1,
+        // but the index for the field it represents in the schema
+        // should be incremented by 1 + value in the current slotSpan index
+        // slotSpan stores the number of columns beyond one that the range spans
+        int i = slotStartIndex, fieldIndex = slotStartIndex;
+        for (i = slotStartIndex; i < slotEndIndex; i++) {
             // Build up the key by appending the bound of each key range
             // from the current position of each slot. 
             KeyRange range = slots.get(i).get(position[i]);
-            boolean isFixedWidth = schema.getField(schemaStartIndex++).getDataType().isFixedWidth();
+            // Use last slot in a multi-span column to determine if fixed width
+            boolean isFixedWidth = schema.getField(fieldIndex + slotSpan[i]).getDataType().isFixedWidth();
+            fieldIndex += slotSpan[i] + 1;
             /*
              * If the current slot is unbound then stop if:
              * 1) setting the upper bound. There's no value in
@@ -294,7 +329,7 @@ public class ScanUtil {
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
             
-            if (!isFixedWidth && ( i < schema.getMaxFields()-1 || inclusiveUpper || exclusiveLower)) {
+            if (!isFixedWidth && ( fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower)) {
                 key[offset++] = QueryConstants.SEPARATOR_BYTE;
                 // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
                 // as we don't want to increment the null byte in this case
@@ -328,10 +363,11 @@ public class ScanUtil {
         // after the table has data, in which case there won't be a separator
         // byte.
         if (bound == Bound.LOWER) {
-            while (schemaStartIndex > 0 && offset > byteOffset && 
-                    !schema.getField(--schemaStartIndex).getDataType().isFixedWidth() && 
+            while (--i >= schemaStartIndex && offset > byteOffset && 
+                    !schema.getField(--fieldIndex).getDataType().isFixedWidth() && 
                     key[offset-1] == QueryConstants.SEPARATOR_BYTE) {
                 offset--;
+                fieldIndex -= slotSpan[i];
             }
         }
         return offset - byteOffset;
@@ -370,7 +406,7 @@ public class ScanUtil {
         for (Mutation m : mutations) {
             keys.add(PDataType.VARBINARY.getKeyRange(m.getRow()));
         }
-        ScanRanges keyRanges = ScanRanges.create(Collections.singletonList(keys), SchemaUtil.VAR_BINARY_SCHEMA);
+        ScanRanges keyRanges = ScanRanges.create(SchemaUtil.VAR_BINARY_SCHEMA, Collections.singletonList(keys), ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
         return keyRanges;
     }
 
@@ -413,5 +449,43 @@ public class ScanUtil {
     public static boolean isReversed(Scan scan) {
         byte[] reversed = scan.getAttribute(REVERSED_ATTR);
         return (PDataType.TRUE_BYTES.equals(reversed));
+    }
+    
+    private static void setRowKeyOffset(Filter filter, int offset) {
+        if (filter instanceof BooleanExpressionFilter) {
+            BooleanExpressionFilter boolFilter = (BooleanExpressionFilter)filter;
+            IndexUtil.setRowKeyExpressionOffset(boolFilter.getExpression(), offset);
+        } else if (filter instanceof SkipScanFilter) {
+            SkipScanFilter skipScanFilter = (SkipScanFilter)filter;
+            skipScanFilter.setOffset(offset);
+        }
+    }
+
+    public static void setRowKeyOffset(Scan scan, int offset) {
+        Filter filter = scan.getFilter();
+        if (filter == null) {
+            return;
+        }
+        if (filter instanceof FilterList) {
+            FilterList filterList = (FilterList)filter;
+            for (Filter childFilter : filterList.getFilters()) {
+                setRowKeyOffset(childFilter, offset);
+            }
+        } else {
+            setRowKeyOffset(filter, offset);
+        }
+    }
+
+    public static int[] getDefaultSlotSpans(int nSlots) {
+        return new int[nSlots];
+    }
+
+    public static int calculateSlotSpan(List<List<KeyRange>> ranges, int[] slotSpan) {
+        int nSlots = ranges.size();
+        int totalSlotSpan = nSlots;
+        for (int i = 0; i < nSlots; i++) {
+            totalSlotSpan += slotSpan[i];
+        }
+        return totalSlotSpan;
     }
 }

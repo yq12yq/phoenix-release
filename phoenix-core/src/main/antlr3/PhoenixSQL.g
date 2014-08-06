@@ -98,7 +98,12 @@ tokens
     VALUE='value';
     FOR='for';
     CACHE='cache';
-    DERIVE='derive';
+    LOCAL='local';
+    ANY='any';
+    SOME='some';
+    MINVALUE='minvalue';
+    MAXVALUE='maxvalue';
+    CYCLE='cycle';
 }
 
 
@@ -129,18 +134,21 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.SchemaUtil;
 }
 
@@ -378,21 +386,24 @@ create_view_node returns [CreateTableStatement ret]
 
 // Parse a create index statement.
 create_index_node returns [CreateIndexStatement ret]
-    :   CREATE INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+    :   CREATE l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
         (LPAREN pk=index_pk_constraint RPAREN)
         (INCLUDE (LPAREN icrefs=column_names RPAREN))?
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
-        {ret = factory.createIndex(i, factory.namedTable(null,t), pk, icrefs, v, p, ex!=null, getBindCount()); }
+        {ret = factory.createIndex(i, factory.namedTable(null,t), pk, icrefs, v, p, ex!=null, l==null ? IndexType.getDefault() : IndexType.LOCAL, getBindCount()); }
     ;
 
 // Parse a create sequence statement.
 create_sequence_node returns [CreateSequenceStatement ret]
     :   CREATE SEQUENCE  (IF NOT ex=EXISTS)? t=from_table_name
-        (START WITH? s=int_literal_or_bind)?
-        (INCREMENT BY? i=int_literal_or_bind)?
+        (START WITH? s=value_expression)?
+        (INCREMENT BY? i=value_expression)?
+        (MINVALUE min=value_expression)?
+        (MAXVALUE max=value_expression)?
+        (cyc=CYCLE)? 
         (CACHE c=int_literal_or_bind)?
-    { $ret = factory.createSequence(t, s, i, c, ex!=null, getBindCount()); }
+    { $ret = factory.createSequence(t, s, i, c, min, max, cyc!=null, ex!=null, getBindCount()); }
     ;
 
 int_literal_or_bind returns [ParseNode ret]
@@ -479,7 +490,7 @@ alter_index_node returns [AlterIndexStatement ret]
 alter_table_node returns [AlterTableStatement ret]
     :   ALTER (TABLE | v=VIEW) t=from_table_name
         ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=properties)?) | (SET (p=properties)) )
-        { PTableType tt = v==null ? PTableType.TABLE : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
+        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
     ;
 
 prop_name returns [String ret]
@@ -546,7 +557,7 @@ select_node returns [SelectStatement ret]
         (HAVING having=expression)?
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate()); }
+        { ParseContext context = contextStack.pop(); $ret = factory.select(from, null, d!=null, sel, where, group, having, order, l, getBindCount(), context.isAggregate(), context.hasSequences()); }
     ;
 
 // Parse a full select expression structure.
@@ -685,13 +696,17 @@ not_expression returns [ParseNode ret]
     |   n=NOT? LPAREN e=expression RPAREN { $ret = n == null ? e : factory.not(e); }
     ;
 
+comparison_op returns [CompareOp ret]
+	: EQ { $ret = CompareOp.EQUAL; }
+	| LT { $ret = CompareOp.LESS; }
+	| GT { $ret = CompareOp.GREATER; }
+	| LT EQ { $ret = CompareOp.LESS_OR_EQUAL; }
+	| GT EQ { $ret = CompareOp.GREATER_OR_EQUAL; }
+	| (NOEQ1 | NOEQ2) { $ret = CompareOp.NOT_EQUAL; }
+	;
+	
 boolean_expression returns [ParseNode ret]
-    :   l=value_expression ((EQ r=value_expression {$ret = factory.equal(l,r); } )
-                  |  ((NOEQ1 | NOEQ2) r=value_expression {$ret = factory.notEqual(l,r); } )
-                  |  (LT r=value_expression {$ret = factory.lt(l,r); } )
-                  |  (GT r=value_expression {$ret = factory.gt(l,r); } )
-                  |  (LT EQ r=value_expression {$ret = factory.lte(l,r); } )
-                  |  (GT EQ r=value_expression {$ret = factory.gte(l,r); } )
+    :   l=value_expression ((op=comparison_op (r=value_expression | ((all=ALL | any=ANY) LPAREN r=value_expression RPAREN)) {$ret = all != null ? factory.wrapInAll(op, l, r) : any != null ? factory.wrapInAny(op, l, r) : factory.comparison(op,l,r); } )
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
                   |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null); } )
                       |        (EXISTS LPAREN r=subquery_expression RPAREN {$ret = factory.exists(l,r,n!=null);} )
@@ -724,17 +739,21 @@ subtract_expression returns [ParseNode ret]
 
 concat_expression returns [ParseNode ret]
 @init{List<ParseNode> l = new ArrayList<ParseNode>(4); }
-    :   i=multiply_expression {l.add(i);} (CONCAT i=multiply_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.concat(l); }
+    :   i=multiply_divide_modulo_expression {l.add(i);} (CONCAT i=multiply_divide_modulo_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.concat(l); }
     ;
 
-multiply_expression returns [ParseNode ret]
-@init{List<ParseNode> l = new ArrayList<ParseNode>(4); }
-    :   i=divide_expression {l.add(i);} (ASTERISK i=divide_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.multiply(l); }
-    ;
-
-divide_expression returns [ParseNode ret]
-@init{List<ParseNode> l = new ArrayList<ParseNode>(4); }
-    :   i=negate_expression {l.add(i);} (DIVIDE i=negate_expression {l.add(i);})* { $ret = l.size() == 1 ? l.get(0) : factory.divide(l); }
+multiply_divide_modulo_expression returns [ParseNode ret]
+@init{ParseNode lhs = null; List<ParseNode> l;}
+    :   i=negate_expression {lhs = i;} 
+        (op=(ASTERISK | DIVIDE | PERCENT) rhs=negate_expression {
+            l = Arrays.asList(lhs, rhs); 
+            // determine the expression type based on the operator found
+            lhs = op.getType() == ASTERISK ? factory.multiply(l)
+                : op.getType() == DIVIDE   ? factory.divide(l)
+                : factory.modulus(l);
+            }
+        )*
+        { $ret = lhs; }
     ;
 
 negate_expression returns [ParseNode ret]
@@ -788,7 +807,9 @@ term returns [ParseNode ret]
                      scale == null ? null : Integer.parseInt(scale.getText()),
                      ar!=null);
         }
-    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name { $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s);}    
+    |   (n=NEXT | CURRENT) VALUE FOR s=from_table_name 
+        { contextStack.peek().hasSequences(true);
+          $ret = n==null ? factory.currentValueFor(s) : factory.nextValueFor(s); }    
     ;
 
 one_or_more_expressions returns [List<ParseNode> ret]
@@ -1039,6 +1060,10 @@ ASTERISK
 
 DIVIDE
     :   '/'
+    ;
+    
+PERCENT
+    :   '%'
     ;
 
 OUTER_JOIN

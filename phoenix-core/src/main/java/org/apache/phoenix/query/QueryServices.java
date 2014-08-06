@@ -44,6 +44,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUEUE_SIZE_ATTRIB = "phoenix.query.queueSize";
     public static final String THREAD_TIMEOUT_MS_ATTRIB = "phoenix.query.timeoutMs";
     public static final String SPOOL_THRESHOLD_BYTES_ATTRIB = "phoenix.query.spoolThresholdBytes";
+    public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
+    public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
+
     
     /**
 	 * max size to spool the the result into
@@ -56,6 +59,11 @@ public interface QueryServices extends SQLCloseable {
 	 */
 	public static final String MAX_SPOOL_TO_DISK_BYTES_ATTRIB = "phoenix.query.maxSpoolToDiskBytes";
     
+    /**
+     * Number of records to read per chunk when streaming records of a basic scan.
+     */
+    public static final String SCAN_RESULT_CHUNK_SIZE = "phoenix.query.scanResultChunkSize";
+
     public static final String MAX_MEMORY_PERC_ATTRIB = "phoenix.query.maxGlobalMemoryPercentage";
     public static final String MAX_MEMORY_WAIT_MS_ATTRIB = "phoenix.query.maxGlobalMemoryWaitMs";
     public static final String MAX_TENANT_MEMORY_PERC_ATTRIB = "phoenix.query.maxTenantMemoryPercentage";
@@ -104,6 +112,17 @@ public interface QueryServices extends SQLCloseable {
     
     // The following config settings is to deal with SYSTEM.CATALOG moves(PHOENIX-916) among region servers
     public static final String CLOCK_SKEW_INTERVAL_ATTRIB = "phoenix.clock.skew.interval";
+    
+    // A master switch if to enable auto rebuild an index which failed to be updated previously 
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_ATTRIB = "phoenix.index.failure.handling.rebuild";
+    
+    // Time interval to check if there is an index needs to be rebuild
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB = 
+        "phoenix.index.failure.handling.rebuild.interval";
+    
+    // Index will be partially re-built from index disable time stamp - following overlap time 
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB = 
+        "phoenix.index.failure.handling.rebuild.overlap.time";
     
     /**
      * Get executor service used for parallel scans

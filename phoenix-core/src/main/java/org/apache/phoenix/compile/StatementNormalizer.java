@@ -21,8 +21,6 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.common.collect.Lists;
-
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BetweenParseNode;
 import org.apache.phoenix.parse.BindTableNode;
@@ -42,6 +40,8 @@ import org.apache.phoenix.parse.TableNodeVisitor;
 import org.apache.phoenix.parse.TableWildcardParseNode;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.util.SchemaUtil;
+
+import com.google.common.collect.Lists;
 
 
 /**
@@ -101,7 +101,7 @@ public class StatementNormalizer extends ParseNodeRewriter {
             if (selectNodes != normSelectNodes) {
                 statement = NODE_FACTORY.select(statement.getFrom(), statement.getHint(), statement.isDistinct(),
                         normSelectNodes, statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(),
-                        statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+                        statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
             }
         }
         

@@ -19,17 +19,28 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.HConnection;
+import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.RequestConverter;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
+import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -39,18 +50,29 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.protobuf.ServiceException;
 
 
 public class MetaDataUtil {
+    private static final Logger logger = LoggerFactory.getLogger(MetaDataUtil.class);
+  
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
     public static final byte[] VIEW_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_TABLE_PREFIX);
+    public static final String LOCAL_INDEX_TABLE_PREFIX = "_LOCAL_IDX_";
+    public static final byte[] LOCAL_INDEX_TABLE_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_TABLE_PREFIX);
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
     public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+    public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
+    public static final byte[] PARENT_TABLE_KEY_BYTES = Bytes.toBytes("PARENT_TABLE");
     
     public static boolean areClientAndServerCompatible(long version) {
         // As of 3.0, we allow a client and server to differ for the minor version.
@@ -246,6 +268,26 @@ public class MetaDataUtil {
         return schemaName;
     }
 
+    public static byte[] getLocalIndexPhysicalName(byte[] physicalTableName) {
+        return ByteUtil.concat(LOCAL_INDEX_TABLE_PREFIX_BYTES, physicalTableName);
+    }
+    
+    public static String getLocalIndexTableName(String tableName) {
+        return LOCAL_INDEX_TABLE_PREFIX + tableName;
+    }
+    
+    public static String getLocalIndexSchemaName(String schemaName) {
+        return schemaName;
+    }  
+
+    public static String getUserTableName(String localIndexTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(localIndexTableName);
+        if(!schemaName.isEmpty()) schemaName = schemaName.substring(LOCAL_INDEX_TABLE_PREFIX.length());
+        String tableName = localIndexTableName.substring((schemaName.isEmpty() ? 0 : (schemaName.length() + QueryConstants.NAME_SEPARATOR.length()))
+            + LOCAL_INDEX_TABLE_PREFIX.length());
+        return SchemaUtil.getTableName(schemaName, tableName);
+    }
+
     public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier
@@ -265,7 +307,15 @@ public class MetaDataUtil {
     }
 
     public static boolean hasViewIndexTable(PhoenixConnection connection, PName name) throws SQLException {
-        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(name.getBytes());
+        return hasViewIndexTable(connection, name.getBytes());
+    }
+    
+    public static boolean hasViewIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
+        return hasViewIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+    }
+    
+    public static boolean hasViewIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         try {
             HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
             return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_VIEW_INDEX_TABLE_PROP_BYTES)));
@@ -273,7 +323,25 @@ public class MetaDataUtil {
             return false;
         }
     }
-    
+
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, PName name) throws SQLException {
+        return hasLocalIndexTable(connection, name.getBytes());
+    }
+
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, String schemaName, String tableName) throws SQLException {
+        return hasLocalIndexTable(connection, SchemaUtil.getTableNameAsBytes(schemaName, tableName));
+    }
+
+    public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
+        try {
+            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
+            return desc != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));
+        } catch (TableNotFoundException e) {
+            return false;
+        }
+    }
+
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
         SequenceKey key = getViewIndexSequenceKey(null, name);
         connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME + 
@@ -281,7 +349,59 @@ public class MetaDataUtil {
                 PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + key.getSchemaName() + "'");
         
     }
+    
+    /**
+     * This function checks if all regions of a table is online
+     * @param table
+     * @return true when all regions of a table are online
+     * @throws IOException
+     * @throws
+     */
+    public static boolean tableRegionsOnline(Configuration conf, PTable table) {
+        HConnection hcon = null;
+
+        try {
+            hcon = HConnectionManager.getConnection(conf);
+            List<HRegionLocation> locations = hcon.locateRegions(
+                org.apache.hadoop.hbase.TableName.valueOf(table.getTableName().getBytes()));
+
+            for (HRegionLocation loc : locations) {
+                try {
+                    ServerName sn = loc.getServerName();
+                    if (sn == null) continue;
+
+                    AdminService.BlockingInterface admin = hcon.getAdmin(sn);
+                    GetRegionInfoRequest request = RequestConverter.buildGetRegionInfoRequest(
+                        loc.getRegionInfo().getRegionName());
+
+                    admin.getRegionInfo(null, request);
+                } catch (ServiceException e) {
+                    IOException ie = ProtobufUtil.getRemoteException(e);
+                    logger.debug("Region " + loc.getRegionInfo().getEncodedName() + " isn't online due to:" + ie);
+                    return false;
+                } catch (RemoteException e) {
+                    logger.debug("Cannot get region " + loc.getRegionInfo().getEncodedName() + " info due to error:" + e);
+                    return false;
+                }
+            }
+        } catch (IOException ex) {
+            logger.warn("tableRegionsOnline failed due to:" + ex);
+            return false;
+        } finally {
+            if (hcon != null) {
+                try {
+                    hcon.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+
+        return true;
+    }
 
     public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
     public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_VIEW_INDEX_TABLE_PROP_NAME);
+
+    public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
+    public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
 }

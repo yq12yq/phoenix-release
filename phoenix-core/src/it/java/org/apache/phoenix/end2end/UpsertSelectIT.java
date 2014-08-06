@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.TestUtil.ROW6;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -39,18 +40,37 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import com.google.common.collect.Maps;
+
 @Category(ClientManagedTimeTest.class)
 public class UpsertSelectIT extends BaseClientManagedTimeIT {
+	
+	
+  @BeforeClass
+  @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+  public static void doSetup() throws Exception {
+      Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+      props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(500));
+      props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
+
+      // Must update config before starting server
+      setUpTestDriver(getUrl(), new ReadOnlyProps(props.entrySet().iterator()));
+  }
     
     @Test
     public void testUpsertSelectWithNoIndex() throws Exception {
@@ -731,5 +751,62 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         
         assertFalse(rs.next());
         conn.close();
+    }
+    
+    @Test
+    public void testUpsertSelectWithSequenceAndOrderByWithSalting() throws Exception {
+
+        int numOfRecords = 200;
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "CREATE TABLE IF NOT EXISTS DUMMY_CURSOR_STORAGE ("
+                + "ORGANIZATION_ID CHAR(15) NOT NULL, QUERY_ID CHAR(15) NOT NULL, CURSOR_ORDER BIGINT NOT NULL, K1 INTEGER, V1 INTEGER "
+                + "CONSTRAINT MAIN_PK PRIMARY KEY (ORGANIZATION_ID, QUERY_ID, CURSOR_ORDER) " + ") SALT_BUCKETS = 4";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute(
+                "CREATE TABLE DUMMY_SEQ_TEST_DATA "
+                        + "(ORGANIZATION_ID CHAR(15) NOT NULL, k1 integer NOT NULL, v1 integer NOT NULL "
+                        + "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, k1, v1) ) VERSIONS=1, SALT_BUCKETS = 4");
+        conn.createStatement().execute("create sequence s cache " + Integer.MAX_VALUE);
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        for (int i = 0; i < numOfRecords; i++) {
+            conn.createStatement().execute(
+                    "UPSERT INTO DUMMY_SEQ_TEST_DATA values ('00Dxx0000001gEH'," + i + "," + (i + 2) + ")");
+        }
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        conn.createStatement().execute(
+                    "UPSERT INTO DUMMY_CURSOR_STORAGE SELECT '00Dxx0000001gEH', 'MyQueryId', NEXT VALUE FOR S, k1, v1  FROM DUMMY_SEQ_TEST_DATA ORDER BY K1, V1");
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select count(*) from DUMMY_CURSOR_STORAGE");
+
+        assertTrue(rs.next());
+        assertEquals(numOfRecords, rs.getLong(1));
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
+        ResultSet rs2 = conn.createStatement().executeQuery(
+                "select cursor_order, k1, v1 from DUMMY_CURSOR_STORAGE order by cursor_order");
+        long seq = 1;
+        while (rs2.next()) {
+            assertEquals(seq, rs2.getLong("cursor_order"));
+            // This value should be the sequence - 1 as we said order by k1 in the UPSERT...SELECT, but is not because
+            // of sequence processing.
+            assertEquals(seq - 1, rs2.getLong("k1"));
+            seq++;
+        }
+        conn.close();
+
     }
 }

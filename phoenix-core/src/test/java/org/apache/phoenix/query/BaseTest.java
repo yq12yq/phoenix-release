@@ -81,10 +81,13 @@ import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.math.BigDecimal;
-import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
@@ -94,10 +97,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -124,12 +129,14 @@ import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * 
@@ -512,8 +519,8 @@ public abstract class BaseTest {
     
     private static void setDefaultTestConfig(Configuration conf) {
         ConfigUtil.setReplicationConfigIfAbsent(conf);
-        QueryServicesOptions options = QueryServicesTestImpl.getDefaultTestServicesOptions();
-        for (Entry<String,String> entry : options.getProps()) {
+        QueryServices services = new PhoenixTestDriver().getQueryServices();
+        for (Entry<String,String> entry : services.getProps()) {
             conf.set(entry.getKey(), entry.getValue());
         }
         //no point doing sanity checks when running tests.
@@ -555,7 +562,8 @@ public abstract class BaseTest {
         PhoenixTestDriver driver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(driver);
         Assert.assertTrue(DriverManager.getDriver(url) == driver);
-        driver.connect(url, TestUtil.TEST_PROPERTIES);
+        Connection conn = driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.close();
         return driver;
     }
     
@@ -997,85 +1005,7 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-    
-    protected static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull, String url) throws Exception {
-        Properties props = new Properties();
-        if (ts != null) {
-            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
-        }
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            // Insert all rows at ts
-            PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                            "TABLE_WITH_ARRAY(" +
-                            "    ORGANIZATION_ID, " +
-                            "    ENTITY_ID, " +
-                            "    a_string_array, " +
-                            "    B_STRING, " +
-                            "    A_INTEGER, " +
-                            "    A_DATE, " +
-                            "    X_DECIMAL, " +
-                            "    x_long_array, " +
-                            "    X_INTEGER," +
-                            "    a_byte_array," +
-                            "    A_SHORT," +
-                            "    A_FLOAT," +
-                            "    a_double_array," +
-                            "    A_UNSIGNED_FLOAT," +
-                            "    A_UNSIGNED_DOUBLE)" +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, tenantId);
-            stmt.setString(2, ROW1);
-            // Need to support primitive
-            String[] strArr =  new String[4];
-            strArr[0] = "ABC";
-            if (useNull) {
-                strArr[1] = null;
-            } else {
-                strArr[1] = "CEDF";
-            }
-            strArr[2] = "XYZWER";
-            strArr[3] = "AB";
-            Array array = conn.createArrayOf("VARCHAR", strArr);
-            stmt.setArray(3, array);
-            stmt.setString(4, B_VALUE);
-            stmt.setInt(5, 1);
-            stmt.setDate(6, date);
-            stmt.setBigDecimal(7, null);
-            // Need to support primitive
-            Long[] longArr =  new Long[2];
-            longArr[0] = 25l;
-            longArr[1] = 36l;
-            array = conn.createArrayOf("BIGINT", longArr);
-            stmt.setArray(8, array);
-            stmt.setNull(9, Types.INTEGER);
-            // Need to support primitive
-            Byte[] byteArr =  new Byte[2];
-            byteArr[0] = 25;
-            byteArr[1] = 36;
-            array = conn.createArrayOf("TINYINT", byteArr);
-            stmt.setArray(10, array);
-            stmt.setShort(11, (short) 128);
-            stmt.setFloat(12, 0.01f);
-            // Need to support primitive
-            Double[] doubleArr =  new Double[4];
-            doubleArr[0] = 25.343;
-            doubleArr[1] = 36.763;
-            doubleArr[2] = 37.56;
-            doubleArr[3] = 386.63;
-            array = conn.createArrayOf("DOUBLE", doubleArr);
-            stmt.setArray(13, array);
-            stmt.setFloat(14, 0.01f);
-            stmt.setDouble(15, 0.0001);
-            stmt.execute();
 
-            conn.commit();
-        } finally {
-            conn.close();
-        }
-    }
-    
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, String url) throws Exception {
         initEntityHistoryTableValues(tenantId, splits, null);
     }
@@ -1310,5 +1240,53 @@ public abstract class BaseTest {
         } finally {
             admin.close();
         }
+    }
+
+    public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
+        List<List<Object>> results = Lists.newArrayList();
+        while (rs.next()) {
+            List<Object> result = Lists.newArrayList();
+            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
+                result.add(rs.getObject(i+1));
+            }
+            results.add(result);
+        }
+        for (int j = 0; j < expectedResultsArray.length; j++) {
+            List<List<Object>> expectedResults = expectedResultsArray[j];
+            Set<List<Object>> expectedResultsSet = Sets.newHashSet(expectedResults);
+            Iterator<List<Object>> iterator = results.iterator();
+            while (iterator.hasNext()) {
+                if (expectedResultsSet.contains(iterator.next())) {
+                    iterator.remove();
+                }
+            }
+        }
+        if (results.isEmpty()) return;
+        fail("Unable to find " + results + " in " + Arrays.asList(expectedResultsArray));
+    }
+
+    /**
+     * Asserts that we find the expected values in the result set. We don't know the order, since we don't always
+     * have an order by and we're going through indexes, but we assert that each expected result occurs once as
+     * expected (in any order).
+     */
+    public static void assertValuesEqualsResultSet(ResultSet rs, List<List<Object>> expectedResults) throws SQLException {
+        int expectedCount = expectedResults.size();
+        int count = 0;
+        List<List<Object>> actualResults = Lists.newArrayList();
+        List<Object> errorResult = null;
+        while (rs.next() && errorResult == null) {
+            List<Object> result = Lists.newArrayList();
+            for (int i = 0; i < rs.getMetaData().getColumnCount(); i++) {
+                result.add(rs.getObject(i+1));
+            }
+            if (!expectedResults.contains(result)) {
+                errorResult = result;
+            }
+            actualResults.add(result);
+            count++;
+        }
+        assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
+        assertEquals(count, expectedCount);
     }
 }

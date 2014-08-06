@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
@@ -40,6 +41,7 @@ import java.util.Properties;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Assert;
@@ -53,6 +55,84 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 
 	private static final String SIMPLE_TABLE_WITH_ARRAY = "SIMPLE_TABLE_WITH_ARRAY";
 
+    private static void initTablesWithArrays(String tenantId, Date date, Long ts, boolean useNull, String url) throws Exception {
+        Properties props = new Properties();
+        if (ts != null) {
+            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
+        }
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            // Insert all rows at ts
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                            "TABLE_WITH_ARRAY(" +
+                            "    ORGANIZATION_ID, " +
+                            "    ENTITY_ID, " +
+                            "    a_string_array, " +
+                            "    B_STRING, " +
+                            "    A_INTEGER, " +
+                            "    A_DATE, " +
+                            "    X_DECIMAL, " +
+                            "    x_long_array, " +
+                            "    X_INTEGER," +
+                            "    a_byte_array," +
+                            "    A_SHORT," +
+                            "    A_FLOAT," +
+                            "    a_double_array," +
+                            "    A_UNSIGNED_FLOAT," +
+                            "    A_UNSIGNED_DOUBLE)" +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            stmt.setString(1, tenantId);
+            stmt.setString(2, ROW1);
+            // Need to support primitive
+            String[] strArr =  new String[4];
+            strArr[0] = "ABC";
+            if (useNull) {
+                strArr[1] = null;
+            } else {
+                strArr[1] = "CEDF";
+            }
+            strArr[2] = "XYZWER";
+            strArr[3] = "AB";
+            Array array = conn.createArrayOf("VARCHAR", strArr);
+            stmt.setArray(3, array);
+            stmt.setString(4, B_VALUE);
+            stmt.setInt(5, 1);
+            stmt.setDate(6, date);
+            stmt.setBigDecimal(7, null);
+            // Need to support primitive
+            Long[] longArr =  new Long[2];
+            longArr[0] = 25l;
+            longArr[1] = 36l;
+            array = conn.createArrayOf("BIGINT", longArr);
+            stmt.setArray(8, array);
+            stmt.setNull(9, Types.INTEGER);
+            // Need to support primitive
+            Byte[] byteArr =  new Byte[2];
+            byteArr[0] = 25;
+            byteArr[1] = 36;
+            array = conn.createArrayOf("TINYINT", byteArr);
+            stmt.setArray(10, array);
+            stmt.setShort(11, (short) 128);
+            stmt.setFloat(12, 0.01f);
+            // Need to support primitive
+            Double[] doubleArr =  new Double[4];
+            doubleArr[0] = 25.343;
+            doubleArr[1] = 36.763;
+            doubleArr[2] = 37.56;
+            doubleArr[3] = 386.63;
+            array = conn.createArrayOf("DOUBLE", doubleArr);
+            stmt.setArray(13, array);
+            stmt.setFloat(14, 0.01f);
+            stmt.setDouble(15, 0.0001);
+            stmt.execute();
+
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+    
 	@Test
 	public void testScanByArrayValue() throws Exception {
 		long ts = nextTimestamp();
@@ -61,7 +141,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM table_with_array WHERE ?=organization_id and ?=a_float";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -97,7 +177,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM table_with_array WHERE ?=organization_id and ?=a_byte_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -137,7 +217,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array, /* comment ok? */ b_string, a_float FROM table_with_array WHERE ?=organization_id and ?=a_string_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -179,7 +259,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_string_array FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -210,7 +290,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -238,7 +318,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array[3] FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -265,7 +345,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT CASE WHEN A_INTEGER = 1 THEN a_double_array ELSE null END [3] FROM table_with_array";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -290,8 +370,8 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
         String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID,a_double_array) values('" + tenantId
-                + "','00A123122312312',ARRAY[2.0d,345.8d])";
-        Properties props = new Properties(TEST_PROPERTIES);
+                + "','00A123122312312',ARRAY[2.0,345.8])";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -303,7 +383,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             statement.close();
             conn.close();
             // create another connection
-            props = new Properties(TEST_PROPERTIES);
+            props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
@@ -331,12 +411,12 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         try {
             createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(tenantId, null, ts, false);
-            Properties props = new Properties(TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID,a_double_array) "
                     + "SELECT organization_id, entity_id, a_double_array  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE a_double_array[2] = 89.96d";
+                    + " WHERE a_double_array[2] = 89.96";
             PreparedStatement statement = conn.prepareStatement(query);
             int executeUpdate = statement.executeUpdate();
             assertEquals(1, executeUpdate);
@@ -344,7 +424,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             statement.close();
             conn.close();
             // create another connection
-            props = new Properties(TEST_PROPERTIES);
+            props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
@@ -364,7 +444,186 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             }
         }
     }
+    
+    @Test
+    public void testArraySelectWithORCondition() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE a_double_array[2] = 89.96d or a_char_array[0] = 'a'";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            assertFalse(rs.next());
 
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithANY() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE 89.96d = ANY(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithALL() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE 64.87d = ALL(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithANYCombinedWithOR() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE  a_char_array[0] = 'f' or 89.96d > ANY(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithALLCombinedWithOR() throws Exception {
+        long ts = nextTimestamp();
+        String tenantId = getOrganizationId();
+        createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+        Connection conn = null;
+        try {
+            createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initSimpleArrayTable(tenantId, null, ts, false);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_double_array[1], a_double_array[2]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE  a_char_array[0] = 'f' or 100.0d > ALL(a_double_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            Double[] doubleArr = new Double[1];
+            doubleArr[0] = 64.87d;
+            Double result = rs.getDouble(1);
+            assertEquals(result, doubleArr[0]);
+            doubleArr = new Double[1];
+            doubleArr[0] = 89.96d;
+            result = rs.getDouble(2);
+            assertEquals(result, doubleArr[0]);
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testArraySelectWithANYUsingVarLengthArray() throws Exception {
+        Connection conn = null;
+        try {
+            long ts = nextTimestamp();
+            String tenantId = getOrganizationId();
+            createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
+            initTablesWithArrays(tenantId, null, ts, false, getUrl());
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+            conn = DriverManager.getConnection(getUrl(), props);
+            String query = "SELECT a_string_array[1]  FROM " + TABLE_WITH_ARRAY
+                    + " WHERE 'XYZWER' = ANY(a_string_array)";
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            String[] strArr = new String[1];
+            strArr[0] = "ABC";
+            String result = rs.getString(1);
+            assertEquals(result, strArr[0]);
+            assertFalse(rs.next());
+            query = "SELECT a_string_array[1]  FROM " + TABLE_WITH_ARRAY + " WHERE 'AB' = ANY(a_string_array)";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            result = rs.getString(1);
+            assertEquals(result, strArr[0]);
+            assertFalse(rs.next());
+        } finally {
+            if (conn != null) {
+                conn.close();
+            }
+        }
+    }
+   
     @Test
     public void testSelectWithArrayWithColumnRef() throws Exception {
         long ts = nextTimestamp();
@@ -373,7 +632,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT a_integer,ARRAY[1,2,a_integer] FROM table_with_array where organization_id =  '"
                 + tenantId + "'";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -404,7 +663,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT b_string,ARRAY['abc','defgh',b_string] FROM table_with_array where organization_id =  '"
                 + tenantId + "'";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -435,7 +694,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT b_string,ARRAY['abc',null,'bcd',null,null,b_string] FROM table_with_array where organization_id =  '"
                 + tenantId + "'";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -470,12 +729,12 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         try {
             createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
             initSimpleArrayTable(tenantId, null, ts, false);
-            Properties props = new Properties(TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID, a_unsigned_double, a_double_array) "
-                    + "SELECT organization_id, entity_id, x_double, ARRAY[23.4d, 22.1d, x_double]  FROM " + SIMPLE_TABLE_WITH_ARRAY
-                    + " WHERE a_double_array[2] = 89.96d";
+                    + "SELECT organization_id, entity_id, x_double, ARRAY[23.4, 22.1, x_double]  FROM " + SIMPLE_TABLE_WITH_ARRAY
+                    + " WHERE a_double_array[2] = 89.96";
             PreparedStatement statement = conn.prepareStatement(query);
             int executeUpdate = statement.executeUpdate();
             assertEquals(1, executeUpdate);
@@ -483,7 +742,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             statement.close();
             conn.close();
             // create another connection
-            props = new Properties(TEST_PROPERTIES);
+            props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
@@ -511,7 +770,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         createSimpleTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
         initSimpleArrayTable(tenantId, null, ts, false);
         String query = "SELECT a_char_array[2] FROM SIMPLE_TABLE_WITH_ARRAY";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -533,7 +792,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt;
         ResultSet rs;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
@@ -564,12 +823,40 @@ public class ArrayIT extends BaseClientManagedTimeIT {
     }
 
     @Test
+    public void testArrayWithFloatArray() throws Exception {
+        Connection conn;
+        PreparedStatement stmt;
+        ResultSet rs;
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a Float ARRAY[])");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("UPSERT INTO t VALUES('a',ARRAY[2.0,3.0])");
+        int res = stmt.executeUpdate();
+        assertEquals(1, res);
+        conn.commit();
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_ELEM(a,2) FROM t");
+        assertTrue(rs.next());
+        Float f = new Float(3.0);
+        assertEquals(f, (Float)rs.getFloat(1));
+        conn.close();
+    }
+
+    @Test
     public void testArraySelectSingleArrayElemWithCast() throws Exception {
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
@@ -601,7 +888,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt;
         ResultSet rs;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a bigint ARRAY[])");
@@ -634,7 +921,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt;
         ResultSet rs;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a VARCHAR(5) ARRAY)");
@@ -669,7 +956,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         ResultSet rs;
         
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a CHAR(5) ARRAY)");
@@ -710,7 +997,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array FROM TABLE_WITH_ARRAY WHERE a_double_array = ARRAY [ 25.343d, 36.763d, 37.56d,386.63d]";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -741,7 +1028,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		int a_index = 0;
 		String query = "SELECT a_double_array[2] FROM table_with_array where a_double_array["+a_index+"2]<?";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -772,7 +1059,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array[2] FROM table_with_array  GROUP BY a_double_array[2]";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -801,7 +1088,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, true, getUrl());
 		String query = "SELECT a_string_array[2] FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -826,7 +1113,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT a_string_array[3],A_INTEGER FROM table_with_array";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -854,7 +1141,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT A_INTEGER, a_string_array[3] FROM table_with_array";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -882,7 +1169,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT  a_string_array[3], a_double_array[2] FROM table_with_array";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -912,7 +1199,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT a_string_array[1], a_string_array[3] FROM table_with_array";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -941,7 +1228,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
                 getDefaultSplits(tenantId), null, ts - 2);
         initTablesWithArrays(tenantId, null, ts, false, getUrl());
         String query = "SELECT a_string_array[3], a_string_array[3] FROM table_with_array";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -969,7 +1256,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_string_array[3] FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -995,7 +1282,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT a_double_array[100] FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1023,7 +1310,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT ARRAY_LENGTH(a_string_array) FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1048,7 +1335,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 				getDefaultSplits(tenantId), null, ts - 2);
 		initTablesWithArrays(tenantId, null, ts, false, getUrl());
 		String query = "SELECT ARRAY_LENGTH(a_double_array) FROM table_with_array";
-		Properties props = new Properties(TEST_PROPERTIES);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 				Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1070,7 +1357,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         createTableWithArray(getUrl(),
                 getDefaultSplits(tenantId), null, ts - 2);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                 Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1102,7 +1389,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         ResultSet rs;
         
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
@@ -1140,7 +1427,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         ResultSet rs;
 
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
@@ -1178,7 +1465,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         ResultSet rs;
 
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
@@ -1216,7 +1503,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
         String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID,a_double_array) values('" + tenantId
                 + "','00A123122312312',null)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1228,7 +1515,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             statement.close();
             conn.close();
             // create another connection
-            props = new Properties(TEST_PROPERTIES);
+            props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_double_array,2) FROM table_with_array";
@@ -1253,7 +1540,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         createTableWithArray(getUrl(), getDefaultSplits(tenantId), null, ts - 2);
         String query = "upsert into table_with_array(ORGANIZATION_ID,ENTITY_ID,a_string_array) values(?, ?, ?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts)); // Execute
                                                                                  // at
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1268,7 +1555,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             statement.close();
             conn.close();
             // create another connection
-            props = new Properties(TEST_PROPERTIES);
+            props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
             conn = DriverManager.getConnection(getUrl(), props);
             query = "SELECT ARRAY_ELEM(a_string_array,1) FROM table_with_array";
@@ -1292,7 +1579,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt;
         ResultSet rs;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
@@ -1328,7 +1615,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
     public void testPKWithArrayNotInEnd() throws Exception {
         Connection conn;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -1350,7 +1637,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
     public void testArrayRefToLiteral() throws Exception {
         Connection conn;
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         try {

@@ -61,6 +61,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private enum Terminate {AT, AFTER};
     // Conjunctive normal form of or-ed ranges or point lookups
     private List<List<KeyRange>> slots;
+    // How far each slot spans minus one. We only handle a single column span currently
+    private int[] slotSpan;
     // schema of the row key
     private RowKeySchema schema;
     // current position for each slot
@@ -72,6 +74,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private byte[] endKey; 
     private int endKeyLength;
     private boolean isDone;
+    private int offset;
 
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -85,6 +88,10 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
         init(slots, schema);
     }
+    
+    public void setOffset(int offset) {
+        this.offset = offset;
+    }
 
     private void init(List<List<KeyRange>> slots, RowKeySchema schema) {
         for (List<KeyRange> ranges : slots) {
@@ -93,6 +100,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
             }
         }
         this.slots = slots;
+        this.slotSpan = ScanUtil.getDefaultSlotSpans(slots.size());
         this.schema = schema;
         this.maxKeyLength = SchemaUtil.getMaxKeyLength(schema, slots);
         this.position = new int[slots.size()];
@@ -113,11 +121,11 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell kv) {
-        return navigate(kv.getRowArray(), kv.getRowOffset(),kv.getRowLength(),Terminate.AFTER);
+        return navigate(kv.getRowArray(), kv.getRowOffset() + offset,kv.getRowLength()- offset,Terminate.AFTER);
     }
 
     @Override
-    public KeyValue getNextKeyHint(KeyValue kv) {
+    public Cell getNextCellHint(Cell kv) {
         // TODO: don't allocate new key value every time here if possible
         return isDone ? null : new KeyValue(startKey, 0, startKeyLength,
                 null, 0, 0, null, 0, 0, HConstants.LATEST_TIMESTAMP, Type.Maximum, null, 0, 0);
@@ -148,10 +156,15 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return true;
     }
     
-    private boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
-        boolean lowerUnbound = (lowerInclusiveKey.length == 0);
-        Arrays.fill(position, 0);
+    private void resetState() {
         isDone = false;
+        endKeyLength = 0;
+        Arrays.fill(position, 0);
+    }
+    
+    private boolean intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
+        resetState();
+        boolean lowerUnbound = (lowerInclusiveKey.length == 0);
         int startPos = 0;
         int lastSlot = slots.size()-1;
         if (!lowerUnbound) {
@@ -210,6 +223,13 @@ public class SkipScanFilter extends FilterBase implements Writable {
             // as the slots for lowerInclusive. If so, there is no intersection.
             if (Arrays.equals(lowerPosition, position) && areSlotsSingleKey(0, position.length-1)) {
                 return false;
+            }
+        } else if (filterAllRemaining()) {
+            // We wrapped around the position array. We know there's an intersection, but it can only at the last
+            // slot position. So reset the position array here to the last position index for each slot. This will
+            // be used below as the end bounds to formulate the list of intersecting slots.
+            for (int i = 0; i <= lastSlot; i++) {
+                position[i] = slots.get(i).size() - 1;
             }
         }
         // Copy inclusive all positions 
@@ -429,7 +449,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
     
     private int setKey(Bound bound, byte[] key, int keyOffset, int slotStartIndex) {
-        return ScanUtil.setKey(schema, slots, position, bound, key, keyOffset, slotStartIndex, position.length);
+        return ScanUtil.setKey(schema, slots, slotSpan, position, bound, key, keyOffset, slotStartIndex, position.length);
     }
 
     private static byte[] copyKey(byte[] targetKey, int targetLength, byte[] sourceKey, int offset, int length) {

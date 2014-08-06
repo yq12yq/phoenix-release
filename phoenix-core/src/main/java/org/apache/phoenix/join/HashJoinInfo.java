@@ -17,26 +17,30 @@
  */
 package org.apache.phoenix.join;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.io.WritableUtils;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class HashJoinInfo {
     private static final String HASH_JOIN = "HashJoin";
-    
+
     private KeyValueSchema joinedSchema;
     private ImmutableBytesPtr[] joinIds;
     private List<Expression>[] joinExpressions;
@@ -47,11 +51,11 @@ public class HashJoinInfo {
     private Expression postJoinFilterExpression;
     private Integer limit;
     private boolean forceProjection;
-    
+
     public HashJoinInfo(PTable joinedTable, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, PTable[] tables, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
     	this(buildSchema(joinedTable), joinIds, joinExpressions, joinTypes, earlyEvaluation, buildSchemas(tables), fieldPositions, postJoinFilterExpression, limit, forceProjection);
     }
-    
+
     private static KeyValueSchema[] buildSchemas(PTable[] tables) {
     	KeyValueSchema[] schemas = new KeyValueSchema[tables.length];
     	for (int i = 0; i < tables.length; i++) {
@@ -59,7 +63,7 @@ public class HashJoinInfo {
     	}
     	return schemas;
     }
-    
+
     private static KeyValueSchema buildSchema(PTable table) {
     	KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
     	if (table != null) {
@@ -71,7 +75,7 @@ public class HashJoinInfo {
     	}
         return builder.build();
     }
-    
+
     private HashJoinInfo(KeyValueSchema joinedSchema, ImmutableBytesPtr[] joinIds, List<Expression>[] joinExpressions, JoinType[] joinTypes, boolean[] earlyEvaluation, KeyValueSchema[] schemas, int[] fieldPositions, Expression postJoinFilterExpression, Integer limit, boolean forceProjection) {
     	this.joinedSchema = joinedSchema;
     	this.joinIds = joinIds;
@@ -84,43 +88,43 @@ public class HashJoinInfo {
         this.limit = limit;
         this.forceProjection = forceProjection;
     }
-    
+
     public KeyValueSchema getJoinedSchema() {
     	return joinedSchema;
     }
-    
+
     public ImmutableBytesPtr[] getJoinIds() {
         return joinIds;
     }
-    
+
     public List<Expression>[] getJoinExpressions() {
         return joinExpressions;
     }
-    
+
     public JoinType[] getJoinTypes() {
         return joinTypes;
     }
-    
+
     public boolean[] earlyEvaluation() {
     	return earlyEvaluation;
     }
-    
+
     public KeyValueSchema[] getSchemas() {
     	return schemas;
     }
-    
+
     public int[] getFieldPositions() {
     	return fieldPositions;
     }
-    
+
     public Expression getPostJoinFilterExpression() {
         return postJoinFilterExpression;
     }
-    
+
     public Integer getLimit() {
         return limit;
     }
-    
+
     /*
      * If the LHS table is a sub-select, we always do projection, since
      * the ON expressions reference only projected columns.
@@ -128,7 +132,7 @@ public class HashJoinInfo {
     public boolean forceProjection() {
         return forceProjection;
     }
-    
+
     public static void serializeHashJoinIntoScan(Scan scan, HashJoinInfo joinInfo) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
@@ -166,9 +170,9 @@ public class HashJoinInfo {
                 throw new RuntimeException(e);
             }
         }
-        
+
     }
-    
+
     @SuppressWarnings("unchecked")
     public static HashJoinInfo deserializeHashJoinFromScan(Scan scan) {
         byte[] join = scan.getAttribute(HASH_JOIN);
@@ -196,7 +200,7 @@ public class HashJoinInfo {
                     int expressionOrdinal = WritableUtils.readVInt(input);
                     Expression expression = ExpressionType.values()[expressionOrdinal].newInstance();
                     expression.readFields(input);
-                    joinExpressions[i].add(expression);                    
+                    joinExpressions[i].add(expression);
                 }
                 int type = WritableUtils.readVInt(input);
                 joinTypes[i] = JoinType.values()[type];
@@ -211,8 +215,17 @@ public class HashJoinInfo {
                 postJoinFilterExpression = ExpressionType.values()[expressionOrdinal].newInstance();
                 postJoinFilterExpression.readFields(input);
             }
-            int limit = WritableUtils.readVInt(input);
-            boolean forceProjection = input.readBoolean();
+            int limit = -1;
+            boolean forceProjection = false;
+            // Read these and ignore if we don't find them as they were not
+            // present in Apache Phoenix 3.0.0 release. This allows a newer
+            // 3.1 server to work with an older 3.0 client without force
+            // both to be upgraded in lock step.
+            try {
+                limit = WritableUtils.readVInt(input);
+                forceProjection = input.readBoolean();
+            } catch (EOFException ignore) {
+            }
             return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null, forceProjection);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -224,5 +237,4 @@ public class HashJoinInfo {
             }
         }
     }
-
 }

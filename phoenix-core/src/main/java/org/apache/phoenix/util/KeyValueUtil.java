@@ -76,10 +76,10 @@ public class KeyValueUtil {
                 ts, Type.Put,
                 value, valueOffset, valueLength);
     }
-
-    public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
-        return newKeyValue(key,cf,cq,ts,value,0,value.length);
-    }
+    
+	public static KeyValue newKeyValue(byte[] key, byte[] cf, byte[] cq, long ts, byte[] value) {
+		return newKeyValue(key, cf, cq, ts, value, 0, value.length);
+	}
 
     /**
      * Binary search for latest column value without allocating memory in the process

@@ -52,6 +52,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -65,7 +66,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) = (7, 5)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -90,7 +91,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) >= (4, 4)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -116,7 +117,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer, y_integer) >= (7, 5)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -142,7 +143,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) = (?, ?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -169,7 +170,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) >= 7";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -193,7 +194,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND 7 <= (a_integer, x_integer)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -217,7 +218,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) >= to_number('7')";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -241,7 +242,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND to_number('7') <= (a_integer, x_integer)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -265,7 +266,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts - 1);
         String upsertQuery = "UPSERT INTO aTable(organization_id, entity_id, a_string) values (?, ?, ?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
@@ -331,7 +332,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts - 1);
         String upsertQuery = "UPSERT INTO aTable(organization_id, entity_id, a_string) values (?, ?, ?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
@@ -397,7 +398,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         Date date = new Date(System.currentTimeMillis());
         initEntityHistoryTableValues(tenantId, getDefaultSplits(tenantId), date, ts);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
@@ -439,7 +440,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         } else {
             initEntityHistoryTableValues(tenantId, getDefaultSplits(tenantId), date, ts - 1);
         }
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
@@ -520,7 +521,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         } else {
             initEntityHistoryTableValues(tenantId, getDefaultSplits(tenantId), date, ts - 1);
         }
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -599,7 +600,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         } else {
             initEntityHistoryTableValues(tenantId, getDefaultSplits(tenantId), date, ts - 1);
         }
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String startingParentId = PARENTID1;
@@ -653,7 +654,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, a_string FROM aTable WHERE ?=organization_id  AND (a_integer, a_string) <= (5, 'a')";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -686,7 +687,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
             "    A_TIMESTAMP) " +
             "VALUES (?, ?, ?)";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1);
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection upsertConn = DriverManager.getConnection(url, props);
         upsertConn.setAutoCommit(true);
         PreparedStatement stmt = upsertConn.prepareStatement(updateStmt);
@@ -697,7 +698,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         stmt.execute();
         
         String query = "SELECT a_timestamp, a_string FROM aTable WHERE ?=organization_id  AND (a_timestamp, a_string) = (?, 'a')";
-        props = new Properties(TEST_PROPERTIES);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -727,7 +728,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
                             "SELECT organization_id, entity_id, a_string FROM aTable WHERE (organization_id, entity_id, a_string) >= (?, ?, ?)",
                             "SELECT organization_id, entity_id, a_string FROM aTable WHERE (organization_id, (entity_id, a_string)) >= (?, (?, ?))"
                            };
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = null;
@@ -762,7 +763,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         //we have a row present in aTable where x_integer = 5 and y_integer = NULL which gets translated to 0 when retriving from HBase. 
         String query = "SELECT x_integer, y_integer FROM aTable WHERE ? = organization_id AND (x_integer, y_integer) IN ((5))";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -785,7 +786,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         // Though we have a row present in aTable where organization_id = tenantId and  x_integer = 5,
         // we'd also need to have an entity_id that is null (which we don't have).
         String query = "SELECT organization_id, entity_id FROM aTable WHERE (organization_id, entity_id) IN (('" + tenantId + "')) AND x_integer = 5";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = null;
         PreparedStatement statement = null;
@@ -813,7 +814,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) < (8.6, 4.5) AND (a_integer, x_integer) > (6.8, 4)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -840,7 +841,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         dateUpserted = new Date(dateUpserted.getTime() + 660); // this makes the dateUpserted equivalent to 2012-01-01 14:25:28.660
         initATableValues(tenantId, getDefaultSplits(tenantId), dateUpserted, ts);
         String query = "SELECT a_integer, a_date FROM aTable WHERE ?=organization_id  AND (a_integer, a_date) <= (9, ?) AND (a_integer, a_date) >= (6, ?)";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -870,7 +871,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     @Test
     public void testRVCWithMultiCompKeysForIn() throws Exception {
         long ts = nextTimestamp();
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE t (pk1 varchar, pk2 varchar, constraint pk primary key (pk1,pk2))");
@@ -892,6 +893,339 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
         assertEquals("b",rs.getString(2));
+        assertFalse(rs.next());
+    }
+    
+    private Connection nextConnection(String url) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        return DriverManager.getConnection(url, props);
+    }
+    
+    //Table type - multi-tenant. Salted - No. Query against - tenant specific view. Connection used for running IN list query - tenant specific. 
+    @Test
+    public void testInListOfRVC1() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) MULTI_TENANT=true";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view (tenant_col VARCHAR) AS SELECT *\n" + 
+                "                FROM t";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(tenantSpecificUrl);
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t_view WHERE (pk2, pk3) IN ((?, ?), (?, ?)) ORDER BY pk2");
+        stmt.setString(1, "helo3");
+        stmt.setInt(2, 3);
+        stmt.setString(3, "helo5");
+        stmt.setInt(4, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - multi-tenant. Salted - No. Query against - base table. Connection used for running IN list query - global. 
+    @Test
+    public void testInListOfRVC2() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) MULTI_TENANT=true";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view (tenant_col VARCHAR) AS SELECT *\n" + 
+                "                FROM t";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - non multi-tenant. Salted - No. Query against - Table. Connection used for running IN list query - global. 
+    @Test
+    public void testInListOfRVC3() throws Exception {
+        String tenantId = "ABC";
+        String tableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3))";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - multi-tenant. Salted - Yes. Query against - base table. Connection used for running IN list query - global. 
+    @Test 
+    public void testInListOfRVC4() throws Exception {
+        String tenantId = "ABC";
+        String tenantSpecificUrl = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + tenantId;
+        String baseTableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) SALT_BUCKETS=4, MULTI_TENANT=true";
+        createTestTable(getUrl(), baseTableDDL, null, nextTimestamp());
+        String tenantTableDDL = "CREATE VIEW t_view (tenant_col VARCHAR) AS SELECT *\n" + 
+                "                FROM t";
+        createTestTable(tenantSpecificUrl, tenantTableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(tenantSpecificUrl);
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t_view (pk2, pk3, c1) values ('helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    //Table type - non multi-tenant. Salted - Yes. Query against - regular table. Connection used for running IN list query - global. 
+    @Test 
+    public void testInListOfRVC5() throws Exception {
+        String tenantId = "ABC";
+        String tableDDL = "CREATE TABLE t (tenantId varchar(5) NOT NULL, pk2 varchar(5) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3)) SALT_BUCKETS=4";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY pk2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "helo5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    @Test 
+    public void testInListOfRVCColumnValuesSmallerLengthThanSchema() throws Exception {
+        String tenantId = "ABC";
+        String tableDDL = "CREATE TABLE t (tenantId char(15) NOT NULL, pk2 char(15) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3))";
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'hel5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        //order by needed on the query to make the order of rows returned deterministic.
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) IN ((?, ?, ?), (?, ?, ?)) ORDER BY PK2");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "hel3");
+        stmt.setInt(3, 3);
+        stmt.setString(4, tenantId);
+        stmt.setString(5, "hel5");
+        stmt.setInt(6, 5);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("hel3", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("hel5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        conn.close();
+    }
+    
+    @Test
+    public void testRVCWithColumnValuesOfSmallerLengthThanSchema() throws Exception {
+        testRVCWithComparisonOps(true);
+    }
+    
+    @Test
+    public void testRVCWithColumnValuesEqualToLengthInSchema() throws Exception {
+        testRVCWithComparisonOps(false);
+    }
+    
+    private void testRVCWithComparisonOps(boolean columnValueLengthSmaller) throws Exception {
+        String tenantId = "ABC";
+        String tableDDLFormat = "CREATE TABLE t (tenantId char(%s) NOT NULL, pk2 char(%s) NOT NULL, pk3 INTEGER NOT NULL, c1 INTEGER constraint pk primary key (tenantId,pk2,pk3))";
+        String tableDDL;
+        if (columnValueLengthSmaller) {
+            tableDDL = String.format(tableDDLFormat, 15, 15);
+        } else {
+            tableDDL = String.format(tableDDLFormat, 3, 5);
+        }
+        createTestTable(getUrl(), tableDDL, null, nextTimestamp());
+
+        Connection conn = nextConnection(getUrl());
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo1', 1, 1)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo2', 2, 2)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo3', 3, 3)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo4', 4, 4)");
+        conn.createStatement().executeUpdate("upsert into t (tenantId, pk2, pk3, c1) values ('ABC', 'helo5', 5, 5)");
+        conn.commit();
+        conn.close();
+
+        conn = nextConnection(getUrl());
+        
+        // >
+        PreparedStatement stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) > (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo3");
+        stmt.setInt(3, 3);
+        
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo4", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // >=
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) >= (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo4");
+        stmt.setInt(3, 4);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo4", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo5", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // <
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) < (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo2");
+        stmt.setInt(3, 2);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo1", rs.getString(1));
+        assertEquals(1, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // <=
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) <= (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo2");
+        stmt.setInt(3, 2);
+        rs = stmt.executeQuery(); 
+        
+        assertTrue(rs.next());
+        assertEquals("helo1", rs.getString(1));
+        assertEquals(1, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("helo2", rs.getString(1));
+        assertEquals(2, rs.getInt(2));
+        assertFalse(rs.next());
+        
+        // =
+        stmt = conn.prepareStatement("select pk2, pk3 from t WHERE (tenantId, pk2, pk3) = (?, ?, ?)");
+        stmt.setString(1, tenantId);
+        stmt.setString(2, "helo4");
+        stmt.setInt(3, 4);
+        
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("helo4", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
         assertFalse(rs.next());
     }
 }

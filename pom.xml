@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.0.0-incubating</version>
+  <version>4.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -79,8 +79,8 @@
     <test.output.tofile>true</test.output.tofile>
 
     <!-- Hadoop Versions -->
-    <hbase-hadoop1.version>0.98.1-hadoop1</hbase-hadoop1.version>
-    <hbase-hadoop2.version>0.98.1-hadoop2</hbase-hadoop2.version>
+    <hbase-hadoop1.version>0.98.4-hadoop1</hbase-hadoop1.version>
+    <hbase-hadoop2.version>0.98.4-hadoop2</hbase-hadoop2.version>
     <hadoop-one.version>1.0.4</hadoop-one.version>
     <hadoop-two.version>2.2.0</hadoop-two.version>
 
@@ -124,10 +124,10 @@
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.4</maven.assembly.version>
     <maven.rat.version>0.8</maven.rat.version>
-	
-    <!--  Plugin options -->
-    <numForkedIT>3</numForkedIT>
+    
+    <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
+    <numForkedIT>7</numForkedIT>
     
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -194,6 +194,8 @@
               <exclude>dev/release_files/**</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/resources/*.Driver</exclude>
+              <exclude>**/META-INF/**</exclude>
+              <exclude>**/*.properties</exclude>
               <exclude>**/*.versionsBackup</exclude>
               <!-- exclude docs -->
               <exclude>docs/**</exclude>
@@ -444,11 +446,6 @@
         <version>${antlr.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.pig</groupId>
-        <artifactId>pig</artifactId>
-        <version>${pig.version}</version>
-      </dependency>
-      <dependency>
         <groupId>jline</groupId>
         <artifactId>jline</artifactId>
         <version>2.11</version>
@@ -563,6 +560,7 @@
 
   <profiles>
 
+
     <!-- Profile for building against Hadoop 1. Active by default. Not used 
       if another Hadoop profile is specified with mvn -Dhadoop.profile=foo -->
     <profile>
@@ -643,6 +641,11 @@
               </exclusion>
             </exclusions>
           </dependency>
+           <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase-hadoop1.version}</version>
+          </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-test</artifactId>
@@ -650,11 +653,16 @@
             <optional>true</optional>
             <scope>test</scope>
           </dependency>
+          <dependency>
+            <groupId>org.apache.pig</groupId>
+            <artifactId>pig</artifactId>
+            <version>${pig.version}</version>
+          </dependency>
         </dependencies>
       </dependencyManagement>
     </profile>
 
-    <!-- Profile for building against Hadoop 2. Activate using: mvn -Dhadoop.profile=2 -->
+     <!-- Profile for building against Hadoop 2. Activate using: mvn -Dhadoop.profile=2 -->
     <profile>
       <id>hadoop-2</id>
       <activation>
@@ -680,7 +688,7 @@
             <version>${project.version}</version>
           </dependency>
 
-          <!-- Hadoop dependencies -->
+          <!-- HBase dependencies -->
           <dependency>
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-testing-util</artifactId>
@@ -694,12 +702,12 @@
           </dependency>
           <dependency>
             <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-common</artifactId>
+            <artifactId>hbase-protocol</artifactId>
             <version>${hbase-hadoop2.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-protocol</artifactId>
+            <artifactId>hbase-common</artifactId>
             <version>${hbase-hadoop2.version}</version>
           </dependency>
           <dependency>
@@ -708,26 +716,46 @@
             <version>${hbase-hadoop2.version}</version>
           </dependency>
           <dependency>
+		    <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase-hadoop2.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-hadoop-compat</artifactId>
+            <version>${hbase-hadoop2.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+          </dependency>
+
+          <!-- Hadoop Dependencies -->
+          <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-annotations</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-mapreduce-client-core</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-minicluster</artifactId>
-            <version>${hadoop.version}</version>
+            <version>${hadoop-two.version}</version>
             <optional>true</optional>
             <scope>test</scope>
+          </dependency>
+          <dependency>
+            <groupId>org.apache.pig</groupId>
+            <artifactId>pig</artifactId>
+            <version>${pig.version}</version>
+            <classifier>h2</classifier>
           </dependency>
         </dependencies>
       </dependencyManagement>

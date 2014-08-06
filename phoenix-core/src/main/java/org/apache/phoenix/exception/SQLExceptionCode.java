@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -138,6 +139,7 @@ public enum SQLExceptionCode {
     }),
     ORDER_BY_ARRAY_NOT_SUPPORTED(515, "42893", "ORDER BY of an array type is not allowed"),
     NON_EQUALITY_ARRAY_COMPARISON(516, "42894", "Array types may only be compared using = or !="),
+    INVALID_NOT_NULL_CONSTRAINT(517, "42895", "Invalid not null constraint on non primary key column"),
     
     /** 
      * HBase and Phoenix specific implementation defined sub-classes.
@@ -210,7 +212,8 @@ public enum SQLExceptionCode {
     INSUFFICIENT_MULTI_TENANT_COLUMNS(1040, "42Y96", "A MULTI_TENANT table must have two or more PK columns with the first column being NOT NULL and of type VARCHAR or CHAR."),
     VIEW_WHERE_IS_CONSTANT(1045, "43A02", "WHERE clause in VIEW should not evaluate to a constant."),
     CANNOT_UPDATE_VIEW_COLUMN(1046, "43A03", "Column updated in VIEW may not differ from value specified in WHERE clause."),
-    TOO_MANY_VIEW_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
+    TOO_MANY_INDEXES(1047, "43A04", "Too many indexes have already been created on the physical table."),
+    NO_LOCAL_INDEX_ON_TABLE_WITH_IMMUTABLE_ROWS(1048,"43A04","Local indexes aren't allowed on tables with immutable rows."),
         
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -225,13 +228,21 @@ public enum SQLExceptionCode {
             return new SequenceNotFoundException(info.getSchemaName(), info.getTableName());
         }
     }),
-    STARTS_WITH_MUST_BE_CONSTANT(1202, "42Z02", "Sequence STARTS WITH value must be an integer or long constant."),
+    START_WITH_MUST_BE_CONSTANT(1202, "42Z02", "Sequence START WITH value must be an integer or long constant."),
     INCREMENT_BY_MUST_BE_CONSTANT(1203, "42Z03", "Sequence INCREMENT BY value must be an integer or long constant."),
     CACHE_MUST_BE_NON_NEGATIVE_CONSTANT(1204, "42Z04", "Sequence CACHE value must be a non negative integer constant."),
     INVALID_USE_OF_NEXT_VALUE_FOR(1205, "42Z05", "NEXT VALUE FOR may only be used as in a SELECT or an UPSERT VALUES expression."),
     CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE(1206, "42Z06", "NEXT VALUE FOR must be called before CURRENT VALUE FOR is called."),
     EMPTY_SEQUENCE_CACHE(1207, "42Z07", "No more cached sequence values"),
-
+    MINVALUE_MUST_BE_CONSTANT(1208, "42Z08", "Sequence MINVALUE must be an integer or long constant."),
+    MAXVALUE_MUST_BE_CONSTANT(1209, "42Z09", "Sequence MAXVALUE must be an integer or long constant."),
+    MINVALUE_MUST_BE_LESS_THAN_OR_EQUAL_TO_MAXVALUE(1210, "42Z10", "Sequence MINVALUE must be less than or equal to MAXVALUE."),
+    STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE(1211, "42Z11",
+            "STARTS WITH value must be greater than or equal to MINVALUE and less than or equal to MAXVALUE"),
+    SEQUENCE_VAL_REACHED_MAX_VALUE(1212, "42Z12", "Reached MAXVALUE of sequence"),
+    SEQUENCE_VAL_REACHED_MIN_VALUE(1213, "42Z13", "Reached MINVALUE of sequence"),
+    INCREMENT_BY_MUST_NOT_BE_ZERO(1214, "42Z14", "Sequence INCREMENT BY value cannot be zero"),
+                    
     /** Parser error. (errorcode 06, sqlState 42P) */
     PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
     MISSING_TOKEN(602, "42P00", "Syntax error.", Factory.SYTAX_ERROR),
@@ -249,6 +260,14 @@ public enum SQLExceptionCode {
     SPLIT_POINT_NOT_CONSTANT(1105, "XCL04", "Split points must be constants."),
     BATCH_EXCEPTION(1106, "XCL05", "Exception while executing batch."),
     EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH(1107, "XCL06", "An executeUpdate is prohibited when the batch is not empty. Use clearBatch to empty the batch first."),
+    STALE_REGION_BOUNDARY_CACHE(1108, "XCL07", "Cache of region boundaries are out of date.", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new StaleRegionBoundaryCacheException(info.getSchemaName(), info.getTableName());
+        }
+    }),
+    CANNOT_SPLIT_LOCAL_INDEX(1109,"XCL08", "Local index may not be pre-split"),
+    CANNOT_SALT_LOCAL_INDEX(1110,"XCL09", "Local index may not be salted"),
     
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).

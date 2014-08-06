@@ -41,6 +41,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -198,6 +199,10 @@ public class ParseNodeFactory {
     public MultiplyParseNode multiply(List<ParseNode> children) {
         return new MultiplyParseNode(children);
     }
+    
+    public ModulusParseNode modulus(List<ParseNode> children) {
+        return new ModulusParseNode(children);
+    }
 
     public AndParseNode and(List<ParseNode> children) {
         return new AndParseNode(children);
@@ -264,13 +269,16 @@ public class ParseNodeFactory {
         return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount);
     }
     
-    public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, int bindCount) {
-        return new CreateIndexStatement(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, bindCount);
+    public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, PrimaryKeyConstraint pkConstraint, List<ColumnName> includeColumns, List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, int bindCount) {
+        return new CreateIndexStatement(indexName, dataTable, pkConstraint, includeColumns, splits, props, ifNotExists, indexType, bindCount);
     }
     
-    public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith, ParseNode incrementBy, ParseNode cacheSize, boolean ifNotExits, int bindCount){
-    	return new CreateSequenceStatement(tableName, startsWith, incrementBy, cacheSize, ifNotExits, bindCount);
-    } 
+    public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
+            ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
+            boolean cycle, boolean ifNotExits, int bindCount) {
+        return new CreateSequenceStatement(tableName, startsWith, incrementBy, cacheSize, minValue,
+                maxValue, cycle, ifNotExits, bindCount);
+    }
     
     public DropSequenceStatement dropSequence(TableName tableName, boolean ifExits, int bindCount){
         return new DropSequenceStatement(tableName, ifExits, bindCount);
@@ -365,17 +373,14 @@ public class ParseNodeFactory {
 
     public FunctionParseNode function(String name, List<ParseNode> valueNodes,
             List<ParseNode> columnNodes, boolean isAscending) {
-        // Right now we support PERCENT functions on only one column
-        if (valueNodes.size() != 1 || columnNodes.size() != 1) {
-            throw new UnsupportedOperationException(name + " not supported on multiple columns");
-        }
-        List<ParseNode> children = new ArrayList<ParseNode>(3);
-        children.add(columnNodes.get(0));
+
+        List<ParseNode> children = new ArrayList<ParseNode>();
+        children.addAll(columnNodes);
         children.add(new LiteralParseNode(Boolean.valueOf(isAscending)));
-        children.add(valueNodes.get(0));
+        children.addAll(valueNodes);
+
         return function(name, children);
     }
-    
 
     public HintNode hint(String hint) {
         return new HintNode(hint);
@@ -493,6 +498,18 @@ public class ParseNodeFactory {
         }
     }
 
+    public ArrayAnyComparisonNode wrapInAny(CompareOp op, ParseNode lhs, ParseNode rhs) {
+        return new ArrayAnyComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
+    }
+
+    public ArrayAllComparisonNode wrapInAll(CompareOp op, ParseNode lhs, ParseNode rhs) {
+        return new ArrayAllComparisonNode(rhs, comparison(op, lhs, elementRef(Arrays.<ParseNode>asList(rhs, literal(1)))));
+    }
+    
+    public ArrayElemRefNode elementRef(List<ParseNode> parseNode) {
+        return new ArrayElemRefNode(parseNode);
+    }
+
     public GreaterThanParseNode gt(ParseNode lhs, ParseNode rhs) {
         return new GreaterThanParseNode(lhs, rhs);
     }
@@ -547,9 +564,10 @@ public class ParseNodeFactory {
     }
     
     public SelectStatement select(List<? extends TableNode> from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate) {
+            List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, int bindCount, boolean isAggregate, boolean hasSequence) {
 
-        return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having, orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate);
+        return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
+                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, bindCount, isAggregate, hasSequence);
     }
     
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
@@ -561,15 +579,20 @@ public class ParseNodeFactory {
     }
 
     public SelectStatement select(SelectStatement statement, ParseNode where, ParseNode having) {
-        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(), having, statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(), having,
+                statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
 
     public SelectStatement select(SelectStatement statement, List<? extends TableNode> tables) {
-        return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+        return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
     }
 
     public SelectStatement select(SelectStatement statement, HintNode hint) {
-        return hint == null || hint.isEmpty() ? statement : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+        return hint == null || hint.isEmpty() ? statement : select(statement.getFrom(), hint, statement.isDistinct(), statement.getSelect(),
+                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), statement.getLimit(),
+                statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
 
     public SubqueryParseNode subquery(SelectStatement select) {

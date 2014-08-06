@@ -171,9 +171,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith,
-            long incrementBy, long cacheSize, long timestamp) throws SQLException {
-        return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith, incrementBy, cacheSize, timestamp);
+    public long createSequence(String tenantId, String schemaName, String sequenceName,
+            long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
+            boolean cycle, long timestamp) throws SQLException {
+        return getDelegate().createSequence(tenantId, schemaName, sequenceName, startWith,
+            incrementBy, cacheSize, minValue, maxValue, cycle, timestamp);
     }
 
     @Override
@@ -184,7 +186,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
     @Override
     public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions, Sequence.Action action) throws SQLException {
+            SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         getDelegate().validateSequences(sequenceKeys, timestamp, values, exceptions, action);
     }
 
@@ -223,5 +225,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public boolean supportsFeature(Feature feature) {
         return getDelegate().supportsFeature(feature);
+    }
+
+    @Override
+    public String getUserName() {
+        return getDelegate().getUserName();
     }
 }

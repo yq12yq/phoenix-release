@@ -57,9 +57,9 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -83,7 +83,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     public void testParameterUnbound() throws Exception {
         try {
             String query = "SELECT a_string, b_string FROM atable WHERE organization_id=? and a_integer = ?";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -208,7 +208,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 509 (42888): The table does not have a primary key. tableName=FOO"));
+            assertTrue(e.getMessage(), e.getMessage().contains("ERROR 517 (42895): Invalid not null constraint on non primary key column columnName=PK"));
         } finally {
             conn.close();
         }
@@ -234,7 +234,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT count(1),a_integer FROM atable WHERE organization_id=? GROUP BY a_string";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -254,7 +254,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT sum(a_integer) + a_integer FROM atable WHERE organization_id=? GROUP BY a_string";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -274,7 +274,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT a_integer FROM atable WHERE organization_id=? AND count(1) > 2";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -294,7 +294,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT a_integer FROM atable WHERE organization_id=? HAVING count(1) > 2";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -314,7 +314,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT a_integer FROM atable WHERE organization_id=? HAVING a_integer = 5";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -334,7 +334,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT a_integer FROM atable WHERE organization_id=? HAVING CASE WHEN a_integer <= 2 THEN 'foo' WHEN a_integer = 3 THEN 2 WHEN a_integer <= 5 THEN 5 ELSE 5 END  = 5";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -354,7 +354,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "SELECT a_integer FROM atable WHERE organization_id=? and CASE WHEN a_integer <= 2 THEN 'foo' WHEN a_integer = 3 THEN 'bar' WHEN a_integer <= 5 THEN 'bas' ELSE 'blah' END";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -428,7 +428,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     private Scan compileQuery(String query, List<Object> binds) throws SQLException {
-        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PhoenixPreparedStatement statement = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
@@ -509,7 +509,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "upsert into ATABLE VALUES (?, ?, ?)";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -531,7 +531,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "upsert into ATABLE VALUES (?, ?, ?)";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -554,7 +554,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Select non agg column in aggregate query
             String query = "select * from ATABLE group by a_string";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -573,7 +573,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Order by in select with no limit or group by
             String query = "select a_string from ATABLE order by max(b_string)";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -592,7 +592,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Order by in select with no limit or group by
             String query = "select max(a_string) from ATABLE order by max(b_string),a_string";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -611,7 +611,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try {
             // Order by in select with no limit or group by
             String query = "select max(a_string) from ATABLE order by b_string LIMIT 5";
-            Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             Connection conn = DriverManager.getConnection(getUrl(), props);
             try {
                 PreparedStatement statement = conn.prepareStatement(query);
@@ -706,7 +706,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 "SELECT entity_id,organization_id FROM atable where A_STRING - 45 < 0",
                 "SELECT entity_id,organization_id FROM atable where A_STRING - 'transaction' < 0", };
 
-        Properties props = new Properties(TestUtil.TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         for (String query : queries) {
             try {
@@ -728,7 +728,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT * from multi_cf G where RESPONSE_TIME = 2222";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -745,7 +745,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT F.RESPONSE_TIME,G.RESPONSE_TIME from multi_cf G where G.RESPONSE_TIME-1 = F.RESPONSE_TIME";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -762,7 +762,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT coalesce(x_integer,'foo') from atable";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -780,7 +780,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT distinct a_string,b_string from atable order by x_integer";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -798,7 +798,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT all distinct a_string,b_string from atable order by x_integer";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -816,7 +816,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT distinct count(1) from atable order by x_integer";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -834,7 +834,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT distinct a_string,count(*) from atable";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -854,7 +854,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")), QueryConstants.SEPARATOR_BYTE_ARRAY),scan.getStopRow());
         assertTrue(scan.getFilter() != null);
 
         query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+', 0) = 'abc'";
@@ -878,7 +878,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         long ts = nextTimestamp();
         String query = "SELECT entity_id,a_string FROM atable where 2 || a_integer || ? like '2%'";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         byte []x=new byte[]{127,127,0,0};//Binary data
         try {
@@ -962,8 +962,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query = "SELECT inst FROM ptsdb WHERE substr(inst, 0, 3) = 'abc'";
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abd"),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc")), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         assertTrue(scan.getFilter() == null); // Extracted.
     }
 
@@ -973,7 +973,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         Scan scan = compileQuery(query, binds);
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("abc")), scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc ")),QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.concat(ByteUtil.nextKey(Bytes.toBytes("abc ")), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
         assertNotNull(scan.getFilter());
     }
     

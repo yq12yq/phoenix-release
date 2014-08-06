@@ -138,7 +138,7 @@ public class SequenceManager {
         return expression;
     }
     
-    public void validateSequences(Sequence.Action action) throws SQLException {
+    public void validateSequences(Sequence.ValueOp action) throws SQLException {
         if (sequenceMap == null || sequenceMap.isEmpty()) {
             return;
         }
@@ -174,7 +174,6 @@ public class SequenceManager {
     
     private class SequenceValueExpression extends BaseTerminalExpression {
         private final int index;
-        private final byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
 
         private SequenceValueExpression(int index) {
             this.index = index;
@@ -186,6 +185,7 @@ public class SequenceManager {
         
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+        		byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
             PDataType.LONG.getCodec().encodeLong(tuple.getSequenceValue(index), valueBuffer, 0);
             ptr.set(valueBuffer);
             return true;

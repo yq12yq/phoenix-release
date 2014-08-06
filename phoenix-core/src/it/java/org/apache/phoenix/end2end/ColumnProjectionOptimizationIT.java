@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_SCHEMA_NAME;
+import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -37,6 +38,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -52,6 +54,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -65,7 +68,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -211,7 +214,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSelectFromViewOnExistingTable() throws Exception {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(
                 PhoenixConnection.class);
         byte[] cfB = Bytes.toBytes(SchemaUtil.normalizeIdentifier("b"));
         byte[] cfC = Bytes.toBytes(SchemaUtil.normalizeIdentifier("c"));
@@ -306,6 +309,63 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             admin.disableTable(htableName);
             admin.deleteTable(htableName);
             admin.close();
+        }
+    }
+
+    
+    private static void initMultiCFTable(long ts) throws Exception {
+        String url = getUrl();
+        ensureTableCreated(url, MULTI_CF_NAME, ts);
+
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            PreparedStatement stmt = conn.prepareStatement(
+                    "upsert into " +
+                    "MULTI_CF(" +
+                    "    id, " +
+                    "    a.unique_user_count, " +
+                    "    b.unique_org_count, " +
+                    "    c.db_cpu_utilization) " +
+                    "VALUES (?, ?, ?, ?)");
+            stmt.setString(1, "id1");
+            stmt.setInt(2, 1);
+            stmt.setInt(3, 1);
+            stmt.setBigDecimal(4, BigDecimal.valueOf(40.1));
+            stmt.execute();
+
+            stmt.setString(1, "id2");
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 2);
+            stmt.setBigDecimal(4, BigDecimal.valueOf(20.9));
+            stmt.execute();
+            conn.commit();
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSelectWithConditionOnMultiCF() throws Exception {
+        long ts = nextTimestamp();
+        initMultiCFTable(ts);
+        
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            String query = "SELECT c.db_cpu_utilization FROM MULTI_CF WHERE a.unique_user_count = ? and b.unique_org_count = ?";
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.setInt(1, 1);
+            statement.setInt(2, 1);
+            ResultSet rs = statement.executeQuery();
+            boolean b = rs.next();
+            assertTrue(b);
+            assertEquals(BigDecimal.valueOf(40.1), rs.getBigDecimal(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
         }
     }
 }

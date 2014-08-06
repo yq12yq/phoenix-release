@@ -39,6 +39,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -47,7 +48,7 @@ import org.junit.experimental.categories.Category;
 public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     // Populate the test table with data.
     private static void populateTestTable() throws SQLException {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
@@ -112,14 +113,14 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testIndexWithNullableFixedWithCols() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (char_col1 ASC, int_col1 ASC)"
-                + " INCLUDE (long_col1, long_col2)";
+                    + " (char_col1 ASC, int_col1 ASC)"
+                    + " INCLUDE (long_col1, long_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
@@ -168,7 +169,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         String fullTableName = "T";
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
 
@@ -190,14 +191,14 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDeleteFromAllPKColumnIndex() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (long_pk, varchar_pk)"
-                + " INCLUDE (long_col1, long_col2)";
+                    + " (long_pk, varchar_pk)"
+                    + " INCLUDE (long_col1, long_col2)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
@@ -242,16 +243,15 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute("DROP INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE);
     }
     
-    
     @Test
     public void testDropIfImmutableKeyValueColumn() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
-                + " (long_col1)";
+                    + " (long_col1)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
         
@@ -279,7 +279,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testGroupByCount() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
@@ -298,7 +298,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test   
     public void testSelectDistinctOnTableWithSecondaryImmutableIndex() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
         populateTestTable();
         String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
@@ -334,7 +334,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testInClauseWithIndexOnColumnOfUsignedIntType() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         ensureTableCreated(getUrl(), INDEX_DATA_TABLE);

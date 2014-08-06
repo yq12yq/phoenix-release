@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.ScanRegionObserver;
+import org.apache.phoenix.iterate.ChunkedResultIterator;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
@@ -42,6 +43,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ScanUtil;
@@ -49,20 +51,20 @@ import org.apache.phoenix.util.ScanUtil;
 
 
 /**
- * 
+ *
  * Query plan for a basic table scan
  *
- * 
+ *
  * @since 0.1
  */
 public class ScanPlan extends BasicQueryPlan {
     private List<KeyRange> splits;
     private boolean allowPageFilter;
-    
+
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, null, 
+        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, orderBy, null,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
-                    new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()));
+                        buildResultIteratorFactory(context, table, orderBy));
         this.allowPageFilter = allowPageFilter;
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
@@ -70,12 +72,30 @@ public class ScanPlan extends BasicQueryPlan {
             ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes, limit == null ? -1 : limit, orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
         }
     }
-    
+
+    private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context,
+            TableRef table, OrderBy orderBy) {
+
+        ParallelIteratorFactory spoolingResultIteratorFactory =
+                new SpoolingResultIterator.SpoolingResultIteratorFactory(
+                        context.getConnection().getQueryServices());
+
+        // If we're doing an order by then we need the full result before we can do anything,
+        // so we don't bother chunking it. If we're just doing a simple scan then we chunk
+        // the scan to have a quicker initial response.
+        if (!orderBy.getOrderByExpressions().isEmpty()) {
+            return spoolingResultIteratorFactory;
+        } else {
+            return new ChunkedResultIterator.ChunkedResultIteratorFactory(
+                    spoolingResultIteratorFactory, table);
+        }
+    }
+
     @Override
     public List<KeyRange> getSplits() {
         return splits;
     }
-    
+
     @Override
     protected ResultIterator newIterator() throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
@@ -96,13 +116,13 @@ public class ScanPlan extends BasicQueryPlan {
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
-            if (isSalted && 
+            if ((isSalted || table.getIndexType() == IndexType.LOCAL) &&
                     (context.getConnection().getQueryServices().getProps().getBoolean(
-                            QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, 
+                            QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB,
                             QueryServicesOptions.DEFAULT_ROW_KEY_ORDER_SALTED_TABLE) ||
                      orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY ||
                      orderBy == OrderBy.REV_ROW_KEY_ORDER_BY)) { // ORDER BY was optimized out b/c query is in row key order
-                scanner = new MergeSortRowKeyResultIterator(iterators, SaltingUtil.NUM_SALTING_BYTES, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+                scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
             } else {
                 scanner = new ConcatResultIterator(iterators);
             }

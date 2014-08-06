@@ -33,6 +33,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -44,7 +45,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalUpsertValue() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -128,7 +129,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalUpsertSelect() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -236,7 +237,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalAveraging() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -296,7 +297,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDecimalArithmeticWithIntAndLong() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -527,7 +528,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumDouble() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(d) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -544,7 +545,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumUnsignedDouble() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(ud) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -561,7 +562,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumFloat() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(f) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -578,7 +579,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     public void testSumUnsignedFloat() throws Exception {
         initSumDoubleValues(null, getUrl());
         String query = "SELECT SUM(uf) FROM SumDoubleTest";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -591,4 +592,241 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         }
     }
     
+    private void initIntegerTable(Connection conn) throws SQLException {
+        String ddl = "CREATE TABLE ARITHMETIC_TEST (six INTEGER PRIMARY KEY, four INTEGER, three INTEGER)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO ARITHMETIC_TEST VALUES(6, 4, 3)";
+        conn.createStatement().execute(dml);
+        conn.commit();        
+    }
+    
+    @Test
+    public void testOrderOfOperationsAdditionSubtraction() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 + 4 - 3
+        // 10 - 3
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT six + four - three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 - 3 + 6
+        // 1 + 6
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT four - three + six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsAdditionMultiplication() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 + 4 * 3
+        // 6 + 12
+        // 18
+        rs = conn.createStatement().executeQuery("SELECT six + four * three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(18, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 * 3 + 6
+        // 12 * 6     
+        // 18
+        rs = conn.createStatement().executeQuery("SELECT four * three + six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(18, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsAdditionDivision() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 + 4 / 3
+        // 6 + 1
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT six + four / three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 / 3 + 6
+        // 1 + 6     
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT four / three + six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsAdditionModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 + 4 % 3
+        // 6 + 1
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT six + four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 + 6
+        // 1 + 6
+        // 7
+        rs = conn.createStatement().executeQuery("SELECT four % three + six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(7, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsSubtrationMultiplication() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 - 4 * 3
+        // 6 - 12
+        // -6
+        rs = conn.createStatement().executeQuery("SELECT six - four * three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(-6, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 * 3 - 6
+        // 12 - 6     
+        // 6
+        rs = conn.createStatement().executeQuery("SELECT four * three - six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(6, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsSubtractionDivision() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 - 4 / 3
+        // 6 - 1     (integer division)
+        // 5
+        rs = conn.createStatement().executeQuery("SELECT six - four / three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(5, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 / 3 - 6
+        // 1 - 6     (integer division)
+        // -5
+        rs = conn.createStatement().executeQuery("SELECT four / three - six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(-5, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsSubtractionModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 - 4 % 3
+        // 6 - 1
+        // 5
+        rs = conn.createStatement().executeQuery("SELECT six - four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(5, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 - 6
+        // 1 - 6
+        // -5
+        rs = conn.createStatement().executeQuery("SELECT four % three - six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(-5, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsMultiplicationDivision() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 * 4 / 3
+        // 24 / 3
+        // 8
+        rs = conn.createStatement().executeQuery("SELECT six * four / three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(8, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 / 3 * 6
+        // 1 * 6     (integer division)
+        // 6
+        rs = conn.createStatement().executeQuery("SELECT four / three * six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(6, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsMultiplicationModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 * 4 % 3
+        // 24 % 3
+        // 0
+        rs = conn.createStatement().executeQuery("SELECT six * four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 * 6
+        // 1 * 6
+        // 6
+        rs = conn.createStatement().executeQuery("SELECT four % three * six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(6, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testOrderOfOperationsDivisionModulus() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        initIntegerTable(conn);
+        ResultSet rs;
+        
+        // 6 / 4 % 3
+        // 1 % 3     (integer division)
+        // 1
+        rs = conn.createStatement().executeQuery("SELECT six / four % three FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getLong(1));
+        assertFalse(rs.next());
+        
+        // 4 % 3 / 6
+        // 1 / 6
+        // 0         (integer division)
+        rs = conn.createStatement().executeQuery("SELECT four % three / six FROM ARITHMETIC_TEST");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getLong(1));
+        assertFalse(rs.next());
+    }
 }

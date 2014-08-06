@@ -61,10 +61,17 @@ import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
+import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
+import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
+import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
+import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
+import org.apache.phoenix.parse.ArrayAllComparisonNode;
+import org.apache.phoenix.parse.ArrayAnyComparisonNode;
 import org.apache.phoenix.parse.ArrayConstructorNode;
+import org.apache.phoenix.parse.ArrayElemRefNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.CaseParseNode;
 import org.apache.phoenix.parse.CastParseNode;
@@ -77,6 +84,7 @@ import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.ModulusParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
 import org.apache.phoenix.parse.NotParseNode;
 import org.apache.phoenix.parse.OrParseNode;
@@ -86,19 +94,23 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.StringConcatParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.DelegateDatum;
+import org.apache.phoenix.schema.LocalIndexDataColumnRef;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -272,7 +284,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     protected Expression addExpression(Expression expression) {
         return context.getExpressionManager().addIfAbsent(expression);
     }
-
+   
     @Override
     /**
      * @param node a function expression node
@@ -282,15 +294,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         children = node.validate(children, context);
         Expression expression = node.create(children, context);
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (node.isStateless()) {
-            Object value = null;
-            PDataType type = expression.getDataType();
-            if (expression.evaluate(null, ptr)) {
-                value = type.toObject(ptr);
-            }
-            return LiteralExpression.newConstant(value, type, expression.isDeterministic());
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
-        boolean isDeterministic = true;
         BuiltInFunctionInfo info = node.getInfo();
         for (int i = 0; i < info.getRequiredArgCount(); i++) { 
             // Optimization to catch cases where a required argument is null resulting in the function
@@ -298,9 +304,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // we can get the proper type to use.
             if (node.evalToNullIfParamIsNull(context, i)) {
                 Expression child = children.get(i);
-                isDeterministic &= child.isDeterministic();
-                if (child.isStateless() && (!child.evaluate(null, ptr) || ptr.getLength() == 0)) {
-                    return LiteralExpression.newConstant(null, expression.getDataType(), isDeterministic);
+                if (ExpressionUtil.isNull(child, ptr)) {
+                    return ExpressionUtil.getNullExpression(expression);
                 }
             }
         }
@@ -320,7 +325,23 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
      * @throws SQLException if the column expression node does not refer to a known/unambiguous column
      */
     protected ColumnRef resolveColumn(ColumnParseNode node) throws SQLException {
-        ColumnRef ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+        ColumnRef ref = null;
+        try {
+            ref = context.getResolver().resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
+        } catch (ColumnNotFoundException e) {
+            // Rather than not use a local index when a column not contained by it is referenced, we
+            // join back to the data table in our coprocessor since this is a relatively cheap
+            // operation given that we know the join is local.
+            if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL) {
+                try {
+                    return new LocalIndexDataColumnRef(context, node.getName());
+                } catch (ColumnFamilyNotFoundException c) {
+                    throw e;
+                }
+            } else {
+                throw e;
+            }
+        }
         PTable table = ref.getTable();
         int pkPosition = ref.getPKSlotPosition();
         // Disallow explicit reference to salting column, tenant ID column, and index ID column
@@ -411,7 +432,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 context.getBindManager().addParamMetaData((BindParseNode)childNode, new DelegateDatum(caseExpression));
             }
         }
-        if (node.isStateless()) {
+        if (ExpressionUtil.isConstant(caseExpression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             int index = caseExpression.evaluateIndexOf(null, ptr);
             if (index < 0) {
@@ -473,7 +494,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
         }
         Expression expression = new LikeExpression(children);
-        if (node.isStateless()) {
+        if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
                 return LiteralExpression.newConstant(null, expression.isDeterministic());
@@ -658,16 +679,108 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ImmutableBytesWritable ptr = context.getTempPtr();
 
         // If all children are literals, just evaluate now
-        if (expression.isStateless()) {
-            if (!expression.evaluate(null,ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
-            }
-            return LiteralExpression.newConstant(expression.getDataType().toObject(ptr), expression.getDataType(), expression.isDeterministic());
-        } else if (isNull) {
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr); 
+        } 
+        else if (isNull) {
             return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
         }
         // Otherwise create and return the expression
         return wrapGroupByExpression(expression);
+    }
+    
+    @Override
+    public boolean visitEnter(AddParseNode node) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public Expression visitLeave(AddParseNode node, List<Expression> children) throws SQLException {
+        return visitLeave(node, children,
+                new ArithmeticExpressionBinder() {
+            @Override
+            public PDatum getBindMetaData(int i, List<Expression> children, final Expression expression) {
+                PDataType type = expression.getDataType();
+                if (type != null && type.isCoercibleTo(PDataType.DATE)) {
+                    return new PDatum() {
+                        @Override
+                        public boolean isNullable() {
+                            return expression.isNullable();
+                        }
+                        @Override
+                        public PDataType getDataType() {
+                            return PDataType.DECIMAL;
+                        }
+                        @Override
+                        public Integer getMaxLength() {
+                            return expression.getMaxLength();
+                        }
+                        @Override
+                        public Integer getScale() {
+                            return expression.getScale();
+                        }
+                        @Override
+                        public SortOrder getSortOrder() {
+                            return expression.getSortOrder();
+                        }
+                    };
+                }
+                return expression;
+            }
+        },
+        new ArithmeticExpressionFactory() {
+            @Override
+            public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
+                boolean foundDate = false;
+                boolean isDeterministic = true;
+                PDataType theType = null;
+                for(int i = 0; i < children.size(); i++) {
+                    Expression e = children.get(i);
+                    isDeterministic &= e.isDeterministic();
+                    PDataType type = e.getDataType();
+                    if (type == null) {
+                        continue; 
+                    } else if (type.isCoercibleTo(PDataType.TIMESTAMP)) {
+                        if (foundDate) {
+                            throw TypeMismatchException.newException(type, node.toString());
+                        }
+                        if (theType == null || (theType != PDataType.TIMESTAMP && theType != PDataType.UNSIGNED_TIMESTAMP)) {
+                            theType = type;
+                        }
+                        foundDate = true;
+                    }else if (type == PDataType.DECIMAL) {
+                        if (theType == null || !theType.isCoercibleTo(PDataType.TIMESTAMP)) {
+                            theType = PDataType.DECIMAL;
+                        }
+                    } else if (type.isCoercibleTo(PDataType.LONG)) {
+                        if (theType == null) {
+                            theType = PDataType.LONG;
+                        }
+                    } else if (type.isCoercibleTo(PDataType.DOUBLE)) {
+                        if (theType == null) {
+                            theType = PDataType.DOUBLE;
+                        }
+                    } else {
+                        throw TypeMismatchException.newException(type, node.toString());
+                    }
+                }
+                if (theType == PDataType.DECIMAL) {
+                    return new DecimalAddExpression(children);
+                } else if (theType == PDataType.LONG) {
+                    return new LongAddExpression(children);
+                } else if (theType == PDataType.DOUBLE) {
+                    return new DoubleAddExpression(children);
+                } else if (theType == null) {
+                    return LiteralExpression.newConstant(null, theType, isDeterministic);
+                } else if (theType == PDataType.TIMESTAMP || theType == PDataType.UNSIGNED_TIMESTAMP) {
+                    return new TimestampAddExpression(children);
+                } else if (theType.isCoercibleTo(PDataType.DATE)) {
+                    return new DateAddExpression(children);
+                } else {
+                    throw TypeMismatchException.newException(theType, node.toString());
+                }
+            }
+        });
     }
 
     @Override
@@ -676,8 +789,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
 
     @Override
-    public Expression visitLeave(SubtractParseNode node,
-            List<Expression> children) throws SQLException {
+    public Expression visitLeave(SubtractParseNode node, List<Expression> children) throws SQLException {
         return visitLeave(node, children, new ArithmeticExpressionBinder() {
             @Override
             public PDatum getBindMetaData(int i, List<Expression> children,
@@ -845,100 +957,6 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
 
     @Override
-    public boolean visitEnter(AddParseNode node) throws SQLException {
-        return true;
-    }
-
-    @Override
-    public Expression visitLeave(AddParseNode node, List<Expression> children) throws SQLException {
-        return visitLeave(node, children,
-                new ArithmeticExpressionBinder() {
-            @Override
-            public PDatum getBindMetaData(int i, List<Expression> children, final Expression expression) {
-                PDataType type = expression.getDataType();
-                if (type != null && type.isCoercibleTo(PDataType.DATE)) {
-                    return new PDatum() {
-                        @Override
-                        public boolean isNullable() {
-                            return expression.isNullable();
-                        }
-                        @Override
-                        public PDataType getDataType() {
-                            return PDataType.DECIMAL;
-                        }
-                        @Override
-                        public Integer getMaxLength() {
-                            return expression.getMaxLength();
-                        }
-                        @Override
-                        public Integer getScale() {
-                            return expression.getScale();
-                        }
-                        @Override
-                        public SortOrder getSortOrder() {
-                            return expression.getSortOrder();
-                        }
-                    };
-                }
-                return expression;
-            }
-        },
-        new ArithmeticExpressionFactory() {
-            @Override
-            public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
-                boolean foundDate = false;
-                boolean isDeterministic = true;
-                PDataType theType = null;
-                for(int i = 0; i < children.size(); i++) {
-                    Expression e = children.get(i);
-                    isDeterministic &= e.isDeterministic();
-                    PDataType type = e.getDataType();
-                    if (type == null) {
-                        continue; 
-                    } else if (type.isCoercibleTo(PDataType.TIMESTAMP)) {
-                        if (foundDate) {
-                            throw TypeMismatchException.newException(type, node.toString());
-                        }
-                        if (theType == null || (theType != PDataType.TIMESTAMP && theType != PDataType.UNSIGNED_TIMESTAMP)) {
-                            theType = type;
-                        }
-                        foundDate = true;
-                    }else if (type == PDataType.DECIMAL) {
-                        if (theType == null || !theType.isCoercibleTo(PDataType.TIMESTAMP)) {
-                            theType = PDataType.DECIMAL;
-                        }
-                    } else if (type.isCoercibleTo(PDataType.LONG)) {
-                        if (theType == null) {
-                            theType = PDataType.LONG;
-                        }
-                    } else if (type.isCoercibleTo(PDataType.DOUBLE)) {
-                        if (theType == null) {
-                            theType = PDataType.DOUBLE;
-                        }
-                    } else {
-                        throw TypeMismatchException.newException(type, node.toString());
-                    }
-                }
-                if (theType == PDataType.DECIMAL) {
-                    return new DecimalAddExpression(children);
-                } else if (theType == PDataType.LONG) {
-                    return new LongAddExpression(children);
-                } else if (theType == PDataType.DOUBLE) {
-                    return new DoubleAddExpression(children);
-                } else if (theType == null) {
-                    return LiteralExpression.newConstant(null, theType, isDeterministic);
-                } else if (theType == PDataType.TIMESTAMP || theType == PDataType.UNSIGNED_TIMESTAMP) {
-                    return new TimestampAddExpression(children);
-                } else if (theType.isCoercibleTo(PDataType.DATE)) {
-                    return new DateAddExpression(children);
-                } else {
-                    throw TypeMismatchException.newException(theType, node.toString());
-                }
-            }
-        });
-    }
-
-    @Override
     public boolean visitEnter(MultiplyParseNode node) throws SQLException {
         return true;
     }
@@ -983,7 +1001,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
         });
     }
-
+    
     @Override
     public boolean visitEnter(DivideParseNode node) throws SQLException {
         return true;
@@ -1044,6 +1062,59 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
         });
     }
+    
+    @Override
+    public boolean visitEnter(ModulusParseNode node) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public Expression visitLeave(ModulusParseNode node, List<Expression> children) throws SQLException {
+        return visitLeave(node, children, null, new ArithmeticExpressionFactory() {
+            @Override
+            public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
+                // ensure integer types
+                for(Expression child : children) {
+                    PDataType type = child.getDataType();
+                    if(type != null && !type.isCoercibleTo(PDataType.LONG)) {
+                        throw TypeMismatchException.newException(type, node.toString());
+                    }
+                }
+                
+                return new ModulusExpression(children);
+            }
+        });
+    }
+    
+    @Override
+    public boolean visitEnter(ArrayAnyComparisonNode node) throws SQLException {
+        return true;
+    }
+
+    @Override
+    public Expression visitLeave(ArrayAnyComparisonNode node, List<Expression> children) throws SQLException {
+        return new ArrayAnyComparisonExpression(children);
+    }
+
+    @Override
+    public boolean visitEnter(ArrayAllComparisonNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
+    public boolean visitEnter(ArrayElemRefNode node) throws SQLException {
+        return true;
+    }
+    
+    @Override
+    public Expression visitLeave(ArrayElemRefNode node, List<Expression> l) throws SQLException {
+        return new InlineArrayElemRefExpression(l);
+    }
+    
+    @Override
+    public Expression visitLeave(ArrayAllComparisonNode node, List<Expression> children) throws SQLException {
+        return new ArrayAllComparisonExpression(children);
+    }
 
     public static void throwNonAggExpressionInAggException(String nonAggregateExpression) throws SQLException {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN)
@@ -1065,11 +1136,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             }
         }
         ImmutableBytesWritable ptr = context.getTempPtr();
-        if (expression.isStateless()) {
-            if (!expression.evaluate(null,ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
-            }
-            return LiteralExpression.newConstant(expression.getDataType().toObject(ptr), expression.getDataType(), expression.isDeterministic());
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         return wrapGroupByExpression(expression);
     }
@@ -1147,21 +1215,20 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         }
         ImmutableBytesWritable ptr = context.getTempPtr();
         Object[] elements = new Object[children.size()];
-        if (node.isStateless()) {
-            boolean isDeterministic = true;
+        
+        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
+        if (ExpressionUtil.isConstant(arrayExpression)) {
             for (int i = 0; i < children.size(); i++) {
                 Expression child = children.get(i);
-                isDeterministic &= child.isDeterministic();
                 child.evaluate(null, ptr);
                 Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
                 elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.isDeterministic()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), isDeterministic);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), true);
         }
         
-        ArrayConstructorExpression arrayExpression = new ArrayConstructorExpression(children, arrayElemDataType);
         return wrapGroupByExpression(arrayExpression);
     }
 

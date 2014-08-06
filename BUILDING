@@ -22,7 +22,7 @@
 # Building Apache Phoenix
 =========================
 
-Phoenix uses Maven (3.X) to build all its necessary resources. 
+Phoenix uses Maven (3.X) to build all its necessary resources.
 
 ## Building from source
 =======================
@@ -60,5 +60,5 @@ Findbugs report is generated in /target/site
 
 ## Generate Apache Web Site
 ===========================
-checkout https://svn.apache.org/repos/asf/incubator/phoenix
+checkout https://svn.apache.org/repos/asf/phoenix
         $ build.sh

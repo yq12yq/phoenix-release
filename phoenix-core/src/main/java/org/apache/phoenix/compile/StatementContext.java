@@ -20,17 +20,30 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.TupleProjector;
-import org.apache.phoenix.query.*;
-import org.apache.phoenix.schema.*;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.NumberUtil;
+import org.apache.phoenix.util.ScanUtil;
+
+import com.google.common.collect.Maps;
 
 
 /**
@@ -53,6 +66,7 @@ public class StatementContext {
     private final String numberFormat;
     private final ImmutableBytesWritable tempPtr;
     private final PhoenixStatement statement;
+    private final Map<PColumn, Integer> dataColumns;
     
     private long currentTime = QueryConstants.UNSET_TIMESTAMP;
     private ScanRanges scanRanges = ScanRanges.EVERYTHING;
@@ -62,15 +76,17 @@ public class StatementContext {
     private TableRef currentTable;
     private List<Pair<byte[], byte[]>> whereConditionColumns;
     private TupleProjector clientTupleProjector;
+    private TimeRange scanTimeRange = null;
     
     public StatementContext(PhoenixStatement statement) {
-        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan());
+        this(statement, FromCompiler.EMPTY_TABLE_RESOLVER, new Scan(), new SequenceManager(statement));
     }
     
-    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan) {
+    public StatementContext(PhoenixStatement statement, ColumnResolver resolver, Scan scan, SequenceManager seqManager) {
         this.statement = statement;
         this.resolver = resolver;
         this.scan = scan;
+        this.sequences = seqManager;
         this.binds = new BindManager(statement.getParameters());
         this.aggregates = new AggregationManager();
         this.expressions = new ExpressionManager();
@@ -81,8 +97,61 @@ public class StatementContext {
         this.numberFormat = connection.getQueryServices().getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();
         this.currentTable = resolver != null && !resolver.getTables().isEmpty() ? resolver.getTables().get(0) : null;
-        this.sequences = new SequenceManager(statement);
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
+        this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer>emptyMap() : Maps.<PColumn, Integer>newLinkedHashMap();
+    }
+
+    /**
+     * Copy constructor where an altered scan can be set.
+     *
+     * @param stmtContext the {@code StatementContext} to be copied
+     * @param scan the customized scan
+     */
+    public StatementContext(StatementContext stmtContext, Scan scan) {
+        this.statement = stmtContext.statement;
+        this.resolver = stmtContext.resolver;
+        this.scan = scan;
+        this.sequences = stmtContext.sequences;
+        this.binds = stmtContext.binds;
+        this.aggregates = stmtContext.aggregates;
+        this.expressions = stmtContext.expressions;
+        this.dateFormat = stmtContext.dateFormat;
+        this.dateFormatter = stmtContext.dateFormatter;
+        this.dateParser = stmtContext.dateParser;
+        this.numberFormat = stmtContext.numberFormat;
+        this.tempPtr = new ImmutableBytesWritable();
+        this.currentTable = stmtContext.currentTable;
+        this.whereConditionColumns = stmtContext.whereConditionColumns;
+        this.dataColumns = stmtContext.getDataColumnsMap();
+    }
+
+    /**
+     * build map from dataColumn to what will be its position in single KeyValue value bytes
+     * returned from the coprocessor that joins from the index row back to the data row.
+     * @param column
+     * @return
+     */
+    public int getDataColumnPosition(PColumn column) {
+        Integer pos = dataColumns.get(column);
+        if (pos == null) {
+            pos = dataColumns.size();
+            dataColumns.put(column, pos);
+        }
+        return pos;
+    }
+
+    /**
+     * @return return set of data columns.
+     */
+    public Set<PColumn> getDataColumns() {
+        return dataColumns.keySet();
+    }
+
+    /**
+     * @return map of data columns and their positions. 
+     */
+    public Map<PColumn, Integer> getDataColumnsMap() {
+        return dataColumns;
     }
 
     public String getDateFormat() {
@@ -236,4 +305,13 @@ public class StatementContext {
     public void setClientTupleProjector(TupleProjector projector) {
         this.clientTupleProjector = projector;
     }
+
+    public void setScanTimeRange(TimeRange value){
+    	this.scanTimeRange = value;
+    }
+    
+    public TimeRange getScanTimeRange() {
+    	return this.scanTimeRange;
+    }
+
 }

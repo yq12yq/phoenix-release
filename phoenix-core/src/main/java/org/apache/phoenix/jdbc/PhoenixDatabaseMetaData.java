@@ -38,6 +38,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
@@ -58,6 +59,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.StringUtil;
 
 import com.google.common.collect.Lists;
 
@@ -97,7 +99,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final int SCHEMA_NAME_INDEX = 1;
     public static final int TENANT_ID_INDEX = 0;
 
-    public static final String SYSTEM_CATALOG_SCHEMA = "SYSTEM";
+    public static final String SYSTEM_CATALOG_SCHEMA = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = Bytes.toBytes(SYSTEM_CATALOG_TABLE);
@@ -108,6 +110,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
     public static final String TABLE_NAME = "TABLE_NAME";
+    public static final byte[] TABLE_NAME_BYTES = Bytes.toBytes(TABLE_NAME);
     public static final String TABLE_TYPE = "TABLE_TYPE";
     public static final byte[] TABLE_TYPE_BYTES = Bytes.toBytes(TABLE_TYPE);
     
@@ -174,6 +177,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] MULTI_TENANT_BYTES = Bytes.toBytes(MULTI_TENANT);
     public static final String VIEW_TYPE = "VIEW_TYPE";
     public static final byte[] VIEW_TYPE_BYTES = Bytes.toBytes(VIEW_TYPE);
+    public static final String INDEX_TYPE = "INDEX_TYPE";
+    public static final byte[] INDEX_TYPE_BYTES = Bytes.toBytes(INDEX_TYPE);
     public static final String LINK_TYPE = "LINK_TYPE";
     public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
     public static final String ARRAY_SIZE = "ARRAY_SIZE";
@@ -198,15 +203,26 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
     public static final byte[] CURRENT_VALUE_BYTES = Bytes.toBytes(CURRENT_VALUE);
     public static final String START_WITH = "START_WITH";
     public static final byte[] START_WITH_BYTES = Bytes.toBytes(START_WITH);
+    // MIN_VALUE, MAX_VALUE, CYCLE_FLAG and LIMIT_FLAG were added in 3.1/4.1
+    public static final String MIN_VALUE = "MIN_VALUE";
+    public static final byte[] MIN_VALUE_BYTES = Bytes.toBytes(MIN_VALUE);
+    public static final String MAX_VALUE = "MAX_VALUE";
+    public static final byte[] MAX_VALUE_BYTES = Bytes.toBytes(MAX_VALUE);
     public static final String INCREMENT_BY = "INCREMENT_BY";
     public static final byte[] INCREMENT_BY_BYTES = Bytes.toBytes(INCREMENT_BY);
     public static final String CACHE_SIZE = "CACHE_SIZE";
     public static final byte[] CACHE_SIZE_BYTES = Bytes.toBytes(CACHE_SIZE);
+    public static final String CYCLE_FLAG = "CYCLE_FLAG";
+    public static final byte[] CYCLE_FLAG_BYTES = Bytes.toBytes(CYCLE_FLAG);
+    public static final String LIMIT_REACHED_FLAG = "LIMIT_REACHED_FLAG";
+    public static final byte[] LIMIT_REACHED_FLAG_BYTES = Bytes.toBytes(LIMIT_REACHED_FLAG);
     public static final String KEY_SEQ = "KEY_SEQ";
     public static final byte[] KEY_SEQ_BYTES = Bytes.toBytes(KEY_SEQ);
     public static final String SUPERTABLE_NAME = "SUPERTABLE_NAME";
-    		
+    
     public static final String TYPE_ID = "TYPE_ID";
+    public static final String INDEX_DISABLE_TIMESTAMP = "INDEX_DISABLE_TIMESTAMP";
+    public static final byte[] INDEX_DISABLE_TIMESTAMP_BYTES = Bytes.toBytes(INDEX_DISABLE_TIMESTAMP);
     
     private final PhoenixConnection connection;
     private final ResultSet emptyResultSet;
@@ -855,7 +871,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
                 SALT_BUCKETS + "," +
                 MULTI_TENANT + "," +
                 VIEW_STATEMENT + "," +
-                SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE +
+                SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
+                SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
                 " and " + COLUMN_FAMILY + " is null");
@@ -904,7 +921,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
 
     @Override
     public String getUserName() throws SQLException {
-        return ""; // FIXME: what should we return here?
+        String userName = connection.getQueryServices().getUserName();
+        return userName == null ? StringUtil.EMPTY_STRING : userName;
     }
 
     @Override

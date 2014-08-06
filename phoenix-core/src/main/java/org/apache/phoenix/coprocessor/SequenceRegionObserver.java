@@ -19,9 +19,12 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -51,7 +54,10 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.SequenceUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 
@@ -70,7 +76,6 @@ import com.google.common.collect.Lists;
  * @since 3.0.0
  */
 public class SequenceRegionObserver extends BaseRegionObserver {
-    public enum Op {CREATE_SEQUENCE, DROP_SEQUENCE, RETURN_SEQUENCE};
     public static final String OPERATION_ATTRIB = "SEQUENCE_OPERATION";
     public static final String MAX_TIMERANGE_ATTRIB = "MAX_TIMERANGE";
     public static final String CURRENT_VALUE_ATTRIB = "CURRENT_VALUE";
@@ -95,7 +100,6 @@ public class SequenceRegionObserver extends BaseRegionObserver {
     }
     
     /**
-     * 
      * Use PreIncrement hook of BaseRegionObserver to overcome deficiencies in Increment
      * implementation (HBASE-10254):
      * 1) Lack of recognition and identification of when the key value to increment doesn't exist
@@ -127,10 +131,9 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 for (Map.Entry<byte[], List<Cell>> entry : increment.getFamilyCellMap().entrySet()) {
                     byte[] cf = entry.getKey();
                     for (Cell cq : entry.getValue()) {
-                    	long value = PDataType.LONG.getCodec().decodeLong(cq.getValueArray(), cq.getValueOffset(), 
-                    			SortOrder.getDefault());
+                    	long value = Bytes.toLong(cq.getValueArray(), cq.getValueOffset());
                         get.addColumn(cf, CellUtil.cloneQualifier(cq));
-                        validateOnly &= (Sequence.Action.VALIDATE.ordinal() == value);
+                        validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCE.ordinal() == value);
                     }
                 }
                 Result result = region.get(get);
@@ -140,29 +143,119 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 if (validateOnly) {
                     return result;
                 }
+                
                 KeyValue currentValueKV = Sequence.getCurrentValueKV(result);
                 KeyValue incrementByKV = Sequence.getIncrementByKV(result);
                 KeyValue cacheSizeKV = Sequence.getCacheSizeKV(result);
-
-                long value = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
+                
+                long currentValue = PDataType.LONG.getCodec().decodeLong(currentValueKV.getValueArray(), currentValueKV.getValueOffset(), SortOrder.getDefault());
                 long incrementBy = PDataType.LONG.getCodec().decodeLong(incrementByKV.getValueArray(), incrementByKV.getValueOffset(), SortOrder.getDefault());
-                int cacheSize = PDataType.LONG.getCodec().decodeInt(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
-
-                value += incrementBy * cacheSize;
-                byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
-                PDataType.LONG.getCodec().encodeLong(value, valueBuffer, 0);
-                Put put = new Put(row, currentValueKV.getTimestamp());
-                // Hold timestamp constant for sequences, so that clients always only see the latest value
-                // regardless of when they connect.
-                KeyValue newCurrentValueKV = KeyValueUtil.newKeyValue(row, 0, row.length,
-                  currentValueKV.getFamilyArray(), currentValueKV.getFamilyOffset(), currentValueKV.getFamilyLength(),
-                  currentValueKV.getQualifierArray(), currentValueKV.getQualifierOffset(), currentValueKV.getQualifierLength(), 
-                  currentValueKV.getTimestamp(), valueBuffer, 0, valueBuffer.length);
-
-                put.add(newCurrentValueKV);
+                long cacheSize = PDataType.LONG.getCodec().decodeLong(cacheSizeKV.getValueArray(), cacheSizeKV.getValueOffset(), SortOrder.getDefault());
+                
+                // Hold timestamp constant for sequences, so that clients always only see the latest
+                // value regardless of when they connect.
+                long timestamp = currentValueKV.getTimestamp();
+				Put put = new Put(row, timestamp);
+                
+				int numIncrementKVs = increment.getFamilyCellMap().get(PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES).size();
+                // creates the list of KeyValues used for the Result that will be returned
+                List<Cell> cells = Sequence.getCells(result, numIncrementKVs);
+                
+                //if client is 3.0/4.0 preserve the old behavior (older clients won't have newer columns present in the increment)
+                if (numIncrementKVs != Sequence.NUM_SEQUENCE_KEY_VALUES) {
+                	currentValue += incrementBy * cacheSize;
+                    // Hold timestamp constant for sequences, so that clients always only see the latest value
+                    // regardless of when they connect.
+                    KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
+                    put.add(newCurrentValueKV);
+                    Sequence.replaceCurrentValueKV(cells, newCurrentValueKV);
+                }
+                else {
+	                KeyValue cycleKV = Sequence.getCycleKV(result);
+	                KeyValue limitReachedKV = Sequence.getLimitReachedKV(result);
+	                KeyValue minValueKV = Sequence.getMinValueKV(result);
+	                KeyValue maxValueKV = Sequence.getMaxValueKV(result);
+	                
+	                boolean increasingSeq = incrementBy > 0 ? true : false;
+	                
+	                // if the minValue, maxValue, cycle and limitReached is null this sequence has been upgraded from
+	                // a lower version. Set minValue, maxValue, cycle and limitReached to Long.MIN_VALUE, Long.MAX_VALUE, true and false
+	                // respectively in order to maintain existing behavior and also update the KeyValues on the server 
+	                boolean limitReached;
+	                if (limitReachedKV == null) {
+	                	limitReached = false;
+	                	KeyValue newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
+	                	put.add(newLimitReachedKV);
+	                	Sequence.replaceLimitReachedKV(cells, newLimitReachedKV);
+	                }
+	                else {
+	                	limitReached = (Boolean) PDataType.BOOLEAN.toObject(limitReachedKV.getValueArray(),
+	                			limitReachedKV.getValueOffset(), limitReachedKV.getValueLength());
+	                }
+	                long minValue;
+	                if (minValueKV == null) {
+	                    minValue = Long.MIN_VALUE;
+	                    KeyValue newMinValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MIN_VALUE_BYTES, minValue, timestamp);
+	                    put.add(newMinValueKV);
+	                    Sequence.replaceMinValueKV(cells, newMinValueKV);
+	                }
+	                else {
+	                    minValue = PDataType.LONG.getCodec().decodeLong(minValueKV.getValueArray(),
+	                                minValueKV.getValueOffset(), SortOrder.getDefault());
+	                }           
+	                long maxValue;
+	                if (maxValueKV == null) {
+	                    maxValue = Long.MAX_VALUE;
+	                    KeyValue newMaxValueKV = createKeyValue(row, PhoenixDatabaseMetaData.MAX_VALUE_BYTES, maxValue, timestamp);
+	                    put.add(newMaxValueKV);
+	                    Sequence.replaceMaxValueKV(cells, newMaxValueKV);
+	                }
+	                else {
+	                    maxValue =  PDataType.LONG.getCodec().decodeLong(maxValueKV.getValueArray(),
+	                            maxValueKV.getValueOffset(), SortOrder.getDefault());
+	                }
+	                boolean cycle;
+	                if (cycleKV == null) {
+	                    cycle = false;
+	                    KeyValue newCycleKV = createKeyValue(row, PhoenixDatabaseMetaData.CYCLE_FLAG_BYTES, cycle, timestamp);
+	                    put.add(newCycleKV);
+	                    Sequence.replaceCycleValueKV(cells, newCycleKV);
+	                }
+	                else {
+	                    cycle = (Boolean) PDataType.BOOLEAN.toObject(cycleKV.getValueArray(),
+	                            cycleKV.getValueOffset(), cycleKV.getValueLength());
+	                }
+	                
+	                // return if we have run out of sequence values 
+					if (limitReached) {
+						if (cycle) {
+							// reset currentValue of the Sequence row to minValue/maxValue
+							currentValue = increasingSeq ? minValue : maxValue;
+						}
+						else {
+							SQLExceptionCode code = increasingSeq ? SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE
+									: SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE;
+							return getErrorResult(row, maxTimestamp, code.getErrorCode());
+						}
+					}
+	                
+	                // check if the limit was reached
+					limitReached = SequenceUtil.checkIfLimitReached(currentValue, minValue, maxValue, incrementBy, cacheSize);
+	                // update currentValue
+					currentValue += incrementBy * cacheSize;
+					// update the currentValue of the Result row
+					KeyValue newCurrentValueKV = createKeyValue(row, PhoenixDatabaseMetaData.CURRENT_VALUE_BYTES, currentValue, timestamp);
+		            Sequence.replaceCurrentValueKV(cells, newCurrentValueKV);
+		            put.add(newCurrentValueKV);
+					// set the LIMIT_REACHED column to true, so that no new values can be used
+					KeyValue newLimitReachedKV = createKeyValue(row, PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG_BYTES, limitReached, timestamp);
+		            put.add(newLimitReachedKV);
+                }
+                // update the KeyValues on the server
                 Mutation[] mutations = new Mutation[]{put};
                 region.batchMutate(mutations);
-                return Sequence.replaceCurrentValueKV(result, newCurrentValueKV);
+                // return a Result with the updated KeyValues
+                return Result.create(cells);
             } finally {
                 region.releaseRowLocks(locks);
             }
@@ -173,6 +266,36 @@ public class SequenceRegionObserver extends BaseRegionObserver {
             region.closeRegionOperation();
         }
     }
+    
+	/**
+	 * Creates a new KeyValue for a long value
+	 * 
+	 * @param key
+	 *            key used while creating KeyValue
+	 * @param cqBytes
+	 *            column qualifier of KeyValue
+	 * @return return the KeyValue that was created
+	 */
+	KeyValue createKeyValue(byte[] key, byte[] cqBytes, long value, long timestamp) {
+		byte[] valueBuffer = new byte[PDataType.LONG.getByteSize()];
+		PDataType.LONG.getCodec().encodeLong(value, valueBuffer, 0);
+		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, timestamp, valueBuffer);
+	}
+    
+	/**
+	 * Creates a new KeyValue for a boolean value and adds it to the given put
+	 * 
+	 * @param key
+	 *            key used while creating KeyValue
+	 * @param cqBytes
+	 *            column qualifier of KeyValue
+	 * @return return the KeyValue that was created
+	 */
+	private KeyValue createKeyValue(byte[] key, byte[] cqBytes, boolean value, long timestamp) throws IOException {
+		// create new key value for put
+		return KeyValueUtil.newKeyValue(key, PhoenixDatabaseMetaData.SEQUENCE_FAMILY_BYTES, cqBytes, 
+				timestamp, value ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
+	}
 
     /**
      * Override the preAppend for checkAndPut and checkAndDelete, as we need the ability to
@@ -187,7 +310,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         if (opBuf == null) {
             return null;
         }
-        Op op = Op.values()[opBuf[0]];
+        Sequence.MetaOp op = Sequence.MetaOp.values()[opBuf[0]];
         Cell keyValue = append.getFamilyCellMap().values().iterator().next().iterator().next();
 
         long clientTimestamp = HConstants.LATEST_TIMESTAMP;
@@ -195,7 +318,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
         long maxGetTimestamp = HConstants.LATEST_TIMESTAMP;
         boolean hadClientTimestamp;
         byte[] clientTimestampBuf = null;
-        if (op == Op.RETURN_SEQUENCE) {
+        if (op == Sequence.MetaOp.RETURN_SEQUENCE) {
             // When returning sequences, this allows us to send the expected timestamp
             // of the sequence to make sure we don't reset any other sequence
             hadClientTimestamp = true;
@@ -211,7 +334,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 // Prevent race condition of creating two sequences at the same timestamp
                 // by looking for a sequence at or after the timestamp at which it'll be
                 // created.
-                if (op == Op.CREATE_SEQUENCE) {
+                if (op == Sequence.MetaOp.CREATE_SEQUENCE) {
                     maxGetTimestamp = clientTimestamp + 1;
                 }            
             } else {
@@ -239,11 +362,11 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                 get.addColumn(family, qualifier);
                 Result result = region.get(get);
                 if (result.isEmpty()) {
-                    if (op == Op.DROP_SEQUENCE || op == Op.RETURN_SEQUENCE) {
+                    if (op == Sequence.MetaOp.DROP_SEQUENCE || op == Sequence.MetaOp.RETURN_SEQUENCE) {
                         return getErrorResult(row, clientTimestamp, SQLExceptionCode.SEQUENCE_UNDEFINED.getErrorCode());
                     }
                 } else {
-                    if (op == Op.CREATE_SEQUENCE) {
+                    if (op == Sequence.MetaOp.CREATE_SEQUENCE) {
                         return getErrorResult(row, clientTimestamp, SQLExceptionCode.SEQUENCE_ALREADY_EXIST.getErrorCode());
                     }
                 }

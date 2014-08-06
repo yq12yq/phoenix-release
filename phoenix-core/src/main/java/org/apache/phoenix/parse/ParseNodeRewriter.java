@@ -166,7 +166,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         }
         return NODE_FACTORY.select(normFrom, statement.getHint(), statement.isDistinct(),
                 normSelectNodes, normWhere, normGroupByNodes, normHaving, normOrderByNodes,
-                statement.getLimit(), statement.getBindCount(), statement.isAggregate());
+                statement.getLimit(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence());
     }
     
     private Map<String, ParseNode> getAliasMap() {
@@ -277,6 +277,16 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     }
     
     @Override
+    public ParseNode visitLeave(ModulusParseNode node, List<ParseNode> nodes) throws SQLException {
+        return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.modulus(children);
+            }
+        });
+    }
+    
+    @Override
     public ParseNode visitLeave(final FunctionParseNode node, List<ParseNode> nodes) throws SQLException {
         return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
             @Override
@@ -355,10 +365,9 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                 return NODE_FACTORY.comparison(node.getFilterOp(), children.get(0), children.get(1));
             }
         });
-        
         return normNode;
     }
-    
+
     @Override
     public ParseNode visitLeave(final BetweenParseNode node, List<ParseNode> nodes) throws SQLException {
         return leaveCompoundNode(node, nodes, new CompoundNodeFactory() {
@@ -427,7 +436,12 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     
     @Override
     public ParseNode visitLeave(StringConcatParseNode node, List<ParseNode> l) throws SQLException {
-        return node;
+        return leaveCompoundNode(node, l, new CompoundNodeFactory() {
+            @Override
+            public ParseNode createNode(List<ParseNode> children) {
+                return NODE_FACTORY.concat(children);
+            }
+        });
     }
 
     @Override
@@ -532,4 +546,19 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
         }
 	    
 	}
+
+	@Override
+    public ParseNode visitLeave(ArrayAnyComparisonNode node, List<ParseNode> l) throws SQLException {
+        return node;
+    }
+
+    @Override
+    public ParseNode visitLeave(ArrayAllComparisonNode node, List<ParseNode> l) throws SQLException {
+        return node;
+    }
+ 
+    @Override
+    public ParseNode visitLeave(ArrayElemRefNode node, List<ParseNode> l) throws SQLException {
+        return node;
+    }
 }

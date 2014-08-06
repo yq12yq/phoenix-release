@@ -22,6 +22,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -36,6 +37,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -47,14 +49,11 @@ import com.google.common.collect.Sets;
  *
  */
 public class InListExpression extends BaseSingleExpression {
-    public final LinkedHashSet<ImmutableBytesPtr> EMPTY_SET = new LinkedHashSet<ImmutableBytesPtr>();
-    private LinkedHashSet<ImmutableBytesPtr> values;
+    private Set<ImmutableBytesPtr> values;
     private ImmutableBytesPtr minValue;
     private ImmutableBytesPtr maxValue;
     private int valuesByteLength;
-    private boolean containsNull;
     private int fixedWidth = -1;
-    private ImmutableBytesPtr value = new ImmutableBytesPtr();
     private List<Expression> keyExpressions; // client side only
 
     public static Expression create (List<Expression> children, boolean isNegate, ImmutableBytesWritable ptr) throws SQLException {
@@ -93,12 +92,8 @@ public class InListExpression extends BaseSingleExpression {
         if (isNegate) { 
             expression = NotExpression.create(expression, ptr);
         }
-        if (expression.isStateless()) {
-            if (!expression.evaluate(null, ptr) || ptr.getLength() == 0) {
-                return LiteralExpression.newConstant(null,expression.getDataType(), expression.isDeterministic());
-            }
-            Object value = expression.getDataType().toObject(ptr);
-            return LiteralExpression.newConstant(value, expression.getDataType(), expression.isDeterministic());
+        if (ExpressionUtil.isConstant(expression)) {
+            return ExpressionUtil.getConstantExpression(expression, ptr);
         }
         return expression;
     }
@@ -116,9 +111,7 @@ public class InListExpression extends BaseSingleExpression {
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             Expression child = keyExpressions.get(i);
             child.evaluate(null, ptr);
-            if (ptr.getLength() == 0) {
-                containsNull = true;
-            } else {
+            if (ptr.getLength() > 0) { // filter null as it has no impact
                 if (values.add(ptr)) {
                     int length = ptr.getLength();
                     if (fixedWidth == -1) {
@@ -138,10 +131,12 @@ public class InListExpression extends BaseSingleExpression {
         if (values.isEmpty()) {
             this.minValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
             this.maxValue = ByteUtil.EMPTY_BYTE_ARRAY_PTR;
-            this.values = EMPTY_SET;
+            this.values = Collections.emptySet();
         } else {
             this.minValue = valuesArray[0];
             this.maxValue = valuesArray[valuesArray.length-1];
+            // Use LinkedHashSet on client-side so that we don't need to serialize the
+            // minValue and maxValue but can infer them based on the first and last position.
             this.values = new LinkedHashSet<ImmutableBytesPtr>(Arrays.asList(valuesArray));
         }
     }
@@ -151,13 +146,12 @@ public class InListExpression extends BaseSingleExpression {
         if (!getChild().evaluate(tuple, ptr)) {
             return false;
         }
-        value.set(ptr);
-        if (values.contains(value)) {
-            ptr.set(PDataType.TRUE_BYTES);
+        if (ptr.getLength() == 0) { // null IN (...) is always null
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return true;
         }
-        if (containsNull) { // If any null value and value not found
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+        if (values.contains(ptr)) {
+            ptr.set(PDataType.TRUE_BYTES);
             return true;
         }
         ptr.set(PDataType.FALSE_BYTES);
@@ -168,7 +162,6 @@ public class InListExpression extends BaseSingleExpression {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + (containsNull ? 1231 : 1237);
         result = prime * result + values.hashCode();
         return result;
     }
@@ -179,7 +172,6 @@ public class InListExpression extends BaseSingleExpression {
         if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         InListExpression other = (InListExpression)obj;
-        if (containsNull != other.containsNull) return false;
         if (!values.equals(other.values)) return false;
         return true;
     }
@@ -187,11 +179,6 @@ public class InListExpression extends BaseSingleExpression {
     @Override
     public PDataType getDataType() {
         return PDataType.BOOLEAN;
-    }
-
-    @Override
-    public boolean isNullable() {
-        return super.isNullable() || containsNull;
     }
 
     private int readValue(DataInput input, byte[] valuesBytes, int offset, ImmutableBytesPtr ptr) throws IOException {
@@ -203,11 +190,12 @@ public class InListExpression extends BaseSingleExpression {
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
-        containsNull = input.readBoolean();
+        input.readBoolean(); // Unused, but left for b/w compat. TODO: remove in next major release
         fixedWidth = WritableUtils.readVInt(input);
         byte[] valuesBytes = Bytes.readByteArray(input);
         valuesByteLength = valuesBytes.length;
         int len = fixedWidth == -1 ? WritableUtils.readVInt(input) : valuesByteLength / fixedWidth;
+        // TODO: consider using a regular HashSet as we never serialize from the server-side
         values = Sets.newLinkedHashSetWithExpectedSize(len);
         int offset = 0;
         int i  = 0;
@@ -229,7 +217,7 @@ public class InListExpression extends BaseSingleExpression {
     @Override
     public void write(DataOutput output) throws IOException {
         super.write(output);
-        output.writeBoolean(containsNull);
+        output.writeBoolean(false); // Unused, but left for b/w compat. TODO: remove in next major release
         WritableUtils.writeVInt(output, fixedWidth);
         WritableUtils.writeVInt(output, valuesByteLength);
         for (ImmutableBytesPtr ptr : values) {
@@ -271,9 +259,6 @@ public class InListExpression extends BaseSingleExpression {
         Expression firstChild = children.get(0);
         PDataType type = firstChild.getDataType();
         StringBuilder buf = new StringBuilder(firstChild + " IN (");
-        if (containsNull) {
-            buf.append("null,");
-        }
         for (ImmutableBytesPtr value : values) {
             if (firstChild.getSortOrder() != null) {
                 type.coerceBytes(value, type, firstChild.getSortOrder(), SortOrder.getDefault());

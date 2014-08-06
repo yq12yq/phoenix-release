@@ -37,7 +37,9 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -55,6 +57,9 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -75,14 +80,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     private static StatementContext compileStatement(String query, List<Object> binds, Integer limit) throws SQLException {
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES).unwrap(PhoenixConnection.class);
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         TestUtil.bindParams(pstmt, binds);
         QueryPlan plan = pstmt.compileQuery();
         assertEquals(limit, plan.getLimit());
         return plan.getContext();
     }
-
+    
     @Test
     public void testSingleKeyExpression() throws SQLException {
         String tenantId = "000000000000001";
@@ -92,6 +97,32 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNull(scan.getFilter());
         assertArrayEquals(PDataType.VARCHAR.toBytes(tenantId), scan.getStartRow());
         assertArrayEquals(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId)), scan.getStopRow());
+    }
+
+    @Test
+    public void testSingleCharPaddedKeyExpression() throws SQLException {
+        String tenantId = "1";
+        String query = "select * from atable where organization_id='" + tenantId + "'";
+        Scan scan = compileStatement(query).getScan();
+
+        assertNull(scan.getFilter());
+        byte[] key = StringUtil.padChar(PDataType.CHAR.toBytes(tenantId), 15);
+        assertArrayEquals(key, scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(key), scan.getStopRow());
+    }
+
+    @Test
+    public void testSingleBinaryPaddedKeyExpression() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute("create table bintable (k BINARY(15) PRIMARY KEY)");
+        String tenantId = "1";
+        String query = "select * from bintable where k='" + tenantId + "'";
+        Scan scan = compileStatement(query).getScan();
+
+        assertNull(scan.getFilter());
+        byte[] key = ByteUtil.fillKey(PDataType.VARCHAR.toBytes(tenantId), 15);
+        assertArrayEquals(key, scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(key), scan.getStopRow());
     }
 
     @Test
@@ -162,9 +193,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)), 15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)), 15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -177,9 +208,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query, binds).getScan();
 
         assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -366,7 +397,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNull(scan.getFilter());
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
-        assertArrayEquals(ByteUtil.concat(startRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.nextKey(startRow), scan.getStopRow());
     }
 
     @Test
@@ -377,14 +408,14 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
         assertNotNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(ByteUtil.fillKey(PDataType.VARCHAR.toBytes(tenantId.substring(0,3)),15),PDataType.VARCHAR.toBytes(entityId));
+        byte[] startRow = ByteUtil.concat(StringUtil.padChar(PDataType.VARCHAR.toBytes(tenantId.substring(0,3)),15),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         // Even though the first slot is a non inclusive range, we need to do a next key
         // on the second slot because of the algorithm we use to seek to and terminate the
         // loop during skip scan. We could end up having a first slot just under the upper
         // limit of slot one and a value equal to the value in slot two and we need this to
         // be less than the upper range that would get formed.
-        byte[] stopRow = ByteUtil.concat(ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId.substring(0,3))),15),ByteUtil.nextKey(PDataType.VARCHAR.toBytes(entityId)));
+        byte[] stopRow = ByteUtil.concat(StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(tenantId.substring(0,3))),15),ByteUtil.nextKey(PDataType.VARCHAR.toBytes(entityId)));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -409,9 +440,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix1),15));
+        byte[] startRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(PDataType.CHAR.toBytes(keyPrefix1),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix2),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(PDataType.CHAR.toBytes(keyPrefix2),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -424,9 +455,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix1),15));
+        byte[] startRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(PDataType.CHAR.toBytes(keyPrefix1),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix2)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.CHAR.toBytes(keyPrefix2)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -439,9 +470,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
         
         assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix1)),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix1)),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix2)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix2)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -467,7 +498,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
-        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
     }
 
     @Test
@@ -489,9 +520,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
         assertNull(scan.getFilter());
 
-        byte[] startRow = PDataType.VARCHAR.toBytes(tenantId);
+        byte[] startRow = PDataType.CHAR.toBytes(tenantId);
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(keyPrefix1),new byte[entityId.length() - keyPrefix1.length()]);
+        byte[] stopRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(PDataType.CHAR.toBytes(keyPrefix1),entityId.length()));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -507,7 +538,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
         assertArrayEquals(startRow, scan.getStartRow());
         byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),PDataType.VARCHAR.toBytes(entityId));
-        assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+        assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
     }
 
     @Test
@@ -519,9 +550,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = compileStatement(query).getScan();
 
         assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix1),15)); // extra byte is due to implicit internal padding
+        byte[] startRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(PDataType.CHAR.toBytes(keyPrefix1),15)); // extra byte is due to implicit internal padding
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix2)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.CHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.CHAR.toBytes(keyPrefix2)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -632,9 +663,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = context.getScan();
 
         assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -648,9 +679,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scan = context.getScan();
 
         assertNull(scan.getFilter());
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -683,9 +714,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                     likeArg)),
                 filter);
 
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -707,9 +738,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                     likeArg)),
                 filter);
 
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
         assertArrayEquals(startRow, scan.getStartRow());
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
@@ -731,8 +762,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                     likeArg)),
                 filter);
 
-        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15));
-        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
+        byte[] startRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15));
+        byte[] stopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId),StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15));
         assertArrayEquals(startRow, scan.getStartRow());
         assertArrayEquals(stopRow, scan.getStopRow());
     }
@@ -1061,11 +1092,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(1,ranges.size());
         List<List<KeyRange>> expectedRanges = Collections.singletonList(Arrays.asList(
                 PDataType.CHAR.getKeyRange(
-                        ByteUtil.fillKey(PDataType.CHAR.toBytes("00D"),15), true, 
-                        ByteUtil.fillKey(ByteUtil.nextKey(PDataType.CHAR.toBytes("00D")),15), false), 
+                        StringUtil.padChar(PDataType.CHAR.toBytes("00D"),15), true, 
+                        StringUtil.padChar(ByteUtil.nextKey(PDataType.CHAR.toBytes("00D")),15), false), 
                 PDataType.CHAR.getKeyRange(
-                        ByteUtil.fillKey(PDataType.CHAR.toBytes("foo"),15), true, 
-                        ByteUtil.fillKey(ByteUtil.nextKey(PDataType.CHAR.toBytes("foo")),15), false)));
+                        StringUtil.padChar(PDataType.CHAR.toBytes("foo"),15), true, 
+                        StringUtil.padChar(ByteUtil.nextKey(PDataType.CHAR.toBytes("foo")),15), false)));
         assertEquals(expectedRanges, ranges);
     }
     
@@ -1122,9 +1153,9 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertNotNull(filter);
         assertTrue(filter instanceof RowKeyComparisonFilter);
 
-        byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), ByteUtil.fillKey(PDataType.VARCHAR.toBytes(keyPrefix),15), PDataType.DATE.toBytes(startTime));
+        byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), StringUtil.padChar(PDataType.VARCHAR.toBytes(keyPrefix),15), PDataType.DATE.toBytes(startTime));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
-        byte[] expectedStopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), ByteUtil.fillKey(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15), PDataType.DATE.toBytes(stopTime));
+        byte[] expectedStopRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(tenantId), StringUtil.padChar(ByteUtil.nextKey(PDataType.VARCHAR.toBytes(keyPrefix)),15), PDataType.DATE.toBytes(stopTime));
         assertArrayEquals(expectedStopRow, scan.getStopRow());
     }
 
@@ -1249,7 +1280,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         assertNull(filter);
         byte[] expectedStartRow = ByteUtil.concat(PDataType.VARCHAR.toBytes(lowerTenantId), PDataType.VARCHAR.toBytes(lowerParentId), PDataType.DATE.toBytes(lowerCreatedDate));
-        byte[] expectedStopRow = ByteUtil.nextKey(ByteUtil.concat(ByteUtil.fillKey(PDataType.VARCHAR.toBytes("7"),15), ByteUtil.fillKey(PDataType.VARCHAR.toBytes("7"), 15)));
+        byte[] expectedStopRow = ByteUtil.nextKey(ByteUtil.concat(StringUtil.padChar(PDataType.VARCHAR.toBytes("7"),15), StringUtil.padChar(PDataType.VARCHAR.toBytes("7"), 15)));
         assertArrayEquals(expectedStartRow, scan.getStartRow());
         assertArrayEquals(expectedStopRow, scan.getStopRow());
     }
@@ -1570,4 +1601,138 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(ByteUtil.concat(PDataType.CHAR.toBytes(firstOrgId), PDataType.CHAR.toBytes(firstParentId)), scan.getStartRow());
         assertArrayEquals(ByteUtil.concat(PDataType.CHAR.toBytes(secondOrgId), PDataType.CHAR.toBytes(secondParentId), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
     }
+    
+    @Test
+    public void testFullyQualifiedRVCWithTenantSpecificViewAndConnection() throws Exception {
+    	String baseTableDDL = "CREATE TABLE BASE_MULTI_TENANT_TABLE(\n " + 
+                "  tenant_id VARCHAR(5) NOT NULL,\n" + 
+                "  userid INTEGER NOT NULL,\n" + 
+                "  username VARCHAR NOT NULL,\n" +
+                "  col VARCHAR\n " + 
+                "  CONSTRAINT pk PRIMARY KEY (tenant_id, userid, username)) MULTI_TENANT=true";
+    	Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String tenantId = "tenantId";
+        String tenantViewDDL = "CREATE VIEW TENANT_VIEW AS SELECT * FROM BASE_MULTI_TENANT_TABLE";
+        Properties tenantProps = new Properties();
+        tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        conn = DriverManager.getConnection(getUrl(), tenantProps);
+        conn.createStatement().execute(tenantViewDDL);
+        
+        String query = "SELECT * FROM TENANT_VIEW WHERE (userid, username) IN ((?, ?), (?, ?))";
+        List<Object> binds = Arrays.<Object>asList(1, "uname1", 2, "uname2");
+        
+        StatementContext context = compileStatementTenantSpecific(tenantId, query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertEquals(SkipScanFilter.class, filter.getClass());
+    }
+    
+    @Test
+    public void testFullyQualifiedRVCWithNonTenantSpecificView() throws Exception {
+    	String baseTableDDL = "CREATE TABLE BASE_TABLE(\n " + 
+                "  tenant_id VARCHAR(5) NOT NULL,\n" + 
+                "  userid INTEGER NOT NULL,\n" + 
+                "  username VARCHAR NOT NULL,\n" +
+                "  col VARCHAR\n " + 
+                "  CONSTRAINT pk PRIMARY KEY (tenant_id, userid, username))";
+    	Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(baseTableDDL);
+        conn.close();
+        
+        String viewDDL = "CREATE VIEW VIEWXYZ AS SELECT * FROM BASE_TABLE";
+        conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(viewDDL);
+        
+        String query = "SELECT * FROM VIEWXYZ WHERE (tenant_id, userid, username) IN ((?, ?, ?), (?, ?, ?))";
+        List<Object> binds = Arrays.<Object>asList("tenantId", 1, "uname1", "tenantId", 2, "uname2");
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertEquals(SkipScanFilter.class, filter.getClass());
+    }
+    
+    @Test
+    public void testRVCWithCompareOpsForRowKeyColumnValuesSmallerThanSchema() throws SQLException {
+        String orgId = "0000005";
+        String entityId = "011";
+        String orgId2 = "000005";
+        String entityId2 = "11";
+        
+        // CASE 1: >=
+        String query = "select * from atable where (organization_id, entity_id) >= (?,?)";
+        List<Object> binds = Arrays.<Object>asList(orgId, entityId);
+        StatementContext context = compileStatement(query, binds);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNull(filter);
+        assertArrayEquals(ByteUtil.concat(StringUtil.padChar(PDataType.CHAR.toBytes(orgId), 15), StringUtil.padChar(PDataType.CHAR.toBytes(entityId), 15)), scan.getStartRow());
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
+        
+        // CASE 2: >
+        query = "select * from atable where (organization_id, entity_id) > (?,?)";
+        binds = Arrays.<Object>asList(orgId, entityId);
+        context = compileStatement(query, binds);
+        scan = context.getScan();
+        filter = scan.getFilter();
+        assertNull(filter);
+        assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(StringUtil.padChar(PDataType.CHAR.toBytes(orgId), 15), StringUtil.padChar(PDataType.CHAR.toBytes(entityId), 15))), scan.getStartRow());
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStopRow());
+        
+        // CASE 3: <=
+        query = "select * from atable where (organization_id, entity_id) <= (?,?)";
+        binds = Arrays.<Object>asList(orgId, entityId);
+        context = compileStatement(query, binds);
+        scan = context.getScan();
+        filter = scan.getFilter();
+        assertNull(filter);
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(StringUtil.padChar(PDataType.CHAR.toBytes(orgId), 15), StringUtil.padChar(PDataType.CHAR.toBytes(entityId), 15))), scan.getStopRow());
+        
+        // CASE 4: <
+        query = "select * from atable where (organization_id, entity_id) < (?,?)";
+        binds = Arrays.<Object>asList(orgId, entityId);
+        context = compileStatement(query, binds);
+        scan = context.getScan();
+        filter = scan.getFilter();
+        assertNull(filter);
+        assertArrayEquals(HConstants.EMPTY_END_ROW, scan.getStartRow());
+        assertArrayEquals(ByteUtil.concat(StringUtil.padChar(PDataType.CHAR.toBytes(orgId), 15), StringUtil.padChar(PDataType.CHAR.toBytes(entityId), 15)), scan.getStopRow());
+        
+        // CASE 5: =
+        // For RVC, this will only occur if there's more than one key in the IN
+        query = "select * from atable where (organization_id, entity_id) IN ((?,?),(?,?))";
+        binds = Arrays.<Object>asList(orgId, entityId, orgId2, entityId2);
+        context = compileStatement(query, binds);
+        scan = context.getScan();
+        filter = scan.getFilter();
+        assertTrue(filter instanceof SkipScanFilter);
+        ScanRanges scanRanges = context.getScanRanges();
+        assertEquals(2,scanRanges.getPointLookupCount());
+        Iterator<KeyRange> iterator = scanRanges.getPointLookupKeyIterator();
+        KeyRange k1 = iterator.next();
+        assertTrue(k1.isSingleKey());
+        assertArrayEquals(ByteUtil.concat(StringUtil.padChar(PDataType.CHAR.toBytes(orgId), 15), StringUtil.padChar(PDataType.CHAR.toBytes(entityId), 15)), k1.getLowerRange());
+        KeyRange k2 = iterator.next();
+        assertTrue(k2.isSingleKey());
+        assertArrayEquals(ByteUtil.concat(StringUtil.padChar(PDataType.CHAR.toBytes(orgId2), 15), StringUtil.padChar(PDataType.CHAR.toBytes(entityId2), 15)), k2.getLowerRange());
+    }
+    
+    private static StatementContext compileStatementTenantSpecific(String tenantId, String query, List<Object> binds) throws Exception {
+    	PhoenixConnection pconn = getTenantSpecificConnection("tenantId").unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        TestUtil.bindParams(pstmt, binds);
+        QueryPlan plan = pstmt.compileQuery();
+        return  plan.getContext();
+    }
+    
+    private static Connection getTenantSpecificConnection(String tenantId) throws Exception {
+    	Properties tenantProps = new Properties();
+        tenantProps.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        Connection conn = DriverManager.getConnection(getUrl(), tenantProps);
+        return conn;
+    }
+    
 }

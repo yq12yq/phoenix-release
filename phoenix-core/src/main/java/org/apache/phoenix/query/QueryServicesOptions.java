@@ -46,6 +46,7 @@ import static org.apache.phoenix.query.QueryServices.REGIONSERVER_LEASE_PERIOD_A
 import static org.apache.phoenix.query.QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
@@ -100,6 +101,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
     public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 5;
     public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
+    // We make the default chunk size one row smaller than the default scan cache size because
+    // one extra row is typically read and discarded by the ChunkedResultIterator, and we don't
+    // want to fill up a whole new cache to read a single extra record
+    public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = DEFAULT_SCAN_CACHE_SIZE - 1L;
     
     // 
     // Spillable GroupBy - SPGBY prefix
@@ -119,6 +124,9 @@ public class QueryServicesOptions {
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*10L; // 10 Mb
     public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
     public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
+    public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 10000; // 10 secs
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 300000; // 5 mins
     
     private final Configuration config;
     
@@ -126,14 +134,14 @@ public class QueryServicesOptions {
         this.config = config;
     }
     
-    public ReadOnlyProps getProps() {
+    public ReadOnlyProps getProps(ReadOnlyProps defaultProps) {
         // Ensure that HBase RPC time out value is at least as large as our thread time out for query. 
         int threadTimeOutMS = config.getInt(THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
         int hbaseRPCTimeOut = config.getInt(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
         if (threadTimeOutMS > hbaseRPCTimeOut) {
             config.setInt(HConstants.HBASE_RPC_TIMEOUT_KEY, threadTimeOutMS);
         }
-        return new ReadOnlyProps(config.iterator());
+        return new ReadOnlyProps(defaultProps, config.iterator());
     }
     
     public QueryServicesOptions setAll(ReadOnlyProps props) {
@@ -173,6 +181,7 @@ public class QueryServicesOptions {
             .setIfUnset(GROUPBY_MAX_CACHE_SIZE_ATTRIB, DEFAULT_GROUPBY_MAX_CACHE_MAX)
             .setIfUnset(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES)
             .setIfUnset(SEQUENCE_CACHE_SIZE_ATTRIB, DEFAULT_SEQUENCE_CACHE_SIZE)
+            .setIfUnset(SCAN_RESULT_CHUNK_SIZE, DEFAULT_SCAN_RESULT_CHUNK_SIZE)
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

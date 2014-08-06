@@ -36,6 +36,7 @@ import java.util.Properties;
 import org.apache.phoenix.expression.function.ToNumberFunction;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -60,10 +61,10 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
     public static final String TO_NUMBER_TABLE_DDL = "create table " + TO_NUMBER_TABLE_NAME +
         "(a_id integer not null, \n" + 
         "a_string char(4) not null, \n" +
-        "b_string char(4) not null, \n" + 
-        "a_date date not null, \n" + 
-        "a_time date not null, \n" + 
-        "a_timestamp timestamp not null \n" + 
+        "b_string char(4), \n" + 
+        "a_date date, \n" + 
+        "a_time date, \n" + 
+        "a_timestamp timestamp \n" + 
         "CONSTRAINT my_pk PRIMARY KEY (a_id, a_string))";
     
     private Date row1Date;
@@ -92,7 +93,7 @@ public class ToNumberFunctionIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         createTestTable(getUrl(), TO_NUMBER_TABLE_DDL, null, ts-2);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(false);
         

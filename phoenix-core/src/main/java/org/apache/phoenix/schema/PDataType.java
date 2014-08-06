@@ -26,6 +26,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.Format;
+import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -180,7 +181,18 @@ public enum PDataType {
      */
     CHAR("CHAR", Types.CHAR, String.class, null) { // Delegate to VARCHAR
         @Override
-        public Object pad(Object object, int maxLength) {
+        public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+            if (ptr.getLength() >= maxLength) {
+                return;
+            }
+            byte[] newBytes = new byte[maxLength];
+            System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
+            Arrays.fill(newBytes, ptr.getLength(), maxLength, StringUtil.SPACE_UTF8);
+            ptr.set(newBytes);
+        }
+
+        @Override
+        public Object pad(Object object, Integer maxLength) {
             String s = (String) object;
             if (s == null) {
                 return s;
@@ -389,6 +401,12 @@ public enum PDataType {
             case DECIMAL:
                 BigDecimal d = (BigDecimal)object;
                 return d.longValueExact();
+            case DATE:
+            case UNSIGNED_DATE:
+            case TIME:
+            case UNSIGNED_TIME:
+                java.util.Date date = (java.util.Date)object;
+                return date.getTime();
             default:
                 return throwConstraintViolationException(actualType,this);
             }
@@ -412,6 +430,10 @@ public enum PDataType {
             case UNSIGNED_FLOAT:
             case DOUBLE:
             case UNSIGNED_DOUBLE:
+            case DATE:
+            case UNSIGNED_DATE:
+            case TIME:
+            case UNSIGNED_TIME:
                 return actualType.getCodec().decodeLong(b, o, sortOrder);
             case DECIMAL:
                 BigDecimal bd = (BigDecimal)actualType.toObject(b, o, l, actualType, sortOrder);
@@ -469,6 +491,11 @@ public enum PDataType {
                 }
             }
             return super.isCoercibleTo(targetType, value);
+        }
+
+        @Override
+        public boolean isCastableTo(PDataType targetType) {
+            return super.isCastableTo(targetType) || targetType.isCoercibleTo(TIMESTAMP);
         }
 
         @Override
@@ -2143,6 +2170,11 @@ public enum PDataType {
             long millis = PDataType.UNSIGNED_LONG.getCodec().decodeLong(ptr.get(),ptr.getOffset(), sortOrder);
             return millis;
         }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.TIMESTAMP;
+        }
     },
     UNSIGNED_TIME("UNSIGNED_TIME", 18, Time.class, new UnsignedDateCodec()) {
 
@@ -2213,6 +2245,11 @@ public enum PDataType {
         @Override
         public String toStringLiteral(byte[] b, int offset, int length, Format formatter) {
             return UNSIGNED_DATE.toStringLiteral(b, offset, length, formatter);
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.TIME;
         }
     },
     UNSIGNED_DATE("UNSIGNED_DATE", 19, Date.class, new UnsignedDateCodec()) { // After TIMESTAMP and DATE to ensure toLiteral finds those first
@@ -2311,6 +2348,11 @@ public enum PDataType {
                 return;
             }
             super.coerceBytes(ptr, object, actualType, maxLength, scale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
+        }
+
+        @Override
+        public int getResultSetSqlType() {
+            return Types.DATE;
         }
     },
     /**
@@ -3094,7 +3136,17 @@ public enum PDataType {
     },
     BINARY("BINARY", Types.BINARY, byte[].class, null) {
         @Override
-        public Object pad(Object object, int maxLength) {
+        public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
+            if (ptr.getLength() >= maxLength) {
+                return;
+            }
+            byte[] newBytes = new byte[maxLength];
+            System.arraycopy(ptr.get(), ptr.getOffset(), newBytes, 0, ptr.getLength());
+            ptr.set(newBytes);
+        }
+        
+        @Override
+        public Object pad(Object object, Integer maxLength) {
             byte[] b = (byte[]) object;
             if (b == null) {
                 return null;
@@ -7102,8 +7154,11 @@ public enum PDataType {
         throw new UnsupportedOperationException("Operation not supported for type " + this);
     }
 
-    public Object pad(Object object, int maxLength) {
+    public Object pad(Object object, Integer maxLength) {
         return object;
+    }
+    
+    public void pad(ImmutableBytesWritable ptr, Integer maxLength) {
     }
     
 }

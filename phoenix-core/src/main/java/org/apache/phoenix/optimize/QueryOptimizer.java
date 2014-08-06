@@ -29,6 +29,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.iterate.ParallelIterators.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -43,6 +44,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.collect.Lists;
@@ -70,17 +72,18 @@ public class QueryOptimizer {
     }
 
     public QueryPlan optimize(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory);
+        QueryCompiler compiler = new QueryCompiler(statement, select, resolver, targetColumns, parallelIteratorFactory, new SequenceManager(statement));
         QueryPlan dataPlan = compiler.compile();
         return optimize(dataPlan, statement, targetColumns, parallelIteratorFactory);
     }
     
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        // Get the statement as it's been normalized now
-        // TODO: the recompile for the index tables could skip the normalize step
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
-        // TODO: consider not even compiling index plans if we have a point lookup
-        if (!useIndexes || select.isJoin() || dataPlan.getContext().getResolver().getTables().size() > 1) {
+        // Exit early if we have a point lookup as we can't get better than that
+        if (!useIndexes 
+                || select.isJoin() 
+                || dataPlan.getContext().getResolver().getTables().size() > 1
+                || dataPlan.getContext().getScanRanges().isPointLookup()) {
             return dataPlan;
         }
         PTable dataTable = dataPlan.getTableRef().getTable();
@@ -192,8 +195,17 @@ public class QueryOptimizer {
             ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
             // Check index state of now potentially updated index table to make sure it's active
             if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
-                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory);
+                QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager());
                 QueryPlan plan = compiler.compile();
+                // If query doesn't have where clause and some of columns to project are missing
+                // in the index then we need to get missing columns from main table for each row in
+                // local index. It's like full scan of both local index and data table which is inefficient.
+                // Then we don't use the index. If all the columns to project are present in the index 
+                // then we can use the index even the query doesn't have where clause. 
+                if (index.getIndexType() == IndexType.LOCAL && indexSelect.getWhere() == null
+                        && !plan.getContext().getDataColumns().isEmpty()) {
+                    return null;
+                }
                 // Checking number of columns handles the wildcard cases correctly, as in that case the index
                 // must contain all columns from the data table to be able to be used.
                 if (plan.getTableRef().getTable().getIndexState() == PIndexState.ACTIVE && plan.getProjector().getColumnCount() == nColumns) {
@@ -281,27 +293,47 @@ public class QueryOptimizer {
                 PTable table1 = plan1.getTableRef().getTable();
                 PTable table2 = plan2.getTableRef().getTable();
                 int c = plan2.getContext().getScanRanges().getRanges().size() - plan1.getContext().getScanRanges().getRanges().size();
+                boolean bothLocalIndexes = table1.getIndexType() == IndexType.LOCAL && table2.getIndexType() == IndexType.LOCAL;
                 // Account for potential view constants which are always bound
                 if (plan1 == dataPlan) { // plan2 is index plan. Ignore the viewIndexId if present
-                    c += boundRanges - (table2.getViewIndexId() == null ? 0 : 1);
+                    c += boundRanges - (table2.getViewIndexId() == null || bothLocalIndexes ? 0 : 1);
+                    // if table2 is local index table and query doesn't have any condition on the
+                    // indexed columns then give first priority to the local index.
+                    if(table2.getIndexType()==IndexType.LOCAL && plan2.getContext().getScanRanges().getRanges().size()==0) c++;
                 } else { // plan1 is index plan. Ignore the viewIndexId if present
-                    c -= boundRanges - (table1.getViewIndexId() == null ? 0 : 1);
+                    c -= boundRanges - (table1.getViewIndexId() == null || bothLocalIndexes ? 0 : 1);
+                    // if table1 is local index table and query doesn't have any condition on the
+                    // indexed columns then give first priority to the local index.
+                    if (!bothLocalIndexes && table1.getIndexType() == IndexType.LOCAL
+                            && plan1.getContext().getScanRanges().getRanges().isEmpty()) c--;
+                    // if both tables are index tables then select plan below based on number of
+                    // columns and type of index.
+                    if(table1.getType()==PTableType.INDEX && table2.getType()==PTableType.INDEX && !bothLocalIndexes) c=0;
                 }
                 if (c != 0) return c;
                 if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
                         return plan1.getGroupBy().isOrderPreserving() ? -1 : 1;
-                    }
+                    } 
                 }
                 // Use smaller table (table with fewest kv columns)
                 c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
                 if (c != 0) return c;
                 
+                // If all things are equal, don't choose local index as it forces scan
+                // on every region.
+                if (table1.getIndexType() == IndexType.LOCAL) {
+                    return 1;
+                }
+                if (table2.getIndexType() == IndexType.LOCAL) {
+                    return -1;
+                }
+
                 // All things being equal, just use the table based on the Hint.USE_DATA_OVER_INDEX_TABLE
-                if (plan1.getTableRef().getTable().getType() == PTableType.INDEX) {
+                if (table1.getType() == PTableType.INDEX) {
                     return comparisonOfDataVersusIndexTable;
                 }
-                if (plan2.getTableRef().getTable().getType() == PTableType.INDEX) {
+                if (table2.getType() == PTableType.INDEX) {
                     return -comparisonOfDataVersusIndexTable;
                 }
                 

@@ -28,7 +28,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -209,7 +208,7 @@ public class DeleteCompiler {
                 hint, false, aliasedNodes, delete.getWhere(), 
                 Collections.<ParseNode>emptyList(), null, 
                 delete.getOrderBy(), delete.getLimit(),
-                delete.getBindCount(), false);
+                delete.getBindCount(), false, false);
         select = StatementNormalizer.normalize(select, resolver);
         DeletingParallelIteratorFactory parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection, tableRef);
         final QueryPlan plan = new QueryOptimizer(services).optimize(statement, select, resolver, Collections.<PColumn>emptyList(), parallelIteratorFactory);

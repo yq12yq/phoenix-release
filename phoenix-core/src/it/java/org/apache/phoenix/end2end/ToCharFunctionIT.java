@@ -38,6 +38,7 @@ import java.util.TimeZone;
 
 import org.apache.phoenix.expression.function.ToCharFunction;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -67,11 +68,11 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
     
     public static final String TO_CHAR_TABLE_DDL = "create table " + TO_CHAR_TABLE_NAME +
         "(pk integer not null, \n" + 
-        "col_date date not null, \n" +
-        "col_time date not null, \n" +
-        "col_timestamp timestamp not null, \n" +
-        "col_integer integer not null, \n" + 
-        "col_decimal decimal not null \n" + 
+        "col_date date, \n" +
+        "col_time date, \n" +
+        "col_timestamp timestamp, \n" +
+        "col_integer integer, \n" + 
+        "col_decimal decimal\n" + 
         "CONSTRAINT my_pk PRIMARY KEY (pk))";
 
     @Before
@@ -82,7 +83,7 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         createTestTable(getUrl(), TO_CHAR_TABLE_DDL, null, ts-2);
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(false);
         

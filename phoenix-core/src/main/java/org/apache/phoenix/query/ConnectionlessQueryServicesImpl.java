@@ -48,6 +48,7 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -61,6 +62,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
+import org.apache.phoenix.schema.SequenceInfo;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -70,6 +72,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SequenceUtil;
 
 import com.google.common.collect.Maps;
 
@@ -84,13 +87,15 @@ import com.google.common.collect.Maps;
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private PMetaData metaData;
-    private final Map<SequenceKey, Long> sequenceMap = Maps.newHashMap();
+    private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
+    private final String userName;
     private KeyValueBuilder kvBuilder;
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     
-    public ConnectionlessQueryServicesImpl(QueryServices queryServices) {
+    public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
         super(queryServices);
+        userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
@@ -316,13 +321,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public long createSequence(String tenantId, String schemaName, String sequenceName, long startWith, long incrementBy, long cacheSize, long timestamp)
-            throws SQLException {
+    public long createSequence(String tenantId, String schemaName, String sequenceName,
+            long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
+            boolean cycle, long timestamp) throws SQLException {
         SequenceKey key = new SequenceKey(tenantId, schemaName, sequenceName);
         if (sequenceMap.get(key) != null) {
             throw new SequenceAlreadyExistsException(schemaName, sequenceName);
         }
-        sequenceMap.put(key, startWith);
+        sequenceMap.put(key, new SequenceInfo(startWith, incrementBy, minValue, maxValue, 1l, cycle)) ;
         return timestamp;
     }
 
@@ -337,14 +343,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
-            SQLException[] exceptions, Sequence.Action action) throws SQLException {
+            SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
         int i = 0;
         for (SequenceKey key : sequenceKeys) {
-            Long value = sequenceMap.get(key);
-            if (value == null) {
+            SequenceInfo info = sequenceMap.get(key);
+            if (info == null) {
                 exceptions[i] = new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
             } else {
-                values[i] = value;          
+                values[i] = info.sequenceValue;          
             }
             i++;
         }
@@ -354,15 +360,29 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values,
             SQLException[] exceptions) throws SQLException {
         int i = 0;
-        for (SequenceKey key : sequenceKeys) {
-            Long value = sequenceMap.get(key);
-            if (value == null) {
-                exceptions[i] = new SequenceNotFoundException(key.getSchemaName(), key.getSequenceName());
-            } else {
-                values[i] = value++;
-            }
-            i++;
-        }
+		for (SequenceKey key : sequenceKeys) {
+			SequenceInfo info = sequenceMap.get(key);
+			if (info == null) {
+				exceptions[i] = new SequenceNotFoundException(
+						key.getSchemaName(), key.getSequenceName());
+			} else {
+				boolean increaseSeq = info.incrementBy > 0;
+				if (info.limitReached) {
+					SQLExceptionCode code = increaseSeq ? SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE
+							: SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE;
+					exceptions[i] = new SQLExceptionInfo.Builder(code).build().buildException();
+				} else {
+					values[i] = info.sequenceValue;
+					info.sequenceValue += info.incrementBy * info.cacheSize;
+					info.limitReached = SequenceUtil.checkIfLimitReached(info);
+					if (info.limitReached && info.cycle) {
+						info.sequenceValue = increaseSeq ? info.minValue : info.maxValue;
+						info.limitReached = false;
+					}
+				}
+			}
+			i++;
+		}
         i = 0;
         for (SQLException e : exceptions) {
             if (e != null) {
@@ -374,13 +394,13 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public long currentSequenceValue(SequenceKey sequenceKey, long timestamp) throws SQLException {
-        Long value = sequenceMap.get(sequenceKey);
-        if (value == null) {
+        SequenceInfo info = sequenceMap.get(sequenceKey);
+        if (info == null) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE)
             .setSchemaName(sequenceKey.getSchemaName()).setTableName(sequenceKey.getSequenceName())
             .build().buildException();
         }
-        return value;
+        return info.sequenceValue;
     }
 
     @Override
@@ -404,5 +424,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public boolean supportsFeature(Feature feature) {
         return false;
+    }
+
+    @Override
+    public String getUserName() {
+        return userName;
     }
 }

@@ -40,12 +40,16 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Test;
@@ -56,12 +60,14 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     public static final String SCHEMA_NAME = "";
     public static final String DATA_TABLE_NAME = "T";
     public static final String INDEX_TABLE_NAME = "I";
+    public static final String LOCAL_INDEX_TABLE_NAME = "LI";
     public static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
     public static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
+    public static final String LOCAL_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "LI");
 
     @Test
     public void testAlterTableWithVarBinaryKey() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -83,8 +89,29 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testAddColsIntoSystemTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+                Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP + 1));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+ 
+      try{
+        conn.createStatement().executeUpdate("ALTER TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG + 
+          " ADD IF NOT EXISTS testNewColumn integer");
+        String query = "SELECT testNewColumn FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG;
+        try {
+          conn.createStatement().executeQuery(query);
+        } catch(SQLException e) {
+          assertFalse("testNewColumn wasn't created successfully:" + e, true);
+        }
+      } finally {
+        conn.close();
+      }
+    }
+
+    @Test
     public void testAddVarCharColToPK() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -155,7 +182,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testAlterColumnFamilyProperty() throws Exception {
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
         String ddl = "CREATE TABLE test_table " +
@@ -195,7 +222,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         PreparedStatement stmt;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -209,6 +236,9 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1, v2)");
+        conn.createStatement().execute(
+            "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1, v2)");
+
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
@@ -253,7 +283,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         PreparedStatement stmt;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -267,7 +297,12 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
         conn.createStatement().execute(
           "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
+        conn.createStatement().execute(
+            "CREATE LOCAL INDEX " + LOCAL_INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) include (v2, v3)");
         query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+        query = "SELECT * FROM " + LOCAL_INDEX_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
     
@@ -316,7 +351,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         PreparedStatement stmt;
     
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
     
@@ -393,7 +428,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSetSaltedTableAsImmutable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -427,7 +462,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDropColumnFromSaltedTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -461,7 +496,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testAddVarCols() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
@@ -570,7 +605,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDropVarCols() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
@@ -590,7 +625,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDisallowAddingNotNullableColumnNotPartOfPkForExistingTable() throws Exception {
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
@@ -627,7 +662,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     public void testDisableWAL() throws Exception {
         String fullTableName = "TEST_TABLE";
         String fullIndexName = "I";
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         try {
@@ -721,7 +756,7 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testDropColumnsWithImutability() throws Exception {
 
-        Properties props = new Properties(TEST_PROPERTIES);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
 

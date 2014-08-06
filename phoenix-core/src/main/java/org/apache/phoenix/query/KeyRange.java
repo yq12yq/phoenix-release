@@ -528,35 +528,6 @@ public class KeyRange implements Writable {
         return tmp2;
     }
     
-    /**
-     * Fill both upper and lower range of keyRange to keyLength bytes.
-     * If the upper bound is inclusive, it must be filled such that an
-     * intersection with a longer key would still match if the shorter
-     * length matches.  For example: (*,00C] intersected with [00Caaa,00Caaa]
-     * should still return [00Caaa,00Caaa] since the 00C matches and is
-     * inclusive.
-     * @param keyLength
-     * @return the newly filled KeyRange
-     */
-    public KeyRange fill(int keyLength) {
-        byte[] lowerRange = this.getLowerRange();
-        byte[] newLowerRange = lowerRange;
-        if (!this.lowerUnbound()) {
-            // If lower range is inclusive, fill with 0x00 since conceptually these bytes are included in the range
-            newLowerRange = ByteUtil.fillKey(lowerRange, keyLength);
-        }
-        byte[] upperRange = this.getUpperRange();
-        byte[] newUpperRange = upperRange;
-        if (!this.upperUnbound()) {
-            // If upper range is inclusive, fill with 0xFF since conceptually these bytes are included in the range
-            newUpperRange = ByteUtil.fillKey(upperRange, keyLength);
-        }
-        if (newLowerRange != lowerRange || newUpperRange != upperRange) {
-            return KeyRange.getKeyRange(newLowerRange, this.isLowerInclusive(), newUpperRange, this.isUpperInclusive());
-        }
-        return this;
-    }
-    
     public KeyRange invert() {
         byte[] lower = this.getLowerRange();
         if (!this.lowerUnbound()) {
@@ -629,5 +600,26 @@ public class KeyRange implements Writable {
     public void write(DataOutput out) throws IOException {
         writeBound(Bound.LOWER, out);
         writeBound(Bound.UPPER, out);
+    }
+
+    public KeyRange prependRange(byte[] bytes, int offset, int length) {
+        if (length == 0 || this == EVERYTHING_RANGE) {
+            return this;
+        }
+        byte[] lowerRange = this.getLowerRange();
+        if (!this.lowerUnbound()) {
+            byte[] newLowerRange = new byte[length + lowerRange.length];
+            System.arraycopy(bytes, offset, newLowerRange, 0, length);
+            System.arraycopy(lowerRange, 0, newLowerRange, length, lowerRange.length);
+            lowerRange = newLowerRange;
+        }
+        byte[] upperRange = this.getUpperRange();
+        if (!this.upperUnbound()) {
+            byte[] newUpperRange = new byte[length + upperRange.length];
+            System.arraycopy(bytes, offset, newUpperRange, 0, length);
+            System.arraycopy(upperRange, 0, newUpperRange, length, upperRange.length);
+            upperRange = newUpperRange;
+        }
+        return getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
     }
 }
