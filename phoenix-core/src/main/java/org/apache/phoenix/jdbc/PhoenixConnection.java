@@ -128,7 +128,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     
     private boolean isClosed = false;
     private Sampler<?> sampler;
-    
+    private boolean readOnly = false;
+ 
     static {
         // add the phoenix span receiver so we can log the traces. We have a single trace
         // source for the whole JVM
@@ -522,7 +523,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public boolean isReadOnly() throws SQLException {
-        return true;
+        return readOnly; 
     }
 
     @Override
@@ -634,9 +635,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
 
     @Override
     public void setReadOnly(boolean readOnly) throws SQLException {
-        if (readOnly) {
-            throw new SQLFeatureNotSupportedException();
-        }
+        this.readOnly=readOnly;
     }
 
     @Override
