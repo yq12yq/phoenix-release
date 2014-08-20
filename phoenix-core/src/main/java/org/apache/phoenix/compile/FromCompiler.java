@@ -33,6 +33,7 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindTableNode;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DMLStatement;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
@@ -168,13 +169,22 @@ public class FromCompiler {
         return visitor;
     }
     
-    public static ColumnResolver getResolverForMutation(SingleTableStatement statement, PhoenixConnection connection)
+    public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection)
             throws SQLException {
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
+        return visitor;
+    }
+
+    public static ColumnResolver getResolverForMutation(DMLStatement statement, PhoenixConnection connection)
+            throws SQLException {
+        /*
+         * We validate the meta data at commit time for mutations, as this allows us to do many UPSERT VALUES calls
+         * without hitting the server each time to check if the meta data is up-to-date.
+         */
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), false);
         return visitor;
     }
     
-
     private static class SingleTableColumnResolver extends BaseColumnResolver {
         	private final List<TableRef> tableRefs;
         	private final String alias;
