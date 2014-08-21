@@ -18,11 +18,11 @@
 package org.apache.phoenix.trace;
 
 import static org.apache.phoenix.metrics.MetricInfo.ANNOTATION;
-import static org.apache.phoenix.metrics.MetricInfo.TAG;
 import static org.apache.phoenix.metrics.MetricInfo.END;
 import static org.apache.phoenix.metrics.MetricInfo.PARENT;
 import static org.apache.phoenix.metrics.MetricInfo.SPAN;
 import static org.apache.phoenix.metrics.MetricInfo.START;
+import static org.apache.phoenix.metrics.MetricInfo.TAG;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -87,15 +87,12 @@ public class TraceMetricSource implements PhoenixSpanReceiver, MetricsSource {
 
   private static final String EMPTY_STRING = "";
 
-  /** This must match the prefix that we are using in the hadoop-metrics2 config */
-  private static final String METRICS_SYSTEM_NAME = "phoenix";
   private static final String CONTEXT = "tracing";
 
   private List<Metric> spans = new ArrayList<Metric>();
 
   public TraceMetricSource() {
-    MetricsManager manager = Metrics.getManager();
-    manager.initialize(METRICS_SYSTEM_NAME);
+    MetricsManager manager = Metrics.initialize();
 
     // Register this instance.
     // For right now, we ignore the MBean registration issues that show up in DEBUG logs. Basically,
@@ -135,6 +132,14 @@ public class TraceMetricSource implements PhoenixSpanReceiver, MetricsSource {
 
   @Override
   public void getMetrics(MetricsCollector collector, boolean all) {
+    // add a marker record so we know how many spans are used
+    // this is also necessary to ensure that we register the metrics source as an MBean (avoiding a
+    // runtime warning)
+    MetricsRecordBuilder marker = collector.addRecord(TracingCompat.METRICS_MARKER_CONTEXT);
+    marker.add(new MetricsTag(new MetricsInfoImpl("stat", "num spans"), Integer
+        .toString(spans.size())));
+
+    // actually convert the known spans into metric records as well
     synchronized (this) {
       for (Metric span : spans) {
         MetricsRecordBuilder builder = collector.addRecord(new MetricsInfoImpl(TracingCompat

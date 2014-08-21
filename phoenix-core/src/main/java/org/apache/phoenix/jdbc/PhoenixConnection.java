@@ -51,8 +51,6 @@ import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -76,7 +74,6 @@ import org.apache.phoenix.schema.PMetaData.Pruner;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.trace.TracingCompat;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.JDBCUtil;
@@ -89,7 +86,6 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.Trace;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -111,8 +107,6 @@ import com.google.common.collect.Maps;
  * @since 0.1
  */
 public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jdbc7Shim.Connection, MetaDataMutated  {
-    private static final Log LOG = LogFactory.getLog(PhoenixConnection.class);
-
     private final String url;
     private final ConnectionQueryServices services;
     private final Properties info;
@@ -131,14 +125,7 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
     private boolean readOnly = false;
  
     static {
-        // add the phoenix span receiver so we can log the traces. We have a single trace
-        // source for the whole JVM
-        try {
-            Trace.addReceiver(TracingCompat.newTraceMetricSource());
-        } catch (RuntimeException e) {
-            LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
-                    + "TraceMetricsSink found on the classpath", e);
-        }
+        Tracing.addTraceMetricsSource();
     }
 
     private static Properties newPropsWithSCN(long scn, Properties props) {
@@ -712,7 +699,6 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // we could modify this metadata in place since it's not shared.
         if (scn == null || scn > table.getTimeStamp()) {
             metaData = metaData.addTable(table);
-            LOG.info("Table " + table + " has been added into metaData");
         }
         //Cascade through to connectionQueryServices too
         getQueryServices().addTable(table);
