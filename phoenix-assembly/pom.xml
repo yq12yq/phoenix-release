@@ -57,6 +57,8 @@
               </archive>
               <descriptors>
                 <descriptor>src/build/client.xml</descriptor>
+                <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
+                <descriptor>src/build/server.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
@@ -107,8 +109,6 @@
                 <descriptor>src/build/client-without-hbase.xml</descriptor>
                <!-- build the phoenix client jar, but without HBase (or its depenencies). -->
                 <descriptor>src/build/client-minimal.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
-                <descriptor>src/build/server.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
