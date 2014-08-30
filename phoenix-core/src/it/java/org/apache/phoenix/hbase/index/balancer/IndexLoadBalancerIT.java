@@ -444,7 +444,7 @@ public class IndexLoadBalancerIT {
             throws IOException, InterruptedException {
 
         List<Pair<HRegionInfo, ServerName>> tableRegionsAndLocations =
-                MetaReader.getTableRegionsAndLocations(master.getCatalogTracker(), TableName
+                MetaReader.getTableRegionsAndLocations(master.getCatalogTracker(0), TableName
                         .valueOf(tableName));
         List<Pair<byte[], ServerName>> startKeyAndLocationPairs =
                 new ArrayList<Pair<byte[], ServerName>>(tableRegionsAndLocations.size());

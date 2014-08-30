@@ -285,11 +285,11 @@ public class IndexSplitTransaction {
     // and assign the parent region.
     if (!testing) {
       if (metaEntries == null || metaEntries.isEmpty()) {
-        MetaEditor.splitRegion(server.getCatalogTracker(),
+        MetaEditor.splitRegion(server.getCatalogTracker(0),
             parent.getRegionInfo(), daughterRegions.getFirst().getRegionInfo(),
             daughterRegions.getSecond().getRegionInfo(), server.getServerName());
       } else {
-        offlineParentInMetaAndputMetaEntries(server.getCatalogTracker(),
+        offlineParentInMetaAndputMetaEntries(server.getCatalogTracker(0),
           parent.getRegionInfo(), daughterRegions.getFirst().getRegionInfo(), daughterRegions
               .getSecond().getRegionInfo(), server.getServerName(), metaEntries);
       }
@@ -414,10 +414,10 @@ public class IndexSplitTransaction {
       if (services != null) {
         try {
           // add 2nd daughter first (see HBASE-4335)
-          services.postOpenDeployTasks(b, server.getCatalogTracker());
+          services.postOpenDeployTasks(b, server.getCatalogTracker(0));
           // Should add it to OnlineRegions
           services.addToOnlineRegions(b);
-          services.postOpenDeployTasks(a, server.getCatalogTracker());
+          services.postOpenDeployTasks(a, server.getCatalogTracker(0));
           services.addToOnlineRegions(a);
         } catch (KeeperException ke) {
           throw new IOException(ke);
