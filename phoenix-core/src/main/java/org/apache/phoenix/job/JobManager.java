@@ -46,9 +46,13 @@ public class JobManager<T> extends AbstractRoundRobinQueue<T> {
         super(maxSize, true); // true -> new producers move to front of queue; this reduces latency.
     }
 
-	@Override
+    @Override
     protected Object extractProducer(T o) {
-        return ((JobFutureTask)o).getJobId();
+      if(o instanceof JobFutureTask){
+          return ((JobFutureTask)o).getJobId();
+      } else {
+          return o;
+      }
     }        
 
     public static interface JobRunnable<T> extends Runnable {
