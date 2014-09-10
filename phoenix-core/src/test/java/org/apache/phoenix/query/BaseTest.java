@@ -87,6 +87,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -115,6 +116,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
+import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1220,19 +1222,20 @@ public abstract class BaseTest {
     }
     
     /**
-     * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
+     * Disable and drop all the tables
      */
-    protected static void disableAndDropNonSystemTables(PhoenixTestDriver driver) throws Exception {
-        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+    protected static void disableAndDropTables(HBaseAdmin admin) throws Exception {
         try {
             HTableDescriptor[] tables = admin.listTables();
             for (HTableDescriptor table : tables) {
-                boolean isCatalogTable = (Bytes.compareTo(table.getName(), PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES) == 0);
-                boolean isSequenceTable = (Bytes.compareTo(table.getName(), PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES) == 0);
-                if (!isCatalogTable && !isSequenceTable) {
-                    admin.disableTable(table.getName());
-                    admin.deleteTable(table.getName());
+                try{
+                  admin.disableTable(table.getName());
+                } catch(IOException ex) {
+                  if(ex instanceof TableNotEnabledException) {
+                    //ignored
+                  }
                 }
+                admin.deleteTable(table.getName());
             }    
         } finally {
             admin.close();

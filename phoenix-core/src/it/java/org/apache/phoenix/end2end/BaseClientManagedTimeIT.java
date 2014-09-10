@@ -25,6 +25,7 @@ import java.sql.Date;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
@@ -98,15 +99,13 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
     
     @AfterClass
     public static void dropTables() throws Exception {
-        try {
-            disableAndDropNonSystemTables(driver);
-        } finally {
-            try {
-                assertTrue(destroyDriver(driver));
-            } finally {
-                driver = null;
-            }
-        }
+      HBaseAdmin admin = driver.getConnectionQueryServices(url, null).getAdmin();
+      try {
+          assertTrue(destroyDriver(driver));
+      } finally {
+          driver = null;
+          disableAndDropTables(admin);
+      }
     }
     
     protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
