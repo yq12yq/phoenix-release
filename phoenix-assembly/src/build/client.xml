@@ -49,6 +49,7 @@
         <include>org.cloudera.htrace:htrace-core</include>
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
+        <include>com.github.stephenc.high-scale-lib:high-scale-lib</include>
       </includes>
     </dependencySet>
 
