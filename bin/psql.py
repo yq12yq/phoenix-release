@@ -26,12 +26,20 @@ import phoenix_utils
 
 phoenix_utils.setPath()
 
+phoenix_client_jar = phoenix_utils.phoenix_client_jar
+# Backward support old env PHOENIX_LIB_DIR
+phoenix_home_path = os.getenv('PHOENIX_LIB_DIR','')
+if phoenix_home_path == "":
+    phoenix_home_path = os.getenv('PHOENIX_HOME','')
+
 if phoenix_client_jar == "":
-    phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", os.path.join(current_dir, ".."))
+    phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_home_path)
+
+hbase_conf_path = os.getenv('HBASE_CONF_DIR','.')
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
-java_cmd = 'java -cp ".' + os.pathsep + phoenix_utils.current_dir + os.pathsep + phoenix_utils.phoenix_client_jar + \
+java_cmd = 'java -cp "' + hbase_conf_path + os.pathsep + phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.util.PhoenixRuntime " + ' '.join(sys.argv[1:])

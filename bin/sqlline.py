@@ -51,7 +51,18 @@ colorSetting = "true"
 if os.name == 'nt':
     colorSetting = "false"
 
-java_cmd = 'java -cp ".' + os.pathsep + phoenix_utils.phoenix_client_jar + \
+phoenix_client_jar = phoenix_utils.phoenix_client_jar
+# Backward support old env PHOENIX_LIB_DIR
+phoenix_home_path = os.getenv('PHOENIX_LIB_DIR','')
+if phoenix_home_path == "":
+    phoenix_home_path = os.getenv('PHOENIX_HOME','')
+
+if phoenix_client_jar == "":
+    phoenix_client_jar = phoenix_utils.find("phoenix-*-client.jar", phoenix_home_path)
+
+hbase_conf_path = os.getenv('HBASE_CONF_DIR','.')
+
+java_cmd = 'java -cp "' + hbase_conf_path + os.pathsep + phoenix_client_jar + \
     '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
