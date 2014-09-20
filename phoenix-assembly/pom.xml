@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.1.0</version>
+    <version>4.2.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-assembly</artifactId>
   <name>Phoenix Assembly</name>
@@ -109,6 +109,8 @@
                 <descriptor>src/build/client-without-hbase.xml</descriptor>
                <!-- build the phoenix client jar, but without HBase (or its depenencies). -->
                 <descriptor>src/build/client-minimal.xml</descriptor>
+               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
+                <descriptor>src/build/server-without-antlr.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>

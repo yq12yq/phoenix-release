@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import java.util.Collection;
+import java.util.List;
 
 /**
  * 
@@ -51,4 +52,6 @@ public interface PColumnFamily {
     PColumn getColumn(String name) throws ColumnNotFoundException;
     
     int getEstimatedSize();
+    
+    List<byte[]> getGuidePosts();
 }

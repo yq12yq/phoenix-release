@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static com.google.common.io.Closeables.closeQuietly;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -80,6 +79,8 @@ import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
@@ -91,6 +92,9 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRespons
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
+import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectRequest;
+import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectResponse;
+import org.apache.phoenix.coprocessor.generated.StatCollectorProtos.StatCollectService;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -124,7 +128,9 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.stat.StatisticsCollector;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -140,8 +146,8 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.io.Closeables;
 import com.google.protobuf.HBaseZeroCopyByteString;
+import com.google.protobuf.ServiceException;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -154,7 +160,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final StatsManager statsManager;
     
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -212,10 +217,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // TODO: should we track connection wide memory usage or just org-wide usage?
         // If connection-wide, create a MemoryManager here, otherwise just use the one from the delegate
         this.childServices = new ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices>(INITIAL_CHILD_SERVICES_CAPACITY);
-        int statsUpdateFrequencyMs = this.getProps().getInt(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS);
-        int maxStatsAgeMs = this.getProps().getInt(QueryServices.MAX_STATS_AGE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_STATS_AGE_MS);
-        this.statsManager = new StatsManagerImpl(this, statsUpdateFrequencyMs, maxStatsAgeMs);
-        
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
@@ -242,11 +243,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    @Override
-    public StatsManager getStatsManager() {
-        return this.statsManager;
-    }
-    
     @Override
     public HTableInterface getTable(byte[] tableName) throws SQLException {
         try {
@@ -308,42 +304,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = e;
             } finally {
                 try {
-                    // Clear any client-side caches.  
-                    statsManager.clearStats();
-                } catch (SQLException e) {
+                    childServices.clear();
+                    synchronized (latestMetaDataLock) {
+                        latestMetaData = null;
+                        latestMetaDataLock.notifyAll();
+                    }
+                    if (connection != null) connection.close();
+                } catch (IOException e) {
                     if (sqlE == null) {
-                        sqlE = e;
+                        sqlE = ServerUtil.parseServerException(e);
                     } else {
-                        sqlE.setNextException(e);
+                        sqlE.setNextException(ServerUtil.parseServerException(e));
                     }
                 } finally {
                     try {
-                        childServices.clear();
-                        synchronized (latestMetaDataLock) {
-                            latestMetaData = null;
-                            latestMetaDataLock.notifyAll();
-                        }
-                        if (connection != null) connection.close();
-                    } catch (IOException e) {
+                        super.close();
+                    } catch (SQLException e) {
                         if (sqlE == null) {
-                            sqlE = ServerUtil.parseServerException(e);
+                            sqlE = e;
                         } else {
-                            sqlE.setNextException(ServerUtil.parseServerException(e));
+                            sqlE.setNextException(e);
                         }
                     } finally {
-                        try {
-                            super.close();
-                        } catch (SQLException e) {
-                            if (sqlE == null) {
-                                sqlE = e;
-                            } else {
-                                sqlE.setNextException(e);
-                            }
-                        } finally {
-                            if (sqlE != null) {
-                                throw sqlE;
-                            }
-                        }
+                        if (sqlE != null) { throw sqlE; }
                     }
                 }
             }
@@ -617,7 +600,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
-            
+
+            if (!descriptor.hasCoprocessor(StatisticsCollector.class.getName())) {
+                descriptor.addCoprocessor(StatisticsCollector.class.getName(), null, 1, null);
+            }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
             // don't install on the metadata table until we fix the TODO there.
@@ -1193,7 +1179,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public MetaDataMutationResult dropTable(final List<Mutation> tableMetaData, final PTableType tableType) throws SQLException {
+    public MetaDataMutationResult dropTable(final List<Mutation> tableMetaData, final PTableType tableType, final boolean cascade) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         SchemaUtil.getVarChars(tableMetaData.get(0).getRow(), rowKeyMetadata);
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -1213,6 +1199,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             builder.addTableMetadataMutations(mp.toByteString());
                         }
                         builder.setTableType(tableType.getSerializedValue());
+                        builder.setCascade(cascade);
                         
                         instance.dropTable(controller, builder.build(), rpcCallback);
                         if(controller.getFailedOn() != null) {
@@ -1532,19 +1519,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
+                                
+                                // TODO : Get this from a configuration
+                                metaConnection.createStatement().executeUpdate(
+                                        QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
-                                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
-                                // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
-                                // any new columns we've added.
-                                String newColumns =
-                                        MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
-                                                + MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " 
-                                                + CYCLE_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName() + ", " 
-                                                + LIMIT_REACHED_FLAG + " " + PDataType.BOOLEAN.getSqlTypeName();
-                                metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME, 
-                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns); 
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
@@ -1716,7 +1696,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } finally {
-                closeQuietly(htable);
+                Closeables.closeQuietly(htable);
             }
         } finally {
             sequence.getLock().unlock();
@@ -1742,7 +1722,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             } finally {
-                closeQuietly(htable);
+                Closeables.closeQuietly(htable);
             }
         } finally {
             sequence.getLock().unlock();
@@ -1871,6 +1851,92 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (Sequence sequence : sequences) {
                 sequence.getLock().unlock();
             }
+        }
+    }
+
+    @Override
+    public long updateStatistics(final KeyRange keyRange, final byte[] tableName) throws SQLException {
+        HTableInterface ht = null;
+        try {
+            ht = this.getTable(tableName);
+            Batch.Call<StatCollectService, StatCollectResponse> callable = new Batch.Call<StatCollectService, StatCollectResponse>() {
+                ServerRpcController controller = new ServerRpcController();
+                BlockingRpcCallback<StatCollectResponse> rpcCallback = new BlockingRpcCallback<StatCollectResponse>();
+
+                @Override
+                public StatCollectResponse call(StatCollectService service) throws IOException {
+                    StatCollectRequest.Builder builder = StatCollectRequest.newBuilder();
+                    builder.setStartRow(HBaseZeroCopyByteString.wrap(keyRange.getLowerRange()));
+                    builder.setStopRow(HBaseZeroCopyByteString.wrap(keyRange.getUpperRange()));
+                    service.collectStat(controller, builder.build(), rpcCallback);
+                    if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
+                    return rpcCallback.get();
+                }
+            };
+            Map<byte[], StatCollectResponse> result = ht.coprocessorService(StatCollectService.class,
+                    keyRange.getLowerRange(), keyRange.getUpperRange(), callable);
+            StatCollectResponse next = result.values().iterator().next();
+            return next.getRowsScanned();
+        } catch (ServiceException e) {
+            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
+        } catch (TableNotFoundException e) {
+            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
+        } catch (Throwable e) {
+            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
+        } finally {
+            if (ht != null) {
+                try {
+                    ht.close();
+                } catch (IOException e) {
+                    throw new SQLException("Unable to close the table " + tableName + " after collecting stats", e);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
+            final long clientTS) throws SQLException {
+        // clear the meta data cache for the table here
+        try {
+            SQLException sqlE = null;
+            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+            try {
+                htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                        new Batch.Call<MetaDataService, ClearCacheForTableResponse>() {
+                            @Override
+                            public ClearCacheForTableResponse call(MetaDataService instance) throws IOException {
+                                ServerRpcController controller = new ServerRpcController();
+                                BlockingRpcCallback<ClearCacheForTableResponse> rpcCallback = new BlockingRpcCallback<ClearCacheForTableResponse>();
+                                ClearCacheForTableRequest.Builder builder = ClearCacheForTableRequest.newBuilder();
+                                builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantId));
+                                builder.setTableName(HBaseZeroCopyByteString.wrap(tableName));
+                                builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaName));
+                                builder.setClientTimestamp(clientTS);
+                                instance.clearCacheForTable(controller, builder.build(), rpcCallback);
+                                if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
+                                return rpcCallback.get();
+                            }
+                        });
+            } catch (IOException e) {
+                throw ServerUtil.parseServerException(e);
+            } catch (Throwable e) {
+                sqlE = new SQLException(e);
+            } finally {
+                try {
+                    htable.close();
+                } catch (IOException e) {
+                    if (sqlE == null) {
+                        sqlE = ServerUtil.parseServerException(e);
+                    } else {
+                        sqlE.setNextException(ServerUtil.parseServerException(e));
+                    }
+                } finally {
+                    if (sqlE != null) { throw sqlE; }
+                }
+            }
+        } catch (Exception e) {
+            throw new SQLException(ServerUtil.parseServerException(e));
         }
     }
 

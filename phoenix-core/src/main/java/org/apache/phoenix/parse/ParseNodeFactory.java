@@ -300,8 +300,8 @@ public class ParseNodeFactory {
         return new DropColumnStatement(table, tableType, columnNodes, ifExists);
     }
     
-    public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists) {
-        return new DropTableStatement(tableName, tableType, ifExists);
+    public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
+        return new DropTableStatement(tableName, tableType, ifExists, cascade);
     }
     
     public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {
@@ -339,13 +339,17 @@ public class ParseNodeFactory {
     public DivideParseNode divide(List<ParseNode> children) {
         return new DivideParseNode(children);
     }
+    
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
+      return new UpdateStatisticsStatement(table);
+    }
 
 
     public FunctionParseNode functionDistinct(String name, List<ParseNode> args) {
         if (CountAggregateFunction.NAME.equals(SchemaUtil.normalizeIdentifier(name))) {
             BuiltInFunctionInfo info = getInfo(
                     SchemaUtil.normalizeIdentifier(DistinctCountAggregateFunction.NAME), args);
-            return new DistinctCountParseNode(name, args, info);
+            return new DistinctCountParseNode(DistinctCountAggregateFunction.NAME, args, info);
         } else {
             throw new UnsupportedOperationException("DISTINCT not supported with " + name);
         }

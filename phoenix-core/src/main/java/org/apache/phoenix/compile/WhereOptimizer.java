@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -99,7 +100,7 @@ public class WhereOptimizer {
     public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement,
             Expression whereClause, Set<Expression> extractNodes) {
         PName tenantId = context.getConnection().getTenantId();
-        PTable table = context.getResolver().getTables().get(0).getTable();
+        PTable table = context.getCurrentTable().getTable();
         if (whereClause == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
             context.setScanRanges(ScanRanges.EVERYTHING);
             return whereClause;
@@ -283,12 +284,6 @@ public class WhereOptimizer {
         // If we have fully qualified point keys with multi-column spans (i.e. RVC),
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
-        if (hasMultiColumnSpan) {
-            forcedRangeScan |= pkPos < nPKColumns;
-            if (forcedRangeScan && removeFromExtractNodes != null) {
-                extractNodes.removeAll(removeFromExtractNodes);
-            }
-        }
         context.setScanRanges(
                 ScanRanges.create(schema, cnf, Arrays.copyOf(slotSpan, cnf.size()), forcedRangeScan, nBuckets),
                 minMaxRange);
@@ -297,6 +292,78 @@ public class WhereOptimizer {
         } else {
             return whereClause.accept(new RemoveExtractedNodesVisitor(extractNodes));
         }
+    }
+    
+    /**
+     * Get an optimal combination of key expressions for hash join key range optimization.
+     * @param context the temporary context to get scan ranges set by pushKeyExpressionsToScan()
+     * @param statement the statement being compiled
+     * @param expressions the join key expressions
+     * @return the optimal list of key expressions
+     */
+    public static List<Expression> getKeyExpressionCombination(StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
+        List<Integer> candidateIndexes = Lists.newArrayList();
+        final List<Integer> pkPositions = Lists.newArrayList();
+        for (int i = 0; i < expressions.size(); i++) {
+            KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, context.getCurrentTable().getTable());
+            KeyExpressionVisitor.KeySlots keySlots = expressions.get(i).accept(visitor);
+            int minPkPos = Integer.MAX_VALUE; 
+            if (keySlots != null) {
+                Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.iterator();
+                while (iterator.hasNext()) {
+                    KeyExpressionVisitor.KeySlot slot = iterator.next();
+                    if (slot.getPKPosition() < minPkPos) {
+                        minPkPos = slot.getPKPosition();
+                    }
+                }
+                if (minPkPos != Integer.MAX_VALUE) {
+                    candidateIndexes.add(i);
+                }
+            }
+            pkPositions.add(minPkPos);
+        }
+        
+        if (candidateIndexes.isEmpty())
+            return Collections.<Expression> emptyList();
+        
+        Collections.sort(candidateIndexes, new Comparator<Integer>() {
+            @Override
+            public int compare(Integer left, Integer right) {
+                return pkPositions.get(left) - pkPositions.get(right);
+            }
+        });
+        
+        List<Expression> candidates = Lists.newArrayList();
+        List<List<Expression>> sampleValues = Lists.newArrayList();
+        for (Integer index : candidateIndexes) {
+            candidates.add(expressions.get(index));
+        }        
+        for (int i = 0; i < 2; i++) {
+            List<Expression> group = Lists.newArrayList();
+            for (Expression expression : candidates) {
+                PDataType type = expression.getDataType();
+                group.add(LiteralExpression.newConstant(type.getSampleValue(), type));
+            }
+            sampleValues.add(group);
+        }
+        
+        int count = 0;
+        int maxPkSpan = 0;
+        while (count < candidates.size()) {
+            Expression lhs = count == 0 ? candidates.get(0) : new RowValueConstructorExpression(candidates.subList(0, count + 1), false);
+            Expression firstRhs = count == 0 ? sampleValues.get(0).get(0) : new RowValueConstructorExpression(sampleValues.get(0).subList(0, count + 1), true);
+            Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
+            Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
+            pushKeyExpressionsToScan(context, statement, testExpression);
+            int pkSpan = context.getScanRanges().getPkColumnSpan();
+            if (pkSpan <= maxPkSpan) {
+                break;
+            }
+            maxPkSpan = pkSpan;
+            count++;
+        }
+        
+        return candidates.subList(0, count);
     }
 
     private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {
@@ -612,7 +679,7 @@ public class WhereOptimizer {
                     for (KeySlot slot : childSlot) {
                         // We have a nested OR with nothing for this slot, so continue
                         if (slot == null) {
-                            continue; // FIXME: I don't think this is ever necessary
+                            return null; //If one childSlot does not have the PK columns, let Phoenix scan all the key ranges of the table. 
                         }
                         /*
                          * If we see a different PK column than before, we can't

@@ -91,6 +91,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -530,8 +531,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
     private static class ExecutableDropTableStatement extends DropTableStatement implements CompilableStatement {
 
-        ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists) {
-            super(tableName, tableType, ifExists);
+        ExecutableDropTableStatement(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
+            super(tableName, tableType, ifExists, cascade);
         }
 
         @SuppressWarnings("unchecked")
@@ -649,6 +650,49 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 }
             };
         }
+    }
+    
+    private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
+            CompilableStatement {
+
+        public ExecutableUpdateStatisticsStatement(NamedTableNode table) {
+            super(table);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new MutationPlan() {
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("ANALYZE"));
+                }
+
+                @Override
+                public PhoenixConnection getConnection() {
+                    return stmt.getConnection();
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getConnection());
+                    return client.updateStatistics(ExecutableUpdateStatisticsStatement.this);
+                }
+            };
+        }
+
     }
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
@@ -788,8 +832,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
         
         @Override
-        public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists) {
-            return new ExecutableDropTableStatement(tableName, tableType, ifExists);
+        public DropTableStatement dropTable(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade) {
+            return new ExecutableDropTableStatement(tableName, tableType, ifExists, cascade);
         }
         
         @Override
@@ -805,6 +849,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         @Override
         public ExplainStatement explain(BindableStatement statement) {
             return new ExecutableExplainStatement(statement);
+        }
+
+        @Override
+        public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
+            return new ExecutableUpdateStatisticsStatement(table);
         }
     }
     

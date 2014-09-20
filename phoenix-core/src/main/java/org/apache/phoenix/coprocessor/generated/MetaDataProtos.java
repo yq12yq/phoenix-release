@@ -2,27 +2,6 @@
 // source: MetaDataService.proto
 
 package org.apache.phoenix.coprocessor.generated;
-/*
- *
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- *
-*/
-
 
 public final class MetaDataProtos {
   private MetaDataProtos() {}
@@ -2650,6 +2629,16 @@ public final class MetaDataProtos {
      */
     com.google.protobuf.ByteString
         getTableTypeBytes();
+
+    // required bool cascade = 3;
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    boolean hasCascade();
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    boolean getCascade();
   }
   /**
    * Protobuf type {@code DropTableRequest}
@@ -2713,6 +2702,11 @@ public final class MetaDataProtos {
             case 18: {
               bitField0_ |= 0x00000001;
               tableType_ = input.readBytes();
+              break;
+            }
+            case 24: {
+              bitField0_ |= 0x00000002;
+              cascade_ = input.readBool();
               break;
             }
           }
@@ -2824,9 +2818,26 @@ public final class MetaDataProtos {
       }
     }
 
+    // required bool cascade = 3;
+    public static final int CASCADE_FIELD_NUMBER = 3;
+    private boolean cascade_;
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    public boolean hasCascade() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required bool cascade = 3;</code>
+     */
+    public boolean getCascade() {
+      return cascade_;
+    }
+
     private void initFields() {
       tableMetadataMutations_ = java.util.Collections.emptyList();
       tableType_ = "";
+      cascade_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -2834,6 +2845,10 @@ public final class MetaDataProtos {
       if (isInitialized != -1) return isInitialized == 1;
 
       if (!hasTableType()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasCascade()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -2849,6 +2864,9 @@ public final class MetaDataProtos {
       }
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         output.writeBytes(2, getTableTypeBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBool(3, cascade_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -2871,6 +2889,10 @@ public final class MetaDataProtos {
       if (((bitField0_ & 0x00000001) == 0x00000001)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(2, getTableTypeBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(3, cascade_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -2902,6 +2924,11 @@ public final class MetaDataProtos {
         result = result && getTableType()
             .equals(other.getTableType());
       }
+      result = result && (hasCascade() == other.hasCascade());
+      if (hasCascade()) {
+        result = result && (getCascade()
+            == other.getCascade());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -2922,6 +2949,10 @@ public final class MetaDataProtos {
       if (hasTableType()) {
         hash = (37 * hash) + TABLETYPE_FIELD_NUMBER;
         hash = (53 * hash) + getTableType().hashCode();
+      }
+      if (hasCascade()) {
+        hash = (37 * hash) + CASCADE_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getCascade());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -3036,6 +3067,8 @@ public final class MetaDataProtos {
         bitField0_ = (bitField0_ & ~0x00000001);
         tableType_ = "";
         bitField0_ = (bitField0_ & ~0x00000002);
+        cascade_ = false;
+        bitField0_ = (bitField0_ & ~0x00000004);
         return this;
       }
 
@@ -3073,6 +3106,10 @@ public final class MetaDataProtos {
           to_bitField0_ |= 0x00000001;
         }
         result.tableType_ = tableType_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.cascade_ = cascade_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -3104,12 +3141,19 @@ public final class MetaDataProtos {
           tableType_ = other.tableType_;
           onChanged();
         }
+        if (other.hasCascade()) {
+          setCascade(other.getCascade());
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
 
       public final boolean isInitialized() {
         if (!hasTableType()) {
+          
+          return false;
+        }
+        if (!hasCascade()) {
           
           return false;
         }
@@ -3277,6 +3321,39 @@ public final class MetaDataProtos {
   }
   bitField0_ |= 0x00000002;
         tableType_ = value;
+        onChanged();
+        return this;
+      }
+
+      // required bool cascade = 3;
+      private boolean cascade_ ;
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public boolean hasCascade() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public boolean getCascade() {
+        return cascade_;
+      }
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public Builder setCascade(boolean value) {
+        bitField0_ |= 0x00000004;
+        cascade_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool cascade = 3;</code>
+       */
+      public Builder clearCascade() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        cascade_ = false;
         onChanged();
         return this;
       }
@@ -6239,6 +6316,1089 @@ public final class MetaDataProtos {
     // @@protoc_insertion_point(class_scope:GetVersionResponse)
   }
 
+  public interface ClearCacheForTableRequestOrBuilder
+      extends com.google.protobuf.MessageOrBuilder {
+
+    // required bytes tenantId = 1;
+    /**
+     * <code>required bytes tenantId = 1;</code>
+     */
+    boolean hasTenantId();
+    /**
+     * <code>required bytes tenantId = 1;</code>
+     */
+    com.google.protobuf.ByteString getTenantId();
+
+    // required bytes schemaName = 2;
+    /**
+     * <code>required bytes schemaName = 2;</code>
+     */
+    boolean hasSchemaName();
+    /**
+     * <code>required bytes schemaName = 2;</code>
+     */
+    com.google.protobuf.ByteString getSchemaName();
+
+    // required bytes tableName = 3;
+    /**
+     * <code>required bytes tableName = 3;</code>
+     */
+    boolean hasTableName();
+    /**
+     * <code>required bytes tableName = 3;</code>
+     */
+    com.google.protobuf.ByteString getTableName();
+
+    // required int64 clientTimestamp = 4;
+    /**
+     * <code>required int64 clientTimestamp = 4;</code>
+     */
+    boolean hasClientTimestamp();
+    /**
+     * <code>required int64 clientTimestamp = 4;</code>
+     */
+    long getClientTimestamp();
+  }
+  /**
+   * Protobuf type {@code ClearCacheForTableRequest}
+   */
+  public static final class ClearCacheForTableRequest extends
+      com.google.protobuf.GeneratedMessage
+      implements ClearCacheForTableRequestOrBuilder {
+    // Use ClearCacheForTableRequest.newBuilder() to construct.
+    private ClearCacheForTableRequest(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+      this.unknownFields = builder.getUnknownFields();
+    }
+    private ClearCacheForTableRequest(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+
+    private static final ClearCacheForTableRequest defaultInstance;
+    public static ClearCacheForTableRequest getDefaultInstance() {
+      return defaultInstance;
+    }
+
+    public ClearCacheForTableRequest getDefaultInstanceForType() {
+      return defaultInstance;
+    }
+
+    private final com.google.protobuf.UnknownFieldSet unknownFields;
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+        getUnknownFields() {
+      return this.unknownFields;
+    }
+    private ClearCacheForTableRequest(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      initFields();
+      int mutable_bitField0_ = 0;
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            default: {
+              if (!parseUnknownField(input, unknownFields,
+                                     extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+            case 10: {
+              bitField0_ |= 0x00000001;
+              tenantId_ = input.readBytes();
+              break;
+            }
+            case 18: {
+              bitField0_ |= 0x00000002;
+              schemaName_ = input.readBytes();
+              break;
+            }
+            case 26: {
+              bitField0_ |= 0x00000004;
+              tableName_ = input.readBytes();
+              break;
+            }
+            case 32: {
+              bitField0_ |= 0x00000008;
+              clientTimestamp_ = input.readInt64();
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e.getMessage()).setUnfinishedMessage(this);
+      } finally {
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_descriptor;
+    }
+
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.Builder.class);
+    }
+
+    public static com.google.protobuf.Parser<ClearCacheForTableRequest> PARSER =
+        new com.google.protobuf.AbstractParser<ClearCacheForTableRequest>() {
+      public ClearCacheForTableRequest parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new ClearCacheForTableRequest(input, extensionRegistry);
+      }
+    };
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ClearCacheForTableRequest> getParserForType() {
+      return PARSER;
+    }
+
+    private int bitField0_;
+    // required bytes tenantId = 1;
+    public static final int TENANTID_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString tenantId_;
+    /**
+     * <code>required bytes tenantId = 1;</code>
+     */
+    public boolean hasTenantId() {
+      return ((bitField0_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>required bytes tenantId = 1;</code>
+     */
+    public com.google.protobuf.ByteString getTenantId() {
+      return tenantId_;
+    }
+
+    // required bytes schemaName = 2;
+    public static final int SCHEMANAME_FIELD_NUMBER = 2;
+    private com.google.protobuf.ByteString schemaName_;
+    /**
+     * <code>required bytes schemaName = 2;</code>
+     */
+    public boolean hasSchemaName() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required bytes schemaName = 2;</code>
+     */
+    public com.google.protobuf.ByteString getSchemaName() {
+      return schemaName_;
+    }
+
+    // required bytes tableName = 3;
+    public static final int TABLENAME_FIELD_NUMBER = 3;
+    private com.google.protobuf.ByteString tableName_;
+    /**
+     * <code>required bytes tableName = 3;</code>
+     */
+    public boolean hasTableName() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>required bytes tableName = 3;</code>
+     */
+    public com.google.protobuf.ByteString getTableName() {
+      return tableName_;
+    }
+
+    // required int64 clientTimestamp = 4;
+    public static final int CLIENTTIMESTAMP_FIELD_NUMBER = 4;
+    private long clientTimestamp_;
+    /**
+     * <code>required int64 clientTimestamp = 4;</code>
+     */
+    public boolean hasClientTimestamp() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>required int64 clientTimestamp = 4;</code>
+     */
+    public long getClientTimestamp() {
+      return clientTimestamp_;
+    }
+
+    private void initFields() {
+      tenantId_ = com.google.protobuf.ByteString.EMPTY;
+      schemaName_ = com.google.protobuf.ByteString.EMPTY;
+      tableName_ = com.google.protobuf.ByteString.EMPTY;
+      clientTimestamp_ = 0L;
+    }
+    private byte memoizedIsInitialized = -1;
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized != -1) return isInitialized == 1;
+
+      if (!hasTenantId()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasSchemaName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasTableName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasClientTimestamp()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getSerializedSize();
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        output.writeBytes(1, tenantId_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBytes(2, schemaName_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeBytes(3, tableName_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeInt64(4, clientTimestamp_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    private int memoizedSerializedSize = -1;
+    public int getSerializedSize() {
+      int size = memoizedSerializedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(1, tenantId_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(2, schemaName_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(3, tableName_);
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(4, clientTimestamp_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSerializedSize = size;
+      return size;
+    }
+
+    private static final long serialVersionUID = 0L;
+    @java.lang.Override
+    protected java.lang.Object writeReplace()
+        throws java.io.ObjectStreamException {
+      return super.writeReplace();
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)) {
+        return super.equals(obj);
+      }
+      org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) obj;
+
+      boolean result = true;
+      result = result && (hasTenantId() == other.hasTenantId());
+      if (hasTenantId()) {
+        result = result && getTenantId()
+            .equals(other.getTenantId());
+      }
+      result = result && (hasSchemaName() == other.hasSchemaName());
+      if (hasSchemaName()) {
+        result = result && getSchemaName()
+            .equals(other.getSchemaName());
+      }
+      result = result && (hasTableName() == other.hasTableName());
+      if (hasTableName()) {
+        result = result && getTableName()
+            .equals(other.getTableName());
+      }
+      result = result && (hasClientTimestamp() == other.hasClientTimestamp());
+      if (hasClientTimestamp()) {
+        result = result && (getClientTimestamp()
+            == other.getClientTimestamp());
+      }
+      result = result &&
+          getUnknownFields().equals(other.getUnknownFields());
+      return result;
+    }
+
+    private int memoizedHashCode = 0;
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptorForType().hashCode();
+      if (hasTenantId()) {
+        hash = (37 * hash) + TENANTID_FIELD_NUMBER;
+        hash = (53 * hash) + getTenantId().hashCode();
+      }
+      if (hasSchemaName()) {
+        hash = (37 * hash) + SCHEMANAME_FIELD_NUMBER;
+        hash = (53 * hash) + getSchemaName().hashCode();
+      }
+      if (hasTableName()) {
+        hash = (37 * hash) + TABLENAME_FIELD_NUMBER;
+        hash = (53 * hash) + getTableName().hashCode();
+      }
+      if (hasClientTimestamp()) {
+        hash = (37 * hash) + CLIENTTIMESTAMP_FIELD_NUMBER;
+        hash = (53 * hash) + hashLong(getClientTimestamp());
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() { return Builder.create(); }
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest prototype) {
+      return newBuilder().mergeFrom(prototype);
+    }
+    public Builder toBuilder() { return newBuilder(this); }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code ClearCacheForTableRequest}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder>
+       implements org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequestOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_descriptor;
+      }
+
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.Builder.class);
+      }
+
+      // Construct using org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+        }
+      }
+      private static Builder create() {
+        return new Builder();
+      }
+
+      public Builder clear() {
+        super.clear();
+        tenantId_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000001);
+        schemaName_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000002);
+        tableName_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000004);
+        clientTimestamp_ = 0L;
+        bitField0_ = (bitField0_ & ~0x00000008);
+        return this;
+      }
+
+      public Builder clone() {
+        return create().mergeFrom(buildPartial());
+      }
+
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableRequest_descriptor;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance();
+      }
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest build() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest buildPartial() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest(this);
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
+          to_bitField0_ |= 0x00000001;
+        }
+        result.tenantId_ = tenantId_;
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.schemaName_ = schemaName_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.tableName_ = tableName_;
+        if (((from_bitField0_ & 0x00000008) == 0x00000008)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.clientTimestamp_ = clientTimestamp_;
+        result.bitField0_ = to_bitField0_;
+        onBuilt();
+        return result;
+      }
+
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest other) {
+        if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance()) return this;
+        if (other.hasTenantId()) {
+          setTenantId(other.getTenantId());
+        }
+        if (other.hasSchemaName()) {
+          setSchemaName(other.getSchemaName());
+        }
+        if (other.hasTableName()) {
+          setTableName(other.getTableName());
+        }
+        if (other.hasClientTimestamp()) {
+          setClientTimestamp(other.getClientTimestamp());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        return this;
+      }
+
+      public final boolean isInitialized() {
+        if (!hasTenantId()) {
+          
+          return false;
+        }
+        if (!hasSchemaName()) {
+          
+          return false;
+        }
+        if (!hasTableName()) {
+          
+          return false;
+        }
+        if (!hasClientTimestamp()) {
+          
+          return false;
+        }
+        return true;
+      }
+
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest) e.getUnfinishedMessage();
+          throw e;
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+      private int bitField0_;
+
+      // required bytes tenantId = 1;
+      private com.google.protobuf.ByteString tenantId_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes tenantId = 1;</code>
+       */
+      public boolean hasTenantId() {
+        return ((bitField0_ & 0x00000001) == 0x00000001);
+      }
+      /**
+       * <code>required bytes tenantId = 1;</code>
+       */
+      public com.google.protobuf.ByteString getTenantId() {
+        return tenantId_;
+      }
+      /**
+       * <code>required bytes tenantId = 1;</code>
+       */
+      public Builder setTenantId(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000001;
+        tenantId_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes tenantId = 1;</code>
+       */
+      public Builder clearTenantId() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        tenantId_ = getDefaultInstance().getTenantId();
+        onChanged();
+        return this;
+      }
+
+      // required bytes schemaName = 2;
+      private com.google.protobuf.ByteString schemaName_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes schemaName = 2;</code>
+       */
+      public boolean hasSchemaName() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
+      }
+      /**
+       * <code>required bytes schemaName = 2;</code>
+       */
+      public com.google.protobuf.ByteString getSchemaName() {
+        return schemaName_;
+      }
+      /**
+       * <code>required bytes schemaName = 2;</code>
+       */
+      public Builder setSchemaName(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000002;
+        schemaName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes schemaName = 2;</code>
+       */
+      public Builder clearSchemaName() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        schemaName_ = getDefaultInstance().getSchemaName();
+        onChanged();
+        return this;
+      }
+
+      // required bytes tableName = 3;
+      private com.google.protobuf.ByteString tableName_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes tableName = 3;</code>
+       */
+      public boolean hasTableName() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>required bytes tableName = 3;</code>
+       */
+      public com.google.protobuf.ByteString getTableName() {
+        return tableName_;
+      }
+      /**
+       * <code>required bytes tableName = 3;</code>
+       */
+      public Builder setTableName(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000004;
+        tableName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes tableName = 3;</code>
+       */
+      public Builder clearTableName() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        tableName_ = getDefaultInstance().getTableName();
+        onChanged();
+        return this;
+      }
+
+      // required int64 clientTimestamp = 4;
+      private long clientTimestamp_ ;
+      /**
+       * <code>required int64 clientTimestamp = 4;</code>
+       */
+      public boolean hasClientTimestamp() {
+        return ((bitField0_ & 0x00000008) == 0x00000008);
+      }
+      /**
+       * <code>required int64 clientTimestamp = 4;</code>
+       */
+      public long getClientTimestamp() {
+        return clientTimestamp_;
+      }
+      /**
+       * <code>required int64 clientTimestamp = 4;</code>
+       */
+      public Builder setClientTimestamp(long value) {
+        bitField0_ |= 0x00000008;
+        clientTimestamp_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int64 clientTimestamp = 4;</code>
+       */
+      public Builder clearClientTimestamp() {
+        bitField0_ = (bitField0_ & ~0x00000008);
+        clientTimestamp_ = 0L;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:ClearCacheForTableRequest)
+    }
+
+    static {
+      defaultInstance = new ClearCacheForTableRequest(true);
+      defaultInstance.initFields();
+    }
+
+    // @@protoc_insertion_point(class_scope:ClearCacheForTableRequest)
+  }
+
+  public interface ClearCacheForTableResponseOrBuilder
+      extends com.google.protobuf.MessageOrBuilder {
+  }
+  /**
+   * Protobuf type {@code ClearCacheForTableResponse}
+   */
+  public static final class ClearCacheForTableResponse extends
+      com.google.protobuf.GeneratedMessage
+      implements ClearCacheForTableResponseOrBuilder {
+    // Use ClearCacheForTableResponse.newBuilder() to construct.
+    private ClearCacheForTableResponse(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+      this.unknownFields = builder.getUnknownFields();
+    }
+    private ClearCacheForTableResponse(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+
+    private static final ClearCacheForTableResponse defaultInstance;
+    public static ClearCacheForTableResponse getDefaultInstance() {
+      return defaultInstance;
+    }
+
+    public ClearCacheForTableResponse getDefaultInstanceForType() {
+      return defaultInstance;
+    }
+
+    private final com.google.protobuf.UnknownFieldSet unknownFields;
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+        getUnknownFields() {
+      return this.unknownFields;
+    }
+    private ClearCacheForTableResponse(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      initFields();
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            default: {
+              if (!parseUnknownField(input, unknownFields,
+                                     extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e.getMessage()).setUnfinishedMessage(this);
+      } finally {
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_descriptor;
+    }
+
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.Builder.class);
+    }
+
+    public static com.google.protobuf.Parser<ClearCacheForTableResponse> PARSER =
+        new com.google.protobuf.AbstractParser<ClearCacheForTableResponse>() {
+      public ClearCacheForTableResponse parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new ClearCacheForTableResponse(input, extensionRegistry);
+      }
+    };
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ClearCacheForTableResponse> getParserForType() {
+      return PARSER;
+    }
+
+    private void initFields() {
+    }
+    private byte memoizedIsInitialized = -1;
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized != -1) return isInitialized == 1;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getSerializedSize();
+      getUnknownFields().writeTo(output);
+    }
+
+    private int memoizedSerializedSize = -1;
+    public int getSerializedSize() {
+      int size = memoizedSerializedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      size += getUnknownFields().getSerializedSize();
+      memoizedSerializedSize = size;
+      return size;
+    }
+
+    private static final long serialVersionUID = 0L;
+    @java.lang.Override
+    protected java.lang.Object writeReplace()
+        throws java.io.ObjectStreamException {
+      return super.writeReplace();
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse)) {
+        return super.equals(obj);
+      }
+      org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse other = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) obj;
+
+      boolean result = true;
+      result = result &&
+          getUnknownFields().equals(other.getUnknownFields());
+      return result;
+    }
+
+    private int memoizedHashCode = 0;
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptorForType().hashCode();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() { return Builder.create(); }
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse prototype) {
+      return newBuilder().mergeFrom(prototype);
+    }
+    public Builder toBuilder() { return newBuilder(this); }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code ClearCacheForTableResponse}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder>
+       implements org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponseOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_descriptor;
+      }
+
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.class, org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.Builder.class);
+      }
+
+      // Construct using org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+        }
+      }
+      private static Builder create() {
+        return new Builder();
+      }
+
+      public Builder clear() {
+        super.clear();
+        return this;
+      }
+
+      public Builder clone() {
+        return create().mergeFrom(buildPartial());
+      }
+
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.internal_static_ClearCacheForTableResponse_descriptor;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance();
+      }
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse build() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse buildPartial() {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse result = new org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse(this);
+        onBuilt();
+        return result;
+      }
+
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse other) {
+        if (other == org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance()) return this;
+        this.mergeUnknownFields(other.getUnknownFields());
+        return this;
+      }
+
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) e.getUnfinishedMessage();
+          throw e;
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:ClearCacheForTableResponse)
+    }
+
+    static {
+      defaultInstance = new ClearCacheForTableResponse(true);
+      defaultInstance.initFields();
+    }
+
+    // @@protoc_insertion_point(class_scope:ClearCacheForTableResponse)
+  }
+
   /**
    * Protobuf service {@code MetaDataService}
    */
@@ -6311,6 +7471,14 @@ public final class MetaDataProtos {
           org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest request,
           com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse> done);
 
+      /**
+       * <code>rpc clearCacheForTable(.ClearCacheForTableRequest) returns (.ClearCacheForTableResponse);</code>
+       */
+      public abstract void clearCacheForTable(
+          com.google.protobuf.RpcController controller,
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
+          com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done);
+
     }
 
     public static com.google.protobuf.Service newReflectiveService(
@@ -6380,6 +7548,14 @@ public final class MetaDataProtos {
           impl.getVersion(controller, request, done);
         }
 
+        @java.lang.Override
+        public  void clearCacheForTable(
+            com.google.protobuf.RpcController controller,
+            org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
+            com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done) {
+          impl.clearCacheForTable(controller, request, done);
+        }
+
       };
     }
 
@@ -6418,6 +7594,8 @@ public final class MetaDataProtos {
               return impl.clearCache(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest)request);
             case 7:
               return impl.getVersion(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest)request);
+            case 8:
+              return impl.clearCacheForTable(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)request);
             default:
               throw new java.lang.AssertionError("Can't get here.");
           }
@@ -6448,6 +7626,8 @@ public final class MetaDataProtos {
               return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest.getDefaultInstance();
             case 7:
               return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest.getDefaultInstance();
+            case 8:
+              return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance();
             default:
               throw new java.lang.AssertionError("Can't get here.");
           }
@@ -6478,6 +7658,8 @@ public final class MetaDataProtos {
               return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse.getDefaultInstance();
             case 7:
               return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance();
+            case 8:
+              return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance();
             default:
               throw new java.lang.AssertionError("Can't get here.");
           }
@@ -6550,6 +7732,14 @@ public final class MetaDataProtos {
         org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest request,
         com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse> done);
 
+    /**
+     * <code>rpc clearCacheForTable(.ClearCacheForTableRequest) returns (.ClearCacheForTableResponse);</code>
+     */
+    public abstract void clearCacheForTable(
+        com.google.protobuf.RpcController controller,
+        org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
+        com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done);
+
     public static final
         com.google.protobuf.Descriptors.ServiceDescriptor
         getDescriptor() {
@@ -6612,6 +7802,11 @@ public final class MetaDataProtos {
             com.google.protobuf.RpcUtil.<org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse>specializeCallback(
               done));
           return;
+        case 8:
+          this.clearCacheForTable(controller, (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest)request,
+            com.google.protobuf.RpcUtil.<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse>specializeCallback(
+              done));
+          return;
         default:
           throw new java.lang.AssertionError("Can't get here.");
       }
@@ -6642,6 +7837,8 @@ public final class MetaDataProtos {
           return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest.getDefaultInstance();
         case 7:
           return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest.getDefaultInstance();
+        case 8:
+          return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest.getDefaultInstance();
         default:
           throw new java.lang.AssertionError("Can't get here.");
       }
@@ -6672,6 +7869,8 @@ public final class MetaDataProtos {
           return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse.getDefaultInstance();
         case 7:
           return org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance();
+        case 8:
+          return org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance();
         default:
           throw new java.lang.AssertionError("Can't get here.");
       }
@@ -6812,6 +8011,21 @@ public final class MetaDataProtos {
             org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.class,
             org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance()));
       }
+
+      public  void clearCacheForTable(
+          com.google.protobuf.RpcController controller,
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request,
+          com.google.protobuf.RpcCallback<org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse> done) {
+        channel.callMethod(
+          getDescriptor().getMethods().get(8),
+          controller,
+          request,
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance(),
+          com.google.protobuf.RpcUtil.generalizeCallback(
+            done,
+            org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.class,
+            org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance()));
+      }
     }
 
     public static BlockingInterface newBlockingStub(
@@ -6858,6 +8072,11 @@ public final class MetaDataProtos {
       public org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse getVersion(
           com.google.protobuf.RpcController controller,
           org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest request)
+          throws com.google.protobuf.ServiceException;
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse clearCacheForTable(
+          com.google.protobuf.RpcController controller,
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request)
           throws com.google.protobuf.ServiceException;
     }
 
@@ -6963,6 +8182,18 @@ public final class MetaDataProtos {
           org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse.getDefaultInstance());
       }
 
+
+      public org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse clearCacheForTable(
+          com.google.protobuf.RpcController controller,
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest request)
+          throws com.google.protobuf.ServiceException {
+        return (org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse) channel.callBlockingMethod(
+          getDescriptor().getMethods().get(8),
+          controller,
+          request,
+          org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse.getDefaultInstance());
+      }
+
     }
 
     // @@protoc_insertion_point(class_scope:MetaDataService)
@@ -7023,6 +8254,16 @@ public final class MetaDataProtos {
   private static
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_GetVersionResponse_fieldAccessorTable;
+  private static com.google.protobuf.Descriptors.Descriptor
+    internal_static_ClearCacheForTableRequest_descriptor;
+  private static
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_ClearCacheForTableRequest_fieldAccessorTable;
+  private static com.google.protobuf.Descriptors.Descriptor
+    internal_static_ClearCacheForTableResponse_descriptor;
+  private static
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_ClearCacheForTableResponse_fieldAccessorTable;
 
   public static com.google.protobuf.Descriptors.FileDescriptor
       getDescriptor() {
@@ -7041,35 +8282,41 @@ public final class MetaDataProtos {
       "\022\022\n\nschemaName\030\002 \002(\014\022\021\n\ttableName\030\003 \002(\014\022" +
       "\026\n\016tableTimestamp\030\004 \002(\003\022\027\n\017clientTimesta" +
       "mp\030\005 \002(\003\"4\n\022CreateTableRequest\022\036\n\026tableM" +
-      "etadataMutations\030\001 \003(\014\"E\n\020DropTableReque",
+      "etadataMutations\030\001 \003(\014\"V\n\020DropTableReque",
       "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\021\n\tta" +
-      "bleType\030\002 \002(\t\"2\n\020AddColumnRequest\022\036\n\026tab" +
-      "leMetadataMutations\030\001 \003(\014\"3\n\021DropColumnR" +
-      "equest\022\036\n\026tableMetadataMutations\030\001 \003(\014\"9" +
-      "\n\027UpdateIndexStateRequest\022\036\n\026tableMetada" +
-      "taMutations\030\001 \003(\014\"\023\n\021ClearCacheRequest\"\024" +
-      "\n\022ClearCacheResponse\"\023\n\021GetVersionReques" +
-      "t\"%\n\022GetVersionResponse\022\017\n\007version\030\001 \002(\003" +
-      "*\212\002\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXIST" +
-      "S\020\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_F",
-      "OUND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CON" +
-      "CURRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN" +
-      "_REGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNAL" +
-      "LOWED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020" +
-      "\010\022\032\n\026PARENT_TABLE_NOT_FOUND\020\t2\303\003\n\017MetaDa" +
-      "taService\022/\n\010getTable\022\020.GetTableRequest\032" +
-      "\021.MetaDataResponse\0225\n\013createTable\022\023.Crea" +
-      "teTableRequest\032\021.MetaDataResponse\0221\n\tdro" +
-      "pTable\022\021.DropTableRequest\032\021.MetaDataResp" +
-      "onse\0221\n\taddColumn\022\021.AddColumnRequest\032\021.M",
-      "etaDataResponse\0223\n\ndropColumn\022\022.DropColu" +
-      "mnRequest\032\021.MetaDataResponse\022?\n\020updateIn" +
-      "dexState\022\030.UpdateIndexStateRequest\032\021.Met" +
-      "aDataResponse\0225\n\nclearCache\022\022.ClearCache" +
-      "Request\032\023.ClearCacheResponse\0225\n\ngetVersi" +
-      "on\022\022.GetVersionRequest\032\023.GetVersionRespo" +
-      "nseBB\n(org.apache.phoenix.coprocessor.ge" +
-      "neratedB\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "bleType\030\002 \002(\t\022\017\n\007cascade\030\003 \002(\010\"2\n\020AddCol" +
+      "umnRequest\022\036\n\026tableMetadataMutations\030\001 \003" +
+      "(\014\"3\n\021DropColumnRequest\022\036\n\026tableMetadata" +
+      "Mutations\030\001 \003(\014\"9\n\027UpdateIndexStateReque" +
+      "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\"\023\n\021Cl" +
+      "earCacheRequest\"\024\n\022ClearCacheResponse\"\023\n" +
+      "\021GetVersionRequest\"%\n\022GetVersionResponse" +
+      "\022\017\n\007version\030\001 \002(\003\"m\n\031ClearCacheForTableR" +
+      "equest\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030\002",
+      " \002(\014\022\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTimesta" +
+      "mp\030\004 \002(\003\"\034\n\032ClearCacheForTableResponse*\212" +
+      "\002\n\014MutationCode\022\030\n\024TABLE_ALREADY_EXISTS\020" +
+      "\000\022\023\n\017TABLE_NOT_FOUND\020\001\022\024\n\020COLUMN_NOT_FOU" +
+      "ND\020\002\022\031\n\025COLUMN_ALREADY_EXISTS\020\003\022\035\n\031CONCU" +
+      "RRENT_TABLE_MUTATION\020\004\022\027\n\023TABLE_NOT_IN_R" +
+      "EGION\020\005\022\025\n\021NEWER_TABLE_FOUND\020\006\022\034\n\030UNALLO" +
+      "WED_TABLE_MUTATION\020\007\022\021\n\rNO_PK_COLUMNS\020\010\022" +
+      "\032\n\026PARENT_TABLE_NOT_FOUND\020\t2\222\004\n\017MetaData" +
+      "Service\022/\n\010getTable\022\020.GetTableRequest\032\021.",
+      "MetaDataResponse\0225\n\013createTable\022\023.Create" +
+      "TableRequest\032\021.MetaDataResponse\0221\n\tdropT" +
+      "able\022\021.DropTableRequest\032\021.MetaDataRespon" +
+      "se\0221\n\taddColumn\022\021.AddColumnRequest\032\021.Met" +
+      "aDataResponse\0223\n\ndropColumn\022\022.DropColumn" +
+      "Request\032\021.MetaDataResponse\022?\n\020updateInde" +
+      "xState\022\030.UpdateIndexStateRequest\032\021.MetaD" +
+      "ataResponse\0225\n\nclearCache\022\022.ClearCacheRe" +
+      "quest\032\023.ClearCacheResponse\0225\n\ngetVersion" +
+      "\022\022.GetVersionRequest\032\023.GetVersionRespons",
+      "e\022M\n\022clearCacheForTable\022\032.ClearCacheForT" +
+      "ableRequest\032\033.ClearCacheForTableResponse" +
+      "BB\n(org.apache.phoenix.coprocessor.gener" +
+      "atedB\016MetaDataProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7099,7 +8346,7 @@ public final class MetaDataProtos {
           internal_static_DropTableRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_DropTableRequest_descriptor,
-              new java.lang.String[] { "TableMetadataMutations", "TableType", });
+              new java.lang.String[] { "TableMetadataMutations", "TableType", "Cascade", });
           internal_static_AddColumnRequest_descriptor =
             getDescriptor().getMessageTypes().get(4);
           internal_static_AddColumnRequest_fieldAccessorTable = new
@@ -7142,6 +8389,18 @@ public final class MetaDataProtos {
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_GetVersionResponse_descriptor,
               new java.lang.String[] { "Version", });
+          internal_static_ClearCacheForTableRequest_descriptor =
+            getDescriptor().getMessageTypes().get(11);
+          internal_static_ClearCacheForTableRequest_fieldAccessorTable = new
+            com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+              internal_static_ClearCacheForTableRequest_descriptor,
+              new java.lang.String[] { "TenantId", "SchemaName", "TableName", "ClientTimestamp", });
+          internal_static_ClearCacheForTableResponse_descriptor =
+            getDescriptor().getMessageTypes().get(12);
+          internal_static_ClearCacheForTableResponse_fieldAccessorTable = new
+            com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+              internal_static_ClearCacheForTableResponse_descriptor,
+              new java.lang.String[] { });
           return null;
         }
       };
