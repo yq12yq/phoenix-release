@@ -418,7 +418,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 return indexRegion;
             }
         }
-        return null;
+        throw new IOException("Local index region isn't co-located with its data region=" + 
+        	userRegion.getRegionInfo().getEncodedName()); 
     }
 
     private static PTable deserializeTable(byte[] b) {
