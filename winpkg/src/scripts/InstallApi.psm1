@@ -106,7 +106,7 @@ function Install(
         ### Copying PHOENIX jars to HBASE lib
         ###
         Write-Log "Copying PHOENIX jars to HBASE lib"
-        $xcopy_cmd = "xcopy /EIYF `"$ENV:PHOENIX_HOME\lib\phoenix-core-*.jar`" `"$ENV:HBASE_HOME\lib`""
+        $xcopy_cmd = "xcopy /EIYF `"$ENV:PHOENIX_HOME\lib\phoenix-*-server.jar`" `"$ENV:HBASE_HOME\lib`""
         Invoke-Cmd $xcopy_cmd
 		
 		Write-log "$env:HADOOP_NODE_INSTALL_ROOT"
