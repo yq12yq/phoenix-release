@@ -22,11 +22,8 @@ import static org.junit.Assert.assertTrue;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
-import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
@@ -50,15 +47,6 @@ import org.junit.experimental.categories.Category;
 @NotThreadSafe
 @Category(HBaseManagedTimeTest.class)
 public abstract class BaseHBaseManagedTimeIT extends BaseTest {
-    private static String url;
-    protected static PhoenixTestDriver driver;
-    private static final Configuration config = HBaseConfiguration.create(); 
-    private static boolean clusterInitialized = false;
-    
-    protected final static String getUrl() {
-        return checkClusterInitialized();
-    }
-    
     protected static Configuration getTestClusterConfig() {
         // don't want callers to modify config.
         return new Configuration(config);
@@ -75,25 +63,7 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        // clear table from HBase
-        setUpTestDriver(getUrl(), ReadOnlyProps.EMPTY_PROPS);
-    }
-    
-    protected static void setUpTestDriver(String url, ReadOnlyProps props) throws Exception {
-        if (PhoenixEmbeddedDriver.isTestUrl(url)) {
-            checkClusterInitialized();
-            if (driver == null) {
-                driver = initAndRegisterDriver(url, props);
-            }
-        }
-    }
-
-    private static String checkClusterInitialized() {
-        if (!clusterInitialized) {
-            url = setUpTestCluster(config);
-            clusterInitialized = true;
-        }
-        return url;
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
     }
     
     @AfterClass

@@ -130,7 +130,6 @@ import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -139,6 +138,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
@@ -479,20 +479,6 @@ public class MetaDataClient {
         PTable table = resolver.getTables().get(0).getTable();
         PName physicalName = table.getPhysicalName();
         byte[] tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-        KeyRange analyzeRange = KeyRange.EVERYTHING_RANGE;
-        if (connection.getTenantId() != null && table.isMultiTenant()) {
-            tenantIdBytes = connection.getTenantId().getBytes();
-            //  TODO remove this inner if once PHOENIX-1259 is fixed.
-            if (table.getBucketNum() == null && table.getIndexType() != IndexType.LOCAL) {
-                List<List<KeyRange>> tenantIdKeyRanges = Collections.singletonList(Collections.singletonList(KeyRange
-                        .getKeyRange(tenantIdBytes)));
-                byte[] lowerRange = ScanUtil.getMinKey(table.getRowKeySchema(), tenantIdKeyRanges,
-                        ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-                byte[] upperRange = ScanUtil.getMaxKey(table.getRowKeySchema(), tenantIdKeyRanges,
-                        ScanUtil.SINGLE_COLUMN_SLOT_SPAN);
-                analyzeRange = KeyRange.getKeyRange(lowerRange, upperRange);
-            }
-        }
         Long scn = connection.getSCN();
         // Always invalidate the cache
         long clientTS = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : scn;
@@ -509,12 +495,26 @@ public class MetaDataClient {
             lastUpdatedTime = rs.getDate(1).getTime() - rs.getDate(2).getTime();
         }
         if (minTimeForStatsUpdate  > lastUpdatedTime) {
+            // Here create the select query.
+            String countQuery = "SELECT /*+ NO_CACHE */ count(*) FROM " + table.getName().getString();
+            PhoenixStatement statement = (PhoenixStatement) connection.createStatement();
+            QueryPlan plan = statement.compileQuery(countQuery);
+            Scan scan = plan.getContext().getScan();
+            // Add all CF in the table
+            scan.getFamilyMap().clear();
+            for (PColumnFamily family : table.getColumnFamilies()) {
+                scan.addFamily(family.getName().getBytes());
+            }
+            scan.setAttribute(BaseScannerRegionObserver.ANALYZE_TABLE, PDataType.TRUE_BYTES);
+            Cell kv = plan.iterator().next().getValue(0);
+            ImmutableBytesWritable tempPtr = plan.getContext().getTempPtr();
+            tempPtr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+            // A single Cell will be returned with the count(*) - we decode that here
+            long rowCount = PDataType.LONG.getCodec().decodeLong(tempPtr, SortOrder.getDefault());
             // We need to update the stats table
-            connection.getQueryServices().updateStatistics(analyzeRange, physicalName.getBytes());
             connection.getQueryServices().clearCacheForTable(tenantIdBytes, table.getSchemaName().getBytes(),
                     table.getTableName().getBytes(), clientTS);
-            updateCache(table.getSchemaName().getString(), table.getTableName().getString(), true);
-            return new MutationState(1, connection);
+            return new  MutationState(0, connection, rowCount);
         } else {
             return new MutationState(0, connection);
         }
@@ -1061,9 +1061,7 @@ public class MetaDataClient {
 
             boolean disableWAL = false;
             Boolean disableWALProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.DISABLE_WAL);
-            if (disableWALProp == null) {
-                disableWAL = isParentImmutableRows; // By default, disable WAL for immutable indexes
-            } else {
+            if (disableWALProp != null) {
                 disableWAL = disableWALProp;
             }
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
@@ -1149,15 +1147,17 @@ public class MetaDataClient {
                             .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
                     }
                     isPK = true;
+                } else {
+                    // do not allow setting NOT-NULL constraint on non-primary columns.
+                    if (  Boolean.FALSE.equals(colDef.isNull()) &&
+                        ( isPK || ( pkConstraint != null && !pkConstraint.contains(colDef.getColumnDefName())))) {
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT)
+                                .setSchemaName(schemaName)
+                                .setTableName(tableName)
+                                .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                    }
                 }
                 
-               // do not allow setting NOT-NULL constraint on non-primary columns.
-                if (!isPK && pkConstraint != null && !pkConstraint.contains(colDef.getColumnDefName())) {
-                    if(Boolean.FALSE.equals(colDef.isNull())) {
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT)
-                            .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
-                    }  
-                }
                 PColumn column = newColumn(position++, colDef, pkConstraint, defaultFamilyName, false);
                 if (SchemaUtil.isPKColumn(column)) {
                     // TODO: remove this constraint?
@@ -1662,7 +1662,7 @@ public class MetaDataClient {
         case CONCURRENT_TABLE_MUTATION:
             connection.addTable(result.getTable());
             if (logger.isDebugEnabled()) {
-                logger.debug("CONCURRENT_TABLE_MUTATION for table " + SchemaUtil.getTableName(schemaName, tableName));
+                logger.debug(LogUtil.addCustomAnnotations("CONCURRENT_TABLE_MUTATION for table " + SchemaUtil.getTableName(schemaName, tableName), connection));
             }
             throw new ConcurrentTableMutationException(schemaName, tableName);
         case NEWER_TABLE_FOUND:
@@ -1752,7 +1752,7 @@ public class MetaDataClient {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 PTable table = resolver.getTables().get(0).getTable();
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Resolved table to " + table.getName().getString() + " with seqNum " + table.getSequenceNumber() + " at timestamp " + table.getTimeStamp() + " with " + table.getColumns().size() + " columns: " + table.getColumns());
+                    logger.debug(LogUtil.addCustomAnnotations("Resolved table to " + table.getName().getString() + " with seqNum " + table.getSequenceNumber() + " at timestamp " + table.getTimeStamp() + " with " + table.getColumns().size() + " columns: " + table.getColumns(), connection));
                 }
                 
                 int position = table.getColumns().size();
@@ -1972,7 +1972,7 @@ public class MetaDataClient {
                         throw e;
                     }
                     if (logger.isDebugEnabled()) {
-                        logger.debug("Caught ConcurrentTableMutationException for table " + SchemaUtil.getTableName(schemaName, tableName) + ". Will try again...");
+                        logger.debug(LogUtil.addCustomAnnotations("Caught ConcurrentTableMutationException for table " + SchemaUtil.getTableName(schemaName, tableName) + ". Will try again...", connection));
                     }
                     retried = true;
                 }

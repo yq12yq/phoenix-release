@@ -154,7 +154,7 @@ import com.google.common.collect.Sets;
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
     private static Logger logger = Logger.getLogger("BaseTest.class");
-    private static HBaseTestingUtility utility = null; 
+    private static IntegrationTestingUtility utility = null; 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -407,33 +407,33 @@ public abstract class BaseTest {
         builder.put("SumDoubleTest","create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
-                "   (\"order_id\" char(15) not null primary key, " +
-                "    \"customer_id\" char(10) not null, " +
-                "    \"item_id\" char(10) not null, " +
-                "    price integer not null, " +
-                "    quantity integer not null, " +
-                "    date timestamp not null)");
+                "   (\"order_id\" varchar(15) not null primary key, " +
+                "    \"customer_id\" varchar(10), " +
+                "    \"item_id\" varchar(10), " +
+                "    price integer, " +
+                "    quantity integer, " +
+                "    date timestamp)");
         builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
-                "   (\"customer_id\" char(10) not null primary key, " +
-                "    name varchar not null, " +
-                "    phone char(12), " +
+                "   (\"customer_id\" varchar(10) not null primary key, " +
+                "    name varchar, " +
+                "    phone varchar(12), " +
                 "    address varchar, " +
-                "    loc_id char(5), " +
+                "    loc_id varchar(5), " +
                 "    date date)");
         builder.put(JOIN_ITEM_TABLE_FULL_NAME, "create table " + JOIN_ITEM_TABLE_FULL_NAME +
-                "   (\"item_id\" char(10) not null primary key, " +
-                "    name varchar not null, " +
+                "   (\"item_id\" varchar(10) not null primary key, " +
+                "    name varchar, " +
                 "    price integer, " +
                 "    discount1 integer, " +
                 "    discount2 integer, " +
-                "    \"supplier_id\" char(10), " +
+                "    \"supplier_id\" varchar(10), " +
                 "    description varchar)");
         builder.put(JOIN_SUPPLIER_TABLE_FULL_NAME, "create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
-                "   (\"supplier_id\" char(10) not null primary key, " +
-                "    name varchar not null, " +
-                "    phone char(12), " +
+                "   (\"supplier_id\" varchar(10) not null primary key, " +
+                "    name varchar, " +
+                "    phone varchar(12), " +
                 "    address varchar, " +
-                "    loc_id char(5))");
+                "    loc_id varchar(5))");
         tableDDLMap = builder.build();
     }
     
@@ -444,19 +444,47 @@ public abstract class BaseTest {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
     }
     
+    protected static String url;
+    protected static PhoenixTestDriver driver;
+    private static boolean clusterInitialized = false;
+    protected static final Configuration config = HBaseConfiguration.create(); 
+    
+    protected static String getUrl() {
+        if (!clusterInitialized) {
+            throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
+        }
+        return url;
+    }
+    
+    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) {
+        if (!clusterInitialized) {
+            url = setUpTestCluster(config, overrideProps);
+            clusterInitialized = true;
+        }
+        return url;
+    }
+    
     /**
      * Set up the test hbase cluster. 
+     * @param props TODO
      * @return url to be used by clients to connect to the cluster.
      */
-    protected static String setUpTestCluster(@Nonnull Configuration conf) {
+    protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
-            return initMiniCluster(conf);
+            return initMiniCluster(conf, overrideProps);
        } else {
-            return initClusterDistributedMode(conf);
+            return initClusterDistributedMode(conf, overrideProps);
         }
     }
     
+    protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
+        String url = checkClusterInitialized(props);
+        if (driver == null) {
+            driver = initAndRegisterDriver(url, props);
+        }
+    }
+
     protected static boolean isDistributedClusterModeEnabled(Configuration conf) {
         boolean isDistributedCluster = false;
         //check if the distributed mode was specified as a system property.
@@ -470,11 +498,12 @@ public abstract class BaseTest {
     
     /**
      * Initialize the mini cluster using phoenix-test specific configuration.
+     * @param overrideProps TODO
      * @return url to be used by clients to connect to the mini cluster.
      */
-    private static String initMiniCluster(Configuration conf) {
-        setUpConfigForMiniCluster(conf);
-        utility = new HBaseTestingUtility(conf);
+    private static String initMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
+        setUpConfigForMiniCluster(conf, overrideProps);
+        utility = new IntegrationTestingUtility(conf);
         try {
             utility.startMiniCluster();
             // add shutdown hook to kill the mini cluster
@@ -494,17 +523,18 @@ public abstract class BaseTest {
         }
     }
 
-    protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
+    protected static String getLocalClusterUrl(IntegrationTestingUtility util) throws Exception {
         String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration());
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     
     /**
      * Initialize the cluster in distributed mode
+     * @param overrideProps TODO
      * @return url to be used by clients to connect to the mini cluster.
      */
-    private static String initClusterDistributedMode(Configuration conf) {
-        setTestConfigForDistribuedCluster(conf);
+    private static String initClusterDistributedMode(Configuration conf, ReadOnlyProps overrideProps) {
+        setTestConfigForDistribuedCluster(conf, overrideProps);
         try {
             IntegrationTestingUtility util =  new IntegrationTestingUtility(conf);
             utility = util;
@@ -515,11 +545,11 @@ public abstract class BaseTest {
         return JDBC_PROTOCOL + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
 
-    private static void setTestConfigForDistribuedCluster(Configuration conf) {
-        setDefaultTestConfig(conf);
+    private static void setTestConfigForDistribuedCluster(Configuration conf, ReadOnlyProps overrideProps) {
+        setDefaultTestConfig(conf, overrideProps);
     }
     
-    private static void setDefaultTestConfig(Configuration conf) {
+    private static void setDefaultTestConfig(Configuration conf, ReadOnlyProps overrideProps) {
         ConfigUtil.setReplicationConfigIfAbsent(conf);
         QueryServices services = new PhoenixTestDriver().getQueryServices();
         for (Entry<String,String> entry : services.getProps()) {
@@ -527,11 +557,20 @@ public abstract class BaseTest {
         }
         //no point doing sanity checks when running tests.
         conf.setBoolean("hbase.table.sanity.checks", false);
+        
+        // override any defaults based on overrideProps
+        for (Entry<String,String> entry : overrideProps) {
+            conf.set(entry.getKey(), entry.getValue());
+        }
     }
     
     public static Configuration setUpConfigForMiniCluster(Configuration conf) {
+        return setUpConfigForMiniCluster(conf, ReadOnlyProps.EMPTY_PROPS);
+    }
+    
+    public static Configuration setUpConfigForMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
         assertNotNull(conf);
-        setDefaultTestConfig(conf);
+        setDefaultTestConfig(conf, overrideProps);
         /*
          * The default configuration of mini cluster ends up spawning a lot of threads
          * that are not really needed by phoenix for test purposes. Limiting these threads
@@ -553,7 +592,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
-        conf.setInt(QueryServices.HISTOGRAM_BYTE_DEPTH_CONF_KEY, 20);
+        conf.setInt(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, 20);
         return conf;
     }
     
@@ -1289,7 +1328,7 @@ public abstract class BaseTest {
             count++;
         }
         assertTrue("Could not find " + errorResult + " in expected results: " + expectedResults + " with actual results: " + actualResults, errorResult == null);
-        assertEquals(count, expectedCount);
+        assertEquals(expectedCount, count);
     }
     
     public HBaseTestingUtility getUtility() {

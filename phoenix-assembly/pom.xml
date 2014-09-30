@@ -74,7 +74,7 @@
               <tarLongFileMode>gnu</tarLongFileMode>
               <appendAssemblyId>false</appendAssemblyId>
               <descriptors>
-                <descriptor>src/build/${assembly.descriptor}</descriptor>
+                <descriptor>src/build/package-to-tar-all.xml</descriptor>
               </descriptors>
             </configuration>
           </execution>
@@ -109,6 +109,8 @@
                 <descriptor>src/build/client-without-hbase.xml</descriptor>
                <!-- build the phoenix client jar, but without HBase (or its depenencies). -->
                 <descriptor>src/build/client-minimal.xml</descriptor>
+               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
+                <descriptor>src/build/server.xml</descriptor>
                <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat and phoenix-hadoop-compat. -->
                 <descriptor>src/build/server-without-antlr.xml</descriptor>
               </descriptors>
@@ -142,7 +144,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>${compat.module}</artifactId>
+      <artifactId>phoenix-hadoop2-compat</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>

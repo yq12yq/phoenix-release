@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
@@ -420,7 +416,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     /**
      * Ensures that metaData mutations are handled in the correct order
-     * @param tenantId TODO
      */
     private PMetaData metaDataMutated(PName tenantId, String tableName, long tableSeqNum, Mutator mutator) throws SQLException {
         synchronized (latestMetaDataLock) {
@@ -599,10 +594,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
-            }
-
-            if (!descriptor.hasCoprocessor(StatisticsCollector.class.getName())) {
-                descriptor.addCoprocessor(StatisticsCollector.class.getName(), null, 1, null);
             }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
@@ -1524,7 +1515,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
+                                // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
+                                // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
+
                             } catch (TableAlreadyExistsException ignore) {
+                                // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
+                                // any new columns we've added.
+                                String newColumns = PhoenixDatabaseMetaData.MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", "
+                                        + PhoenixDatabaseMetaData.MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.CYCLE_FLAG + " "
+                                        + PDataType.BOOLEAN.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " "
+                                        + PDataType.BOOLEAN.getSqlTypeName();
+                                metaConnection = addColumnsIfNotExists(metaConnection,
+                                        PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns);
+                            }
+                            try {
+                                metaConnection.createStatement().executeUpdate(
+                                        QueryConstants.CREATE_STATS_TABLE_METADATA);
+                            } catch (NewerTableAlreadyExistsException ignore) {
+
+                            } catch(TableAlreadyExistsException ignore) {
+                                
                             }
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
@@ -1853,47 +1864,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-
-    @Override
-    public long updateStatistics(final KeyRange keyRange, final byte[] tableName) throws SQLException {
-        HTableInterface ht = null;
-        try {
-            ht = this.getTable(tableName);
-            Batch.Call<StatCollectService, StatCollectResponse> callable = new Batch.Call<StatCollectService, StatCollectResponse>() {
-                ServerRpcController controller = new ServerRpcController();
-                BlockingRpcCallback<StatCollectResponse> rpcCallback = new BlockingRpcCallback<StatCollectResponse>();
-
-                @Override
-                public StatCollectResponse call(StatCollectService service) throws IOException {
-                    StatCollectRequest.Builder builder = StatCollectRequest.newBuilder();
-                    builder.setStartRow(HBaseZeroCopyByteString.wrap(keyRange.getLowerRange()));
-                    builder.setStopRow(HBaseZeroCopyByteString.wrap(keyRange.getUpperRange()));
-                    service.collectStat(controller, builder.build(), rpcCallback);
-                    if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
-                    return rpcCallback.get();
-                }
-            };
-            Map<byte[], StatCollectResponse> result = ht.coprocessorService(StatCollectService.class,
-                    keyRange.getLowerRange(), keyRange.getUpperRange(), callable);
-            StatCollectResponse next = result.values().iterator().next();
-            return next.getRowsScanned();
-        } catch (ServiceException e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } catch (TableNotFoundException e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } catch (Throwable e) {
-            throw new SQLException("Unable to update the statistics for the table " + tableName, e);
-        } finally {
-            if (ht != null) {
-                try {
-                    ht.close();
-                } catch (IOException e) {
-                    throw new SQLException("Unable to close the table " + tableName + " after collecting stats", e);
-                }
-            }
-        }
-    }
-
+   
     @Override
     public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {

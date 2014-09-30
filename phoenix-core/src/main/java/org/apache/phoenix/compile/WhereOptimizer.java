@@ -50,6 +50,7 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.TraverseNoExpressionVisitor;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -476,13 +477,21 @@ public class WhereOptimizer {
                 KeySlots slots = childSlots.get(i);
                 KeySlot keySlot = slots.iterator().next();
                 List<Expression> childExtractNodes = keySlot.getKeyPart().getExtractNodes();
-                // If columns are not in PK order, then stop iteration
-                if (childExtractNodes.size() != 1 || childExtractNodes.get(0) != rvc.getChildren().get(i)) {
+                // Stop if there was a gap in extraction of RVC elements. This is required if the leading
+                // RVC has not row key columns, as we'll still get childSlots if the RVC has trailing row
+                // key columns. We can't rule the RVC out completely when the childSlots is less the the
+                // RVC length, as a partial, *leading* match is optimizable.
+                if (childExtractNodes.size() != 1 || !childExtractNodes.get(0).equals(rvc.getChildren().get(i))) {
                     break;
                 }
+                int pkPosition = keySlot.getPKPosition();
+                if (pkPosition < 0) { // break for non PK columns
+                    break;
+                }
+                // Continue while we have consecutive pk columns
                 if (position == -1) {
-                    position = initialPosition = keySlot.getPKPosition();
-                } else if (keySlot.getPKPosition() != position) {
+                    position = initialPosition = pkPosition;
+                } else if (pkPosition != position) {
                     break;
                 }
                 position++;
@@ -521,6 +530,7 @@ public class WhereOptimizer {
             if (isDegenerate(slot.getKeyRanges())) {
                 return EMPTY_KEY_SLOTS;
             }
+            final List<Expression> extractNodes = Collections.<Expression>singletonList(node);
             final KeyPart childPart = slot.getKeyPart();
             final ImmutableBytesWritable ptr = context.getTempPtr();
             return new SingleKeySlot(new KeyPart() {
@@ -550,7 +560,7 @@ public class WhereOptimizer {
 
                 @Override
                 public List<Expression> getExtractNodes() {
-                    return childPart.getExtractNodes();
+                    return extractNodes;
                 }
 
                 @Override
@@ -877,7 +887,8 @@ public class WhereOptimizer {
         @Override
         public Iterator<Expression> visitEnter(LikeExpression node) {
             // TODO: can we optimize something that starts with '_' like this: foo LIKE '_a%' ?
-            if (! (node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()) {
+            if (node.getLikeType() == LikeType.CASE_INSENSITIVE || // TODO: remove this when we optimize ILIKE
+                ! (node.getChildren().get(1) instanceof LiteralExpression) || node.startsWithWildcard()) {
                 return Iterators.emptyIterator();
             }
 
@@ -886,6 +897,7 @@ public class WhereOptimizer {
 
         @Override
         public KeySlots visitLeave(LikeExpression node, List<KeySlots> childParts) {
+            // TODO: optimize ILIKE by creating two ranges for the literal prefix: one with lower case, one with upper case
             if (childParts.isEmpty()) {
                 return null;
             }

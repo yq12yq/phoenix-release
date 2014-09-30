@@ -110,6 +110,24 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testDropSystemTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        try {
+            try {
+                conn.createStatement().executeUpdate(
+                        "DROP TABLE " + PhoenixDatabaseMetaData.SYSTEM_CATALOG);
+                fail("Should not be allowed to drop a system table");
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testAddVarCharColToPK() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -684,10 +702,10 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
             conn2 = DriverManager.getConnection(getUrl(), props);
             query = "SELECT * FROM i";
             rs = conn2.createStatement().executeQuery(query);
-            asssertIsWALDisabled(conn2,fullIndexName, true);
+            asssertIsWALDisabled(conn2,fullIndexName, false);
             assertFalse(rs.next());
             conn2.close();
-            asssertIsWALDisabled(conn,fullIndexName, true);
+            asssertIsWALDisabled(conn,fullIndexName, false);
             
             conn.createStatement().execute("DROP TABLE test_table");
         } finally {
@@ -714,10 +732,10 @@ public class AlterTableIT extends BaseHBaseManagedTimeIT {
             conn2 = DriverManager.getConnection(getUrl(), props);
             query = "SELECT * FROM i";
             rs = conn2.createStatement().executeQuery(query);
-            asssertIsWALDisabled(conn2,fullIndexName, true);
+            asssertIsWALDisabled(conn2,fullIndexName, false);
             assertFalse(rs.next());
             conn2.close();
-            asssertIsWALDisabled(conn,fullIndexName, true);
+            asssertIsWALDisabled(conn,fullIndexName, false);
             conn.createStatement().execute("DROP TABLE test_table");
         } finally {
             conn.close();
