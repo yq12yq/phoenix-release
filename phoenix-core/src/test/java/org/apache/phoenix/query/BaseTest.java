@@ -1331,7 +1331,7 @@ public abstract class BaseTest {
         assertEquals(expectedCount, count);
     }
     
-    public HBaseTestingUtility getUtility() {
+    public IntegrationTestingUtility getUtility() {
         return utility;
     }
 }
