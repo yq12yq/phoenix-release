@@ -662,6 +662,40 @@
   </dependencyManagement>
 
   <profiles>
+    <profile>
+        <id>windows</id>
+        <modules>
+            <module>winpkg</module>
+        </modules>
+        <build>
+            <plugins>
+                <plugin>
+                <groupId>com.google.code.maven-replacer-plugin</groupId>
+                <artifactId>replacer</artifactId>
+                <version>1.5.2</version>
+                <executions>
+                    <execution>
+                    <goals>
+                        <goal>replace</goal>
+                    </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includes>
+                        <include>winpkg/src/scripts/*</include>
+                    </includes>
+                    <replacements>
+                        <replacement>
+                            <token>@final.name@</token>
+                            <value>phoenix-${project.version}</value>
+                        </replacement>
+                    </replacements>
+                </configuration>
+              </plugin>
+          </plugins>
+      </build>
+    </profile>
+
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
