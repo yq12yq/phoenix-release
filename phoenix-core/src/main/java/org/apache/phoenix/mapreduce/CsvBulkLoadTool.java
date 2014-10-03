@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -424,6 +425,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	            job.setMapperClass(CsvToKeyValueMapper.class);
 	            job.setMapOutputKeyClass(ImmutableBytesWritable.class);
 	            job.setMapOutputValueClass(KeyValue.class);
+	            TableMapReduceUtil.initCredentials(job);
 	
 	            HTable htable = new HTable(conf, tableName);
 	
