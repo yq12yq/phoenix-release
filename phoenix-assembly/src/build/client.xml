@@ -51,9 +51,11 @@
         <include>commons-codec:commons-codec</include>
         <include>com.github.stephenc.high-scale-lib:high-scale-lib</include>
       </includes>
-      <excludes>
-        <exclude>META-INF/**/license</exclude>
-      </excludes>
+      <unpackOptions>
+        <excludes>
+          <exclude>META-INF/**/license/**</exclude>
+        </excludes>
+      </unpackOptions>
     </dependencySet>
 
     <!-- Make sure we get all the components, not just the minimal client ones (e.g.
