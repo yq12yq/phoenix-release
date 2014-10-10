@@ -40,7 +40,7 @@ public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
 	    Connection conn = DriverManager.getConnection(getUrl(), props);	    
 	    conn.setAutoCommit(false);
 	    
-            String create = "CREATE TABLE DIE ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50) NOT NULL)";
+            String create = "CREATE TABLE DIE ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50))";
             PreparedStatement createStmt = conn.prepareStatement(create);
             createStmt.executeUpdate();
             PreparedStatement stmt = conn.prepareStatement(
