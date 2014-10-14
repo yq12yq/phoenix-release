@@ -191,9 +191,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * cluster.
      * @param services base services from where we derive our default configuration
      * @param connectionInfo to provide connection information
+     * @param info hbase configuration properties
      * @throws SQLException
      */
-    public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo) {
+    public ConnectionQueryServicesImpl(QueryServices services, ConnectionInfo connectionInfo, Properties info) {
         super(services);
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         for (Entry<String,String> entry : services.getProps()) {
@@ -201,6 +202,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         for (Entry<String,String> entry : connectionInfo.asProps()) {
             config.set(entry.getKey(), entry.getValue());
+        }
+        if(info != null) {
+            for(Object key : info.keySet()){
+                config.set((String)key, info.getProperty((String)key));
+            }
         }
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
