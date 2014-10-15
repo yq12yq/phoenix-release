@@ -53,7 +53,7 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
+@Category({HBaseManagedTimeTest.class, NeedsOwnMiniClusterTest.class})
 public class GuidePostsLifeCycleIT extends BaseHBaseManagedTimeIT {
     
     @BeforeClass

@@ -61,7 +61,7 @@ import com.google.common.collect.Maps;
  * @since 0.1
  */
 
-@Category(ClientManagedTimeTest.class)
+@Category({ClientManagedTimeTest.class, NeedsOwnMiniClusterTest.class})
 public class DefaultParallelIteratorsRegionSplitterIT extends BaseParallelIteratorsRegionSplitterIT {
     
     @BeforeClass

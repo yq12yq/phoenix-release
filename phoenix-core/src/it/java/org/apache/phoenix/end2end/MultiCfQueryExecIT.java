@@ -57,7 +57,7 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(ClientManagedTimeTest.class)
+@Category({ClientManagedTimeTest.class, NeedsOwnMiniClusterTest.class})
 public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
     private static final String MULTI_CF = "MULTI_CF";
     
