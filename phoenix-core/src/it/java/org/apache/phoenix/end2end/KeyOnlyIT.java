@@ -57,7 +57,7 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(ClientManagedTimeTest.class)
+@Category({ClientManagedTimeTest.class, NeedsOwnMiniClusterTest.class})
 public class KeyOnlyIT extends BaseClientManagedTimeIT {
     
     @BeforeClass
@@ -90,6 +90,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         Scan scan = new Scan();
         List<KeyRange> splits = getSplits(conn5, ts, scan);
+
         assertEquals(3, splits.size());
         conn5.close();
         
