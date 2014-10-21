@@ -323,7 +323,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         addTenantIdFilter(buf, null);
         buf.append(" order by " + TENANT_ID);
         Statement stmt = connection.createStatement();
-        return stmt.executeQuery(buf.toString());
+        try {
+          return stmt.executeQuery(buf.toString());
+        } finally {
+          stmt.close();
+        }
     }
 
     @Override
@@ -438,7 +442,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         buf.append(where);
         buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + ORDINAL_POSITION);
         Statement stmt = connection.createStatement();
-        return stmt.executeQuery(buf.toString());
+        try {
+          return stmt.executeQuery(buf.toString());
+        } finally {
+          stmt.close();
+        }
     }
 
     @Override
@@ -563,7 +571,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         addTenantIdFilter(buf, catalog);
         buf.append("\norder by INDEX_NAME," + ORDINAL_POSITION);
         Statement stmt = connection.createStatement();
-        return stmt.executeQuery(buf.toString());
+        try {
+          return stmt.executeQuery(buf.toString());
+        } finally {
+          stmt.close();
+        }
     }
 
 
@@ -708,8 +720,13 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         buf.append(" and " + COLUMN_FAMILY + " is null");
         addTenantIdFilter(buf, catalog);
         buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + " ," + COLUMN_NAME);
-        ResultSet rs = connection.createStatement().executeQuery(buf.toString());
-        return rs;
+        Statement s = connection.createStatement();
+        try {
+          ResultSet rs = s.executeQuery(buf.toString());
+          return rs;
+        } finally {
+          s.close();
+        }
     }
 
     @Override
@@ -771,7 +788,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
             buf.append(" and " + TABLE_SCHEM + " like '" + escapePattern(schemaPattern) + "'");
         }
         Statement stmt = connection.createStatement();
-        return stmt.executeQuery(buf.toString());
+        try {
+          return stmt.executeQuery(buf.toString());
+        } finally {
+          stmt.close();
+        }
     }
 
     @Override
@@ -803,7 +824,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         }
         buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," +TABLE_NAME + "," + SUPERTABLE_NAME);
         Statement stmt = connection.createStatement();
-        return stmt.executeQuery(buf.toString());
+        try {
+          return stmt.executeQuery(buf.toString());
+        } finally {
+          stmt.close();
+        }
     }
     
     @Override
@@ -911,7 +936,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData, org.apache.pho
         }
         buf.append(" order by " + SYSTEM_CATALOG_ALIAS + "." + TABLE_TYPE + "," +TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME);
         Statement stmt = connection.createStatement();
-        return stmt.executeQuery(buf.toString());
+        try {
+          return stmt.executeQuery(buf.toString());
+        } finally {
+          stmt.close();
+        }
     }
 
     @Override

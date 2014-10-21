@@ -17,8 +17,10 @@
  */package org.apache.phoenix.trace;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -91,7 +93,9 @@ public class TraceReader {
                         + " ORDER BY " + MetricInfo.TRACE.columnName + " DESC, "
                         + MetricInfo.START.columnName + " ASC" + " LIMIT " + pageSize;
         int resultCount = 0;
-        ResultSet results = conn.prepareStatement(query).executeQuery();
+        PreparedStatement ps = conn.prepareStatement(query);
+        ResultSet results = ps.executeQuery();
+        ps.close();
         TraceHolder trace = null;
         // the spans that are not the root span, but haven't seen their parent yet
         List<SpanInfo> orphans = null;
@@ -216,7 +220,13 @@ public class TraceReader {
                         + MetricInfo.PARENT.columnName + "=" + parent + " AND "
                         + MetricInfo.SPAN.columnName + "=" + span;
         LOG.trace(addCustomAnnotations("Requesting columns with: " + request));
-        ResultSet results = conn.createStatement().executeQuery(request);
+        Statement s = conn.createStatement();
+        ResultSet results = null;
+        try {
+          results = s.executeQuery(request);
+        } finally {
+          s.close();
+        }
         List<String> cols = new ArrayList<String>();
         while (results.next()) {
             for (int index = 1; index <= count; index++) {

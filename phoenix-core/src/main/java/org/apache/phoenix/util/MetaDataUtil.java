@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 import java.util.List;
 
@@ -346,10 +347,14 @@ public class MetaDataUtil {
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
         SequenceKey key = getViewIndexSequenceKey(null, name);
-        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME + 
+        Statement s = connection.createStatement();
+        try {
+          s.executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME + 
                 " WHERE " + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + 
                 PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + key.getSchemaName() + "'");
-        
+        } finally {
+          s.close();
+        }
     }
     
     /**

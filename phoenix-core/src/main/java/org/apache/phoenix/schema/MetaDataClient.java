@@ -71,6 +71,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.BitSet;
 import java.util.Collection;
@@ -398,6 +399,7 @@ public class MetaDataClient {
             colUpsert.setShort(17, keySeq);
         }
         colUpsert.execute();
+        colUpsert.close();
     }
 
     private PColumn newColumn(int position, ColumnDef def, PrimaryKeyConstraint pkConstraint, String defaultColumnFamily, boolean addingToPK) throws SQLException {
@@ -489,7 +491,9 @@ public class MetaDataClient {
         String query = "SELECT CURRENT_DATE(),"+ LAST_STATS_UPDATE_TIME + " FROM " + SYSTEM_CATALOG_SCHEMA
                 + "." + SYSTEM_STATS_TABLE + " WHERE " + PHYSICAL_NAME + "='" + physicalName.getString() + "' AND " + COLUMN_FAMILY
                 + " IS NULL AND " + REGION_NAME + " IS NULL";
-        ResultSet rs = connection.createStatement().executeQuery(query);
+        Statement s = connection.createStatement();
+        ResultSet rs = s.executeQuery(query);
+        s.close();
         long lastUpdatedTime = 0;
         if (rs.next() && rs.getDate(2) != null) {
             lastUpdatedTime = rs.getDate(1).getTime() - rs.getDate(2).getTime();
@@ -1611,7 +1615,12 @@ public class MetaDataClient {
                 buf.append("'" + ref.getTable().getName().getString() + "',");
             }
             buf.setCharAt(buf.length() - 1, ')');
-            conn.createStatement().execute(buf.toString());
+            Statement s = conn.createStatement();
+            try {
+              s.execute(buf.toString());
+            } finally {
+              s.close();
+            }
             success = true;
         } catch (SQLException e) {
             sqlException = e;
@@ -1709,6 +1718,7 @@ public class MetaDataClient {
             tableBoolUpsert.setString(3, tableName);
             tableBoolUpsert.setBoolean(4, isImmutableRows);
             tableBoolUpsert.execute();
+            tableBoolUpsert.close();
         }
         if (disableWAL != null) {
             PreparedStatement tableBoolUpsert = connection.prepareStatement(MUTATE_DISABLE_WAL);
@@ -2003,7 +2013,12 @@ public class MetaDataClient {
         }
         buf.setCharAt(buf.length()-1, ')');
         
-        connection.createStatement().execute(buf.toString());
+        Statement s = connection.createStatement();
+        try {
+          s.execute(buf.toString());
+        } finally {
+          s.close();
+        }
         
         Collections.sort(columnsToDrop,new Comparator<PColumn> () {
             @Override
@@ -2018,17 +2033,21 @@ public class MetaDataClient {
         colUpdate.setString(1, tenantId);
         colUpdate.setString(2, schemaName);
         colUpdate.setString(3, tableName);
-        for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1; i < table.getColumns().size(); i++) {
+        try {
+          for (int i = columnsToDrop.get(columnsToDropIndex).getPosition() + 1; i < table.getColumns().size(); i++) {
             PColumn column = table.getColumns().get(i);
             if(columnsToDrop.contains(column)) {
-                columnsToDropIndex++;
-                continue;
+              columnsToDropIndex++;
+              continue;
             }
             colUpdate.setString(4, column.getName().getString());
             colUpdate.setString(5, column.getFamilyName() == null ? null : column.getFamilyName().getString());
             // Adjust position to not include the salt column
             colUpdate.setInt(6, column.getPosition() - columnsToDropIndex - (isSalted ? 1 : 0));
             colUpdate.execute();
+          }
+        } finally {
+          colUpdate.close();
         }
        return familyName;
     }

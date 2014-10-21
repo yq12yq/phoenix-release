@@ -80,7 +80,7 @@ public class QueryOptimizer {
     public QueryPlan optimize(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
-        if (!useIndexes 
+        if (!useIndexes || select == null
                 || select.isJoin() 
                 || dataPlan.getContext().getResolver().getTables().size() > 1
                 || dataPlan.getContext().getScanRanges().isPointLookup()) {
