@@ -419,7 +419,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         TraceReader reader = new TraceReader(conn);
         int retries = 0;
         boolean found = false;
-        outer: while (retries < MAX_RETRIES) {
+        outer: while (retries < 2*MAX_RETRIES) {
             Collection<TraceHolder> traces = reader.readAll(100);
             for (TraceHolder trace : traces) {
                 LOG.info("Got trace: " + trace);

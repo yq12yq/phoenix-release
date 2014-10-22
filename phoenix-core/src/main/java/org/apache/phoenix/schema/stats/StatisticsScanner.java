@@ -6,7 +6,7 @@
  * License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  * the specific language governing permissions and limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -15,14 +15,12 @@ import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TimeKeeper;
 
 /**
  * The scanner that does the scanning to collect the stats during major compaction.{@link StatisticsCollector}
@@ -30,12 +28,12 @@ import org.apache.phoenix.util.TimeKeeper;
 public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
-    private StatisticsTable stats;
-    private HRegionInfo region;
+    private StatisticsWriter stats;
+    private HRegion region;
     private StatisticsCollector tracker;
     private byte[] family;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsTable stats, HRegionInfo region,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, HRegion region,
             InternalScanner delegate, byte[] family) {
         // should there be only one tracker?
         this.tracker = tracker;
@@ -75,26 +73,23 @@ public class StatisticsScanner implements InternalScanner {
         }
     }
 
+    @Override
     public void close() throws IOException {
         IOException toThrow = null;
         try {
             // update the statistics table
             // Just verify if this if fine
-            String tableName = SchemaUtil.getTableNameFromFullName(region.getTable().getNameAsString());
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.deleteStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family),
-                    mutations, currentTime);
+            stats.deleteStats(region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
             }
-            stats.addStats(tableName, region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations,
-                    currentTime);
+            stats.addStats(region.getRegionNameAsString(), this.tracker, Bytes.toString(family), mutations);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
@@ -103,12 +98,25 @@ public class StatisticsScanner implements InternalScanner {
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
             toThrow = e;
-        }
-        // close the delegate scanner
-        try {
-            delegate.close();
-        } catch (IOException e) {
-            LOG.error("Error while closing the scanner");
+        } finally {
+            try {
+                stats.close();
+            } catch (IOException e) {
+                if (toThrow == null) toThrow = e;
+                LOG.error("Error while closing the stats table", e);
+            } finally {
+                // close the delegate scanner
+                try {
+                    delegate.close();
+                } catch (IOException e) {
+                    if (toThrow == null) toThrow = e;
+                    LOG.error("Error while closing the scanner", e);
+                } finally {
+                    if (toThrow != null) {
+                        throw toThrow;
+                    }
+                }
+            }
         }
     }
 }

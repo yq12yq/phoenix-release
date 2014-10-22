@@ -34,8 +34,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
@@ -82,8 +80,7 @@ import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.stat.StatisticsCollector;
-import org.apache.phoenix.schema.stat.StatisticsTable;
+import org.apache.phoenix.schema.stats.StatisticsCollector;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -92,6 +89,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -116,8 +114,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     public static final String EMPTY_CF = "EmptyCF";
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
-    private static final Log LOG = LogFactory.getLog(UngroupedAggregateRegionObserver.class);
-    private StatisticsTable statsTable = null;
     
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -125,8 +121,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
         // be able to get a single backing buffer for a KeyValue.
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
-        String name = ((RegionCoprocessorEnvironment)e).getRegion().getTableDesc().getTableName().getNameAsString();
-        this.statsTable = StatisticsTable.getStatisticsTableForCoprocessor(e.getConfiguration(), name);
     }
 
     private static void commitBatch(HRegion region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
@@ -145,20 +139,29 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
     
     @Override
-    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
-        int offset = 0;
-        boolean isAnalyze = false;
-        HRegion region = c.getEnvironment().getRegion();
-        TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        StatisticsCollector stats = null;
-        if(scan.getAttribute(BaseScannerRegionObserver.ANALYZE_TABLE) != null && statsTable != null) {
-            stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
-            isAnalyze = true;
+    public RegionScanner preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan, RegionScanner s)
+            throws IOException {
+        s = super.preScannerOpen(e, scan, s);
+        if (ScanUtil.isAnalyzeTable(scan)) {
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than 
             // individual tenant specific tables.
             scan.setStartRow(HConstants.EMPTY_START_ROW);
             scan.setStopRow(HConstants.EMPTY_END_ROW);
+            scan.setFilter(null);
+        }
+        return s;
+    }
+    
+    @Override
+    protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException {
+        int offset = 0;
+        HRegion region = c.getEnvironment().getRegion();
+        long ts = scan.getTimeRange().getMax();
+        StatisticsCollector stats = null;
+        if(ScanUtil.isAnalyzeTable(scan)) {
+            // Let this throw, as this scan is being done for the sole purpose of collecting stats
+            stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts);
         }
         if (ScanUtil.isLocalIndex(scan)) {
             /*
@@ -225,7 +228,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         innerScanner = theScanner;
         
         int batchSize = 0;
-        long ts = scan.getTimeRange().getMax();
         List<Mutation> mutations = Collections.emptyList();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if (isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
@@ -252,7 +254,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
                 hasMore = innerScanner.nextRaw(results);
-                if(isAnalyze && stats != null) {
+                if(stats != null) {
                     stats.collectStatistics(results);
                 }
                 
@@ -375,13 +377,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             } while (hasMore);
         } finally {
             try {
-                if (isAnalyze && stats != null) {
-                    stats.updateStatistic(region);
-                    stats.clear();
+                if (stats != null) {
+                    try {
+                        stats.updateStatistic(region);
+                    } finally {
+                        stats.close();
+                    }
                 }
-                innerScanner.close();
             } finally {
-                region.closeRegionOperation();
+                try {
+                    innerScanner.close();
+                } finally {
+                    region.closeRegionOperation();
+                }
             }
         }
         
@@ -450,9 +458,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
                 && scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            StatisticsCollector stats = new StatisticsCollector(statsTable, c.getEnvironment().getConfiguration());
-            internalScan =
-                    stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+            try {
+                // TODO: for users that manage timestamps themselves, we should provide
+                // a means of specifying/getting this.
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(), clientTimeStamp);
+                internalScan =
+                        stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanners, scanType, earliestPutTs, s);
+            } catch (IOException e) {
+                // If we can't reach the stats table, don't interrupt the normal
+                // compaction operation, just log a warning.
+                if(logger.isWarnEnabled()) {
+                    logger.warn("Unable to collect stats for " + table, e);
+                }
+            }
         }
         return internalScan;
     }
@@ -464,15 +483,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         HRegion region = e.getEnvironment().getRegion();
         TableName table = region.getRegionInfo().getTable();
         if (!table.getNameAsString().equals(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)) {
+            StatisticsCollector stats = null;
             try {
-                StatisticsCollector stats = new StatisticsCollector(statsTable, e.getEnvironment()
-                        .getConfiguration());
+                // TODO: for users that manage timestamps themselves, we should provide
+                // a means of specifying/getting this.
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
                 stats.collectStatsDuringSplit(e.getEnvironment().getConfiguration(), l, r, region);
-                stats.clear();
             } catch (IOException ioe) { 
-                if(LOG.isDebugEnabled()) {
-                    LOG.debug("Error while collecting stats during split ",ioe);
+                if(logger.isWarnEnabled()) {
+                    logger.warn("Error while collecting stats during split for " + table,ioe);
                 }
+            } finally {
+                if (stats != null) stats.close();
             }
         }
             

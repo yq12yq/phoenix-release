@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
@@ -46,6 +47,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ListMultimap;
@@ -179,6 +181,12 @@ public class ParseNodeFactory {
     }
 
     public ParseNodeFactory() {
+    }
+    
+    private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
+    
+    public static String createTempAlias() {
+        return "$" + tempAliasCounter.incrementAndGet();
     }
 
     public ExplainStatement explain(BindableStatement statement) {
@@ -340,9 +348,9 @@ public class ParseNodeFactory {
     public DivideParseNode divide(List<ParseNode> children) {
         return new DivideParseNode(children);
     }
-    
-    public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
-      return new UpdateStatisticsStatement(table);
+
+    public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
+      return new UpdateStatisticsStatement(table, scope);
     }
 
     public FunctionParseNode functionDistinct(String name, List<ParseNode> args) {
@@ -394,8 +402,8 @@ public class ParseNodeFactory {
         return new InListParseNode(children, negate);
     }
 
-    public ExistsParseNode exists(ParseNode l, ParseNode r, boolean negate) {
-        return new ExistsParseNode(l, r, negate);
+    public ExistsParseNode exists(ParseNode child, boolean negate) {
+        return new ExistsParseNode(child, negate);
     }
 
     public InParseNode in(ParseNode l, ParseNode r, boolean negate) {
@@ -408,7 +416,7 @@ public class ParseNodeFactory {
 
     public TableNode table(TableNode table, List<JoinPartNode> parts) {
         for (JoinPartNode part : parts) {
-            table = new JoinTableNode(part.getType(), table, part.getTable(), part.getOnNode());
+            table = new JoinTableNode(part.getType(), table, part.getTable(), part.getOnNode(), false);
         }
         return table;
     }
@@ -417,8 +425,8 @@ public class ParseNodeFactory {
         return new JoinPartNode(type, onNode, table);
     }
 
-    public JoinTableNode join(JoinType type, TableNode lhs, TableNode rhs, ParseNode on) {
-        return new JoinTableNode(type, lhs, rhs, on);
+    public JoinTableNode join(JoinType type, TableNode lhs, TableNode rhs, ParseNode on, boolean singleValueOnly) {
+        return new JoinTableNode(type, lhs, rhs, on, singleValueOnly);
     }
 
     public DerivedTableNode derivedTable (String alias, SelectStatement select) {
@@ -554,7 +562,11 @@ public class ParseNodeFactory {
         return new NotEqualParseNode(lhs, rhs);
     }
 
-    public NotParseNode not(ParseNode child) {
+    public ParseNode not(ParseNode child) {
+        if (child instanceof ExistsParseNode) {
+            return exists(child.getChildren().get(0), !((ExistsParseNode) child).isNegate());
+        }
+        
         return new NotParseNode(child);
     }
 
@@ -596,6 +608,30 @@ public class ParseNodeFactory {
     public SelectStatement select(SelectStatement statement, List<? extends TableNode> tables) {
         return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), statement.getWhere(), statement.getGroupBy(),
                 statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, List<? extends TableNode> tables, ParseNode where) {
+        return select(tables, statement.getHint(), statement.isDistinct(), statement.getSelect(), where, statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, boolean isDistinct, List<AliasedNode> select) {
+        return select(statement.getFrom(), statement.getHint(), isDistinct, select, statement.getWhere(), statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, boolean isDistinct, List<AliasedNode> select, ParseNode where) {
+        return select(statement.getFrom(), statement.getHint(), isDistinct, select, where, statement.getGroupBy(),
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), statement.isAggregate(),
+                statement.hasSequence());
+    }
+
+    public SelectStatement select(SelectStatement statement, List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, boolean isAggregate) {
+        return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), select, where, groupBy,
+                statement.getHaving(), statement.getOrderBy(), statement.getLimit(), statement.getBindCount(), isAggregate,
                 statement.hasSequence());
     }
 

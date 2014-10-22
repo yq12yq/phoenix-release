@@ -28,7 +28,6 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -177,11 +176,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
           Long scn = connection.getSCN();
           if (scn == null) {
             scn = context.getCurrentTime();
-            // Add one to server time since max of time range is exclusive
-            // and we need to account of OSs with lower resolution clocks.
-            if (scn < HConstants.LATEST_TIMESTAMP) {
-              scn++;
-            }
           }
           ScanUtil.setTimeRange(scan, scn);
         } else {
@@ -205,13 +199,13 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                String schemaName = context.getCurrentTable().getTable().getSchemaName().getString();
+                String parentSchema = context.getCurrentTable().getTable().getParentSchemaName().getString();
                 String parentTable = context.getCurrentTable().getTable().getParentTableName().getString();
                 final ParseNodeFactory FACTORY = new ParseNodeFactory();
                 TableRef dataTableRef =
                         FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(schemaName, parentTable)),
-                            context.getConnection()).resolveTable(schemaName, parentTable);
+                            FACTORY.namedTable(null, TableName.create(parentSchema, parentTable)),
+                            context.getConnection()).resolveTable(parentSchema, parentTable);
                 PTable dataTable = dataTableRef.getTable();
                 // Set index maintainer of the local index.
                 serializeIndexMaintainerIntoScan(scan, dataTable);
@@ -388,5 +382,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
         List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
         iterator.explain(planSteps);
         return planSteps;
+    }
+
+    @Override
+    public boolean isRowKeyOrdered() {
+        return groupBy.isEmpty() ? orderBy.getOrderByExpressions().isEmpty() : groupBy.isOrderPreserving();
     }
 }

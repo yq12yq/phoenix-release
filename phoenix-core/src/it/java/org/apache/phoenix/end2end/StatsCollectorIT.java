@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -22,20 +39,14 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category(HBaseManagedTimeTest.class)
-public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
-    //private static String url;
-    private static int frequency = 5000;
+@Category(NeedsOwnMiniClusterTest.class)
+public class StatsCollectorIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
-        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(frequency));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(20));
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(20));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -54,7 +65,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         Array array;
         conn = upsertValues(props, "t");
         // CAll the update statistics query here. If already major compaction has run this will not get executed.
-        stmt = conn.prepareStatement("ANALYZE T");
+        stmt = conn.prepareStatement("UPDATE STATISTICS T");
         stmt.execute();
         stmt = upsertStmt(conn, "t");
         stmt.setString(1, "z");
@@ -68,7 +79,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         conn.close();
         conn = DriverManager.getConnection(getUrl(), props);
         // This analyze would not work
-        stmt = conn.prepareStatement("ANALYZE T");
+        stmt = conn.prepareStatement("UPDATE STATISTICS T");
         stmt.execute();
         rs = conn.createStatement().executeQuery("SELECT k FROM T");
         assertTrue(rs.next());
@@ -80,7 +91,6 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;
-        long ts = nextTimestamp();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
@@ -95,9 +105,9 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         conn = upsertValues(props, "x");
         conn = upsertValues(props, "z");
         // CAll the update statistics query here
-        stmt = conn.prepareStatement("ANALYZE X");
+        stmt = conn.prepareStatement("UPDATE STATISTICS X");
         stmt.execute();
-        stmt = conn.prepareStatement("ANALYZE Z");
+        stmt = conn.prepareStatement("UPDATE STATISTICS Z");
         stmt.execute();
         stmt = upsertStmt(conn, "x");
         stmt.setString(1, "z");
@@ -120,7 +130,7 @@ public class StatsCollectorIT extends BaseHBaseManagedTimeIT {
         conn.close();
         conn = DriverManager.getConnection(getUrl(), props);
         // This analyze would not work
-        stmt = conn.prepareStatement("ANALYZE Z");
+        stmt = conn.prepareStatement("UPDATE STATISTICS Z");
         stmt.execute();
         rs = conn.createStatement().executeQuery("SELECT k FROM Z");
         assertTrue(rs.next());

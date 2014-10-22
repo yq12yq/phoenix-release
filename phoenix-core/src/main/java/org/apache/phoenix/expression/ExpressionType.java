@@ -32,6 +32,7 @@ import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
+import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FirstValueFunction;
@@ -182,6 +183,7 @@ public enum ExpressionType {
     InlineArrayElemRefExpression(InlineArrayElemRefExpression.class),
     SQLIndexTypeFunction(SQLIndexTypeFunction.class),
     ModulusExpression(ModulusExpression.class),
+    DistinctValueAggregateFunction(DistinctValueAggregateFunction.class),
     RegexpSplitFunctiond(RegexpSplitFunction.class);
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;

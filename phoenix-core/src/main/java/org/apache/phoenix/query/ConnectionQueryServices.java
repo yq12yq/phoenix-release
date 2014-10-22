@@ -39,6 +39,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.stats.PTableStats;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
@@ -103,5 +104,10 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public boolean supportsFeature(Feature feature);
     
     public String getUserName();
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
+    public void incrementTableTimeStamp(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
+
+    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException;
+    
+    public void clearCache() throws SQLException;
+    public int getSequenceSaltBuckets();
 }

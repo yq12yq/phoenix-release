@@ -41,6 +41,7 @@ import org.apache.phoenix.expression.DecimalAddExpression;
 import org.apache.phoenix.expression.DecimalDivideExpression;
 import org.apache.phoenix.expression.DecimalMultiplyExpression;
 import org.apache.phoenix.expression.DecimalSubtractExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.DoubleAddExpression;
 import org.apache.phoenix.expression.DoubleDivideExpression;
 import org.apache.phoenix.expression.DoubleMultiplyExpression;
@@ -54,6 +55,7 @@ import org.apache.phoenix.expression.LongAddExpression;
 import org.apache.phoenix.expression.LongDivideExpression;
 import org.apache.phoenix.expression.LongMultiplyExpression;
 import org.apache.phoenix.expression.LongSubtractExpression;
+import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -64,7 +66,6 @@ import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAllComparisonExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
 import org.apache.phoenix.expression.function.InlineArrayElemRefExpression;
-import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.parse.AddParseNode;
 import org.apache.phoenix.parse.AndParseNode;
 import org.apache.phoenix.parse.ArithmeticParseNode;
@@ -78,13 +79,13 @@ import org.apache.phoenix.parse.CastParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DivideParseNode;
+import org.apache.phoenix.parse.ExistsParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
-import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.InListParseNode;
-import org.apache.phoenix.parse.InParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.ModulusParseNode;
 import org.apache.phoenix.parse.MultiplyParseNode;
@@ -117,8 +118,6 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
-
-import com.google.common.collect.Lists;
 
 
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
@@ -226,7 +225,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     private Expression orExpression(List<Expression> children) throws SQLException {
         Iterator<Expression> iterator = children.iterator();
-        boolean isDeterministic = true;
+        Determinism determinism = Determinism.ALWAYS;
         while (iterator.hasNext()) {
             Expression child = iterator.next();
             if (child.getDataType() != PDataType.BOOLEAN) {
@@ -238,10 +237,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             if (LiteralExpression.isTrue(child)) {
                 return child;
             }
-            isDeterministic &= child.isDeterministic();
+            determinism = determinism.combine(child.getDeterminism());
         }
         if (children.size() == 0) {
-            return LiteralExpression.newConstant(true, isDeterministic);
+            return LiteralExpression.newConstant(true, determinism);
         }
         if (children.size() == 1) {
             return children.get(0);
@@ -395,12 +394,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     @Override
     public Expression visit(BindParseNode node) throws SQLException {
         Object value = context.getBindManager().getBindValue(node);
-        return LiteralExpression.newConstant(value, true);
+        return LiteralExpression.newConstant(value, Determinism.ALWAYS);
     }
 
     @Override
     public Expression visit(LiteralParseNode node) throws SQLException {
-        return LiteralExpression.newConstant(node.getValue(), node.getType(), true);
+        return LiteralExpression.newConstant(node.getValue(), node.getType(), Determinism.ALWAYS);
     }
 
     @Override
@@ -420,13 +419,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return true;
     }
 
-    private static boolean isDeterministic(List<Expression> l) {
+    private static Determinism getDeterminism(List<Expression> l) {
+    	Determinism determinism = Determinism.ALWAYS;
         for (Expression e : l) {
-            if (!e.isDeterministic()) {
-                return false;
-            }
+        	determinism.combine(e.getDeterminism());
         }
-        return true;
+        return determinism;
     }
 
     @Override
@@ -442,7 +440,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             ImmutableBytesWritable ptr = context.getTempPtr();
             int index = caseExpression.evaluateIndexOf(null, ptr);
             if (index < 0) {
-                return LiteralExpression.newConstant(null, isDeterministic(l));
+                return LiteralExpression.newConstant(null, getDeterminism(l));
             }
             return caseExpression.getChildren().get(index);
         }
@@ -474,7 +472,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (rhs instanceof LiteralExpression) {
             String pattern = (String)((LiteralExpression)rhs).getValue();
             if (pattern == null || pattern.length() == 0) {
-                return LiteralExpression.newConstant(null, rhs.isDeterministic());
+                return LiteralExpression.newConstant(null, rhs.getDeterminism());
             }
             // TODO: for pattern of '%' optimize to strlength(lhs) > 0
             // We can't use lhs IS NOT NULL b/c if lhs is NULL we need
@@ -483,19 +481,19 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             // Can't possibly be as long as the constant, then FALSE
             Integer lhsMaxLength = lhs.getMaxLength();
             if (lhsMaxLength != null && lhsMaxLength < index) {
-                return LiteralExpression.newConstant(false, rhs.isDeterministic());
+                return LiteralExpression.newConstant(false, rhs.getDeterminism());
             }
             if (index == -1) {
                 String rhsLiteral = LikeExpression.unescapeLike(pattern);
                 if (lhsMaxLength != null && lhsMaxLength != rhsLiteral.length()) {
-                    return LiteralExpression.newConstant(false, rhs.isDeterministic());
+                    return LiteralExpression.newConstant(false, rhs.getDeterminism());
                 }
                 if (node.getLikeType() == LikeType.CASE_SENSITIVE) {
                   CompareOp op = node.isNegate() ? CompareOp.NOT_EQUAL : CompareOp.EQUAL;
                   if (pattern.equals(rhsLiteral)) {
                       return new ComparisonExpression(op, children);
                   } else {
-                      rhs = LiteralExpression.newConstant(rhsLiteral, PDataType.CHAR, rhs.isDeterministic());
+                      rhs = LiteralExpression.newConstant(rhsLiteral, PDataType.CHAR, rhs.getDeterminism());
                       return new ComparisonExpression(op, Arrays.asList(lhs,rhs));
                   }
                 }
@@ -505,9 +503,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (ExpressionUtil.isConstant(expression)) {
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (!expression.evaluate(null, ptr)) {
-                return LiteralExpression.newConstant(null, expression.isDeterministic());
+                return LiteralExpression.newConstant(null, expression.getDeterminism());
             } else {
-                return LiteralExpression.newConstant(Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr)) ^ node.isNegate(), expression.isDeterministic());
+                return LiteralExpression.newConstant(Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(ptr)) ^ node.isNegate(), expression.getDeterminism());
             }
         }
         if (node.isNegate()) {
@@ -691,7 +689,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             return ExpressionUtil.getConstantExpression(expression, ptr); 
         } 
         else if (isNull) {
-            return LiteralExpression.newConstant(null, expression.getDataType(), expression.isDeterministic());
+            return LiteralExpression.newConstant(null, expression.getDataType(), expression.getDeterminism());
         }
         // Otherwise create and return the expression
         return wrapGroupByExpression(expression);
@@ -740,11 +738,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             @Override
             public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
                 boolean foundDate = false;
-                boolean isDeterministic = true;
+                Determinism determinism = Determinism.ALWAYS;
                 PDataType theType = null;
                 for(int i = 0; i < children.size(); i++) {
                     Expression e = children.get(i);
-                    isDeterministic &= e.isDeterministic();
+                    determinism = determinism.combine(e.getDeterminism());
                     PDataType type = e.getDataType();
                     if (type == null) {
                         continue; 
@@ -779,7 +777,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else if (theType == PDataType.DOUBLE) {
                     return new DoubleAddExpression(children);
                 } else if (theType == null) {
-                    return LiteralExpression.newConstant(null, theType, isDeterministic);
+                	return LiteralExpression.newConstant(null, theType, determinism);
                 } else if (theType == PDataType.TIMESTAMP || theType == PDataType.UNSIGNED_TIMESTAMP) {
                     return new TimestampAddExpression(children);
                 } else if (theType.isCoercibleTo(PDataType.DATE)) {
@@ -867,7 +865,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 PDataType theType = null;
                 Expression e1 = children.get(0);
                 Expression e2 = children.get(1);
-                boolean isDeterministic = e1.isDeterministic() && e2.isDeterministic();
+                Determinism determinism = e1.getDeterminism().combine(e2.getDeterminism());
                 PDataType type1 = e1.getDataType();
                 PDataType type2 = e2.getDataType();
                 // TODO: simplify this special case for DATE conversion
@@ -919,7 +917,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                     // This logic finds the common type to which all child types are coercible
                     // without losing precision.
                     Expression e = children.get(i);
-                    isDeterministic &= e.isDeterministic();
+                    determinism = determinism.combine(e.getDeterminism());
                     PDataType type = e.getDataType();
                     if (type == null) {
                         continue;
@@ -952,7 +950,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 } else if (theType == PDataType.DOUBLE) {
                     return new DoubleSubtractExpression(children);
                 } else if (theType == null) {
-                    return LiteralExpression.newConstant(null, theType, isDeterministic);
+                	return LiteralExpression.newConstant(null, theType, determinism);
                 } else if (theType == PDataType.TIMESTAMP || theType == PDataType.UNSIGNED_TIMESTAMP) {
                     return new TimestampSubtractExpression(children);
                 } else if (theType.isCoercibleTo(PDataType.DATE)) {
@@ -975,10 +973,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             @Override
             public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
                 PDataType theType = null;
-                boolean isDeterministic = true;
+                Determinism determinism = Determinism.ALWAYS;
                 for(int i = 0; i < children.size(); i++) {
                     Expression e = children.get(i);
-                    isDeterministic &= e.isDeterministic();
+                    determinism = determinism.combine(e.getDeterminism());
                     PDataType type = e.getDataType();
                     if (type == null) {
                         continue;
@@ -1004,7 +1002,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 case DOUBLE:
                     return new DoubleMultiplyExpression( children);
                 default:
-                    return LiteralExpression.newConstant(null, theType, isDeterministic);
+                    return LiteralExpression.newConstant(null, theType, determinism);
                 }
             }
         });
@@ -1036,10 +1034,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
             @Override
             public Expression create(ArithmeticParseNode node, List<Expression> children) throws SQLException {
                 PDataType theType = null;
-                boolean isDeterministic = true;
+                Determinism determinism = Determinism.ALWAYS;
                 for(int i = 0; i < children.size(); i++) {
                     Expression e = children.get(i);
-                    isDeterministic &= e.isDeterministic();
+                    determinism = determinism.combine(e.getDeterminism());
                     PDataType type = e.getDataType();
                     if (type == null) {
                         continue;
@@ -1065,7 +1063,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 case DOUBLE:
                     return new DoubleDivideExpression(children);
                 default:
-                    return LiteralExpression.newConstant(null, theType, isDeterministic);
+                    return LiteralExpression.newConstant(null, theType, determinism);
                 }
             }
         });
@@ -1196,7 +1194,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 arrayElemChild = child;
                 arrayElemDataType = childType;
             } else {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CONVERT_TYPE)
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
                         .setMessage(
                                 "Case expressions must have common type: " + arrayElemDataType
                                         + " cannot be coerced to " + childType).build().buildException();
@@ -1230,11 +1228,11 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 Expression child = children.get(i);
                 child.evaluate(null, ptr);
                 Object value = arrayElemDataType.toObject(ptr, child.getDataType(), child.getSortOrder());
-                elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.isDeterministic()).getValue();
+                elements[i] = LiteralExpression.newConstant(value, child.getDataType(), child.getDeterminism()).getValue();
             }
             Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType, elements);
             return LiteralExpression.newConstant(value,
-                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), true);
+                    PDataType.fromTypeId(arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE), Determinism.ALWAYS);
         }
         
         return wrapGroupByExpression(arrayExpression);
@@ -1246,29 +1244,15 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     }
 
     @Override
-    public boolean visitEnter(InParseNode node) throws SQLException {
+    public boolean visitEnter(ExistsParseNode node) throws SQLException {
         return true;
     }
 
     @Override
-    public Expression visitLeave(InParseNode node, List<Expression> l)
-            throws SQLException {
-        Expression firstChild = l.get(0);
-        LiteralExpression secondChild = (LiteralExpression) l.get(1);
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        ParseNode firstChildNode = node.getChildren().get(0);
-        
-        if (firstChildNode instanceof BindParseNode) {
-            context.getBindManager().addParamMetaData((BindParseNode)firstChildNode, firstChild);
-        }
-        
-        List<Expression> children = Lists.<Expression> newArrayList(firstChild);
-        PhoenixArray array = (PhoenixArray) secondChild.getValue();
-        PDataType type = PDataType.fromTypeId(array.getBaseType());
-        for (Object obj : (Object[]) array.getArray()) {
-            children.add(LiteralExpression.newConstant(obj, type));
-        }
-        return wrapGroupByExpression(InListExpression.create(children, node.isNegate(), ptr));
+    public Expression visitLeave(ExistsParseNode node, List<Expression> l) throws SQLException {
+        LiteralExpression child = (LiteralExpression) l.get(0);
+        PhoenixArray array = (PhoenixArray) child.getValue();
+        return LiteralExpression.newConstant(array.getDimensions() > 0 ^ node.isNegate(), PDataType.BOOLEAN);
     }
 
     @Override

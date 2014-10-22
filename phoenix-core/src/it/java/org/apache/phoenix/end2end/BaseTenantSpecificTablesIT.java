@@ -20,24 +20,23 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
 import java.sql.SQLException;
+import java.util.Map;
 
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
-/**
- * Describe your class here.
- *
- * 
- * @since 2.2
- */
+import com.google.common.collect.Maps;
 
-@Category(ClientManagedTimeTest.class)
-public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public abstract class BaseTenantSpecificTablesIT extends BaseOwnClusterClientManagedTimeIT {
     protected static final String TENANT_ID = "ZZTop";
     protected static final String TENANT_TYPE_ID = "abc";
-    protected static final String PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;
+    protected static String PHOENIX_JDBC_TENANT_SPECIFIC_URL;
     protected static final String TENANT_ID2 = "Styx";
-    protected static final String PHOENIX_JDBC_TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID2;
+    protected static String PHOENIX_JDBC_TENANT_SPECIFIC_URL2;
     
     protected static final String PARENT_TABLE_NAME = "PARENT_TABLE";
     protected static final String PARENT_TABLE_DDL = "CREATE TABLE " + PARENT_TABLE_NAME + " ( \n" + 
@@ -45,7 +44,7 @@ public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT
             "                tenant_id VARCHAR(5) NOT NULL,\n" + 
             "                tenant_type_id VARCHAR(3) NOT NULL, \n" + 
             "                id INTEGER NOT NULL\n" + 
-            "                CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id)) MULTI_TENANT=true";
+            "                CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id)) MULTI_TENANT=true, IMMUTABLE_ROWS=true";
     
     protected static final String TENANT_TABLE_NAME = "TENANT_TABLE";
     protected static final String TENANT_TABLE_DDL = "CREATE VIEW " + TENANT_TABLE_NAME + " ( \n" + 
@@ -57,12 +56,13 @@ public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT
             "                user VARCHAR ,\n" + 
             "                tenant_id VARCHAR(5) NOT NULL,\n" + 
             "                id INTEGER NOT NULL,\n" + 
-            "                CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true";
+            "                CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true, IMMUTABLE_ROWS=true";
     
     protected static final String TENANT_TABLE_NAME_NO_TENANT_TYPE_ID = "TENANT_TABLE_NO_TENANT_TYPE_ID";
     protected static final String TENANT_TABLE_DDL_NO_TENANT_TYPE_ID = "CREATE VIEW " + TENANT_TABLE_NAME_NO_TENANT_TYPE_ID + " ( \n" + 
             "                tenant_col VARCHAR) AS SELECT *\n" + 
             "                FROM " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID;
+    
     
     @Before
     public void createTables() throws SQLException {
@@ -70,5 +70,15 @@ public abstract class BaseTenantSpecificTablesIT extends BaseClientManagedTimeIT
         createTestTable(getUrl(), PARENT_TABLE_DDL_NO_TENANT_TYPE_ID, null, nextTimestamp());
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL, null, nextTimestamp());
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL_NO_TENANT_TYPE_ID, null, nextTimestamp());
+    }
+    
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        // Must update config before starting server
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;
+        PHOENIX_JDBC_TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID2;
     }
 }

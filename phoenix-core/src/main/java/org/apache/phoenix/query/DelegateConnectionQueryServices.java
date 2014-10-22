@@ -41,6 +41,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
+import org.apache.phoenix.schema.stats.PTableStats;
 
 
 public class DelegateConnectionQueryServices extends DelegateQueryServices implements ConnectionQueryServices {
@@ -228,8 +229,24 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
     
     @Override
-    public void clearCacheForTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
+    public void incrementTableTimeStamp(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTS)
             throws SQLException {
-        getDelegate().clearCacheForTable(tenantId, schemaName, tableName, clientTS);
+        getDelegate().incrementTableTimeStamp(tenantId, schemaName, tableName, clientTS);
+    }
+
+    @Override
+    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException {
+        return getDelegate().getTableStats(physicalName, clientTimeStamp);
+    }
+
+
+    @Override
+    public void clearCache() throws SQLException {
+        getDelegate().clearCache();
+    }
+
+    @Override
+    public int getSequenceSaltBuckets() {
+        return getDelegate().getSequenceSaltBuckets();
     }
 }

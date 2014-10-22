@@ -45,6 +45,7 @@ import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.JOIN_COITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
@@ -90,6 +91,7 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -102,8 +104,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import javax.annotation.Nonnull;
 
@@ -120,6 +120,7 @@ import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
@@ -131,7 +132,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -153,8 +155,9 @@ import com.google.common.collect.Sets;
  */
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
-    private static Logger logger = Logger.getLogger("BaseTest.class");
     private static IntegrationTestingUtility utility = null; 
+    private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
+
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -434,6 +437,13 @@ public abstract class BaseTest {
                 "    phone varchar(12), " +
                 "    address varchar, " +
                 "    loc_id varchar(5))");
+        builder.put(JOIN_COITEM_TABLE_FULL_NAME, "create table " + JOIN_COITEM_TABLE_FULL_NAME +
+                "   (item_id varchar(10) NOT NULL, " +
+                "    item_name varchar NOT NULL, " +
+                "    co_item_id varchar(10), " +
+                "    co_item_name varchar " +
+                "   CONSTRAINT pk PRIMARY KEY (item_id, item_name)) " +
+                "   SALT_BUCKETS=4");
         tableDDLMap = builder.build();
     }
     
@@ -478,6 +488,39 @@ public abstract class BaseTest {
         }
     }
     
+    protected static void destroyDriver() throws Exception {
+        if (driver != null) {
+            try {
+                assertTrue(destroyDriver(driver));
+            } finally {
+                driver = null;
+            }
+        }
+    }
+    
+    protected static void dropNonSystemTables() throws Exception {
+        try {
+            disableAndDropNonSystemTables();
+        } finally {
+            destroyDriver();
+        }
+    }
+
+    protected static void tearDownMiniCluster() throws Exception {
+        try {
+            destroyDriver();
+        } finally {
+            try {
+                if (utility != null) {
+                    utility.shutdownMiniCluster();
+                }
+            } finally {
+                utility = null;
+                clusterInitialized = false;
+            }
+        }
+    }
+            
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
         String url = checkClusterInitialized(props);
         if (driver == null) {
@@ -511,9 +554,9 @@ public abstract class BaseTest {
                 @Override
                 public void run() {
                     try {
-                        utility.shutdownMiniCluster();
+                        if (utility != null) utility.shutdownMiniCluster();
                     } catch (Exception e) {
-                        logger.log(Level.WARNING, "Exception caught when shutting down mini cluster: " + e.getMessage());
+                        logger.warn("Exception caught when shutting down mini cluster", e);
                     }
                 }
             });
@@ -592,7 +635,6 @@ public abstract class BaseTest {
         conf.setInt("hbase.hlog.asyncer.number", 2);
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
-        conf.setInt(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, 20);
         return conf;
     }
     
@@ -601,25 +643,32 @@ public abstract class BaseTest {
      * @return an initialized and registered {@link PhoenixTestDriver} 
      */
     protected static PhoenixTestDriver initAndRegisterDriver(String url, ReadOnlyProps props) throws Exception {
-        PhoenixTestDriver driver = new PhoenixTestDriver(props);
-        DriverManager.registerDriver(driver);
-        Assert.assertTrue(DriverManager.getDriver(url) == driver);
-        Connection conn = driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
+        DriverManager.registerDriver(newDriver);
+        Driver oldDriver = DriverManager.getDriver(url); 
+        if (oldDriver != newDriver) {
+            destroyDriver(oldDriver);
+        }
+        Connection conn = newDriver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.close();
-        return driver;
+        return newDriver;
     }
     
     //Close and unregister the driver.
-    protected static boolean destroyDriver(PhoenixTestDriver driver) {
+    protected static boolean destroyDriver(Driver driver) {
         if (driver != null) {
+            assert(driver instanceof PhoenixEmbeddedDriver);
+            PhoenixEmbeddedDriver pdriver = (PhoenixEmbeddedDriver)driver;
             try {
                 try {
-                    driver.close();
+                    pdriver.close();
                     return true;
                 } finally {
                     DriverManager.deregisterDriver(driver);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                logger.warn("Unable to close registered driver: " + driver, e);
+            }
         }
         return false;
     }
@@ -764,13 +813,9 @@ public abstract class BaseTest {
         ResultSet rs = conn.createStatement().executeQuery("SELECT " 
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         while (rs.next()) {
-            try {
-                conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getTableName(rs.getString(1), rs.getString(2)));
-            } catch (Exception e) {
-                //FIXME: see https://issues.apache.org/jira/browse/PHOENIX-973
-            }
+            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
         }
     }
     
@@ -1045,16 +1090,28 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-
+    
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        initATableValues(tenantId, splits, date, ts, getUrl());
+    }
+    
+    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    }
+    
+    protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+    }
+        
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, String url) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, null);
+        initEntityHistoryTableValues(tenantId, splits, null, null, url);
     }
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, date, null);
+        initEntityHistoryTableValues(tenantId, splits, date, null, url);
     }
     
-    protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    private static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
             ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits);
         } else {
@@ -1269,6 +1326,32 @@ public abstract class BaseTest {
         try {
             HTableDescriptor[] tables = admin.listTables();
             for (HTableDescriptor table : tables) {
+                try{
+                  admin.disableTable(table.getName());
+                } catch(IOException ex) {
+                  if(ex instanceof TableNotEnabledException) {
+                    //ignored
+                  }
+                }
+                admin.deleteTable(table.getName());
+            }
+        } finally {
+            admin.close();
+        }
+    }
+    
+    /**
+     * Disable and drop all the tables
+     */
+    protected static void disableAndDropNonSystemTables() throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try {
+            HTableDescriptor[] tables = admin.listTables();
+            for (HTableDescriptor table : tables) {
+                String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
+                if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
+                	continue;
+                }
                 try{
                   admin.disableTable(table.getName());
                 } catch(IOException ex) {

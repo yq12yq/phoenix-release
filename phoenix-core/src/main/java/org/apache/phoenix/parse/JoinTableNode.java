@@ -29,19 +29,29 @@ import java.sql.SQLException;
  * @since 0.1
  */
 public class JoinTableNode extends TableNode {
-    public enum JoinType {Inner, Left, Right, Full};
+    public enum JoinType {
+        Inner, 
+        Left, 
+        Right, 
+        Full,
+        // the following two types derive from sub-query rewriting
+        Semi, 
+        Anti,
+    };
     
     private final JoinType type;
     private final TableNode lhs;
     private final TableNode rhs;
     private final ParseNode onNode;
+    private final boolean singleValueOnly;
     
-    JoinTableNode(JoinType type, TableNode lhs, TableNode rhs, ParseNode onNode) {
+    JoinTableNode(JoinType type, TableNode lhs, TableNode rhs, ParseNode onNode, boolean singleValueOnly) {
         super(null);
         this.type = type;
         this.lhs = lhs;
         this.rhs = rhs;
         this.onNode = onNode;
+        this.singleValueOnly = singleValueOnly;
     }
     
     public JoinType getType() {
@@ -58,6 +68,10 @@ public class JoinTableNode extends TableNode {
     
     public ParseNode getOnNode() {
         return onNode;
+    }
+    
+    public boolean isSingleValueOnly() {
+        return singleValueOnly;
     }
 
     @Override

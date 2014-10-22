@@ -30,12 +30,12 @@ import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.JoinTableNode;
+import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.LessThanOrEqualParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
-import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
@@ -121,7 +121,7 @@ public class StatementNormalizer extends ParseNodeRewriter {
         @Override
         public List<TableName> visit(JoinTableNode joinNode) throws SQLException {
             List<TableName> lhs = joinNode.getLHS().accept(this);
-            List<TableName> rhs = joinNode.getRHS().accept(this);
+            List<TableName> rhs = joinNode.getType() == JoinType.Semi || joinNode.getType() == JoinType.Anti ? Collections.<TableName> emptyList() : joinNode.getRHS().accept(this);
             List<TableName> ret = Lists.<TableName>newArrayListWithExpectedSize(lhs.size() + rhs.size());
             ret.addAll(lhs);
             ret.addAll(rhs);
@@ -152,18 +152,6 @@ public class StatementNormalizer extends ParseNodeRewriter {
              normNodes.add(nodes.get(0));
              nodes = normNodes;
              node = NODE_FACTORY.comparison(node.getInvertFilterOp(), nodes.get(0), nodes.get(1));
-         }
-         // Add limit 2 to direct comparison with sub-query without ANY/SOME/ALL modifiers.
-         ParseNode rhs = nodes.get(1);
-         if (rhs instanceof SubqueryParseNode) {
-             SelectStatement subquery = ((SubqueryParseNode) rhs).getSelectNode();
-             subquery = NODE_FACTORY.select(subquery, NODE_FACTORY.limit(NODE_FACTORY.literal(2)));
-             rhs = NODE_FACTORY.subquery(subquery, true);
-             List<ParseNode> normNodes = Lists.newArrayListWithExpectedSize(2);
-             normNodes.add(nodes.get(0));
-             normNodes.add(rhs);
-             nodes = normNodes;
-             node = NODE_FACTORY.comparison(node.getFilterOp(), nodes.get(0), nodes.get(1));
          }
          return super.visitLeave(node, nodes);
     }

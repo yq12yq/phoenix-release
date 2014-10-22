@@ -56,7 +56,7 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
@@ -506,7 +506,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             conn.close();
             
             // Global connection sees all tenant tables
-            conn = DriverManager.getConnection(getUrl());
+            conn = DriverManager.getConnection(getUrl(), props);
             rs = conn.getMetaData().getSuperTables(TENANT_ID, null, null);
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
@@ -556,8 +556,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "user");
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_id");
-            assertTrue(rs.next());
+            // (tenant_id column is not visible in tenant-specific connection)
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_type_id");
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "id");
@@ -566,8 +565,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "user");
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "tenant_id");
-            assertTrue(rs.next());
+            // (tenant_id column is not visible in tenant-specific connection)
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "id");
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "tenant_col");

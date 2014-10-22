@@ -19,7 +19,6 @@ package org.apache.phoenix.execute;
 
 import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -38,9 +37,6 @@ import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -50,6 +46,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -59,31 +56,27 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.join.HashJoinInfo;
-import org.apache.phoenix.join.TupleProjector;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
 import com.google.common.collect.Lists;
 
-public class HashJoinPlan implements QueryPlan {
+public class HashJoinPlan extends DelegateQueryPlan {
     private static final Log LOG = LogFactory.getLog(HashJoinPlan.class);
 
     private final FilterableStatement statement;
-    private final BaseQueryPlan plan;
     private final HashJoinInfo joinInfo;
     private final SubPlan[] subPlans;
     private final boolean recompileWhereClause;
@@ -98,7 +91,7 @@ public class HashJoinPlan implements QueryPlan {
     public static HashJoinPlan create(FilterableStatement statement, 
             QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) {
         if (plan instanceof BaseQueryPlan)
-            return new HashJoinPlan(statement, (BaseQueryPlan) plan, joinInfo, subPlans, joinInfo == null);
+            return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null);
         
         assert (plan instanceof HashJoinPlan);
         HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
@@ -111,33 +104,18 @@ public class HashJoinPlan implements QueryPlan {
         for (SubPlan subPlan : subPlans) {
             mergedSubPlans[i++] = subPlan;
         }
-        return new HashJoinPlan(statement, hashJoinPlan.plan, joinInfo, mergedSubPlans, true);
+        return new HashJoinPlan(statement, hashJoinPlan.delegate, joinInfo, mergedSubPlans, true);
     }
     
     private HashJoinPlan(FilterableStatement statement, 
-            BaseQueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause) {
+            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause) {
+        super(plan);
         this.statement = statement;
-        this.plan = plan;
         this.joinInfo = joinInfo;
         this.subPlans = subPlans;
         this.recompileWhereClause = recompileWhereClause;
         this.forceHashJoinRangeScan = plan.getStatement().getHint().hasHint(Hint.RANGE_SCAN_HASH_JOIN);
         this.forceHashJoinSkipScan = plan.getStatement().getHint().hasHint(Hint.SKIP_SCAN_HASH_JOIN);
-    }
-
-    @Override
-    public Integer getLimit() {
-        return plan.getLimit();
-    }
-
-    @Override
-    public OrderBy getOrderBy() {
-        return plan.getOrderBy();
-    }
-
-    @Override
-    public RowProjector getProjector() {
-        return plan.getProjector();
     }
 
     @Override
@@ -149,7 +127,7 @@ public class HashJoinPlan implements QueryPlan {
         List<Future<Object>> futures = Lists.<Future<Object>>newArrayListWithExpectedSize(count);
         dependencies = Lists.newArrayList();
         if (joinInfo != null) {
-            hashClient = new HashCacheClient(plan.getContext().getConnection());
+            hashClient = new HashCacheClient(delegate.getContext().getConnection());
             maxServerCacheTimeToLive = services.getProps().getInt(QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
             firstJobEndTime = new AtomicLong(0);
             keyRangeExpressions = new CopyOnWriteArrayList<Expression>();
@@ -194,31 +172,31 @@ public class HashJoinPlan implements QueryPlan {
         
         boolean hasKeyRangeExpressions = keyRangeExpressions != null && !keyRangeExpressions.isEmpty();
         if (recompileWhereClause || hasKeyRangeExpressions) {
-            StatementContext context = plan.getContext();
+            StatementContext context = delegate.getContext();
             PTable table = context.getCurrentTable().getTable();
             ParseNode viewWhere = table.getViewStatement() == null ? null : new SQLParser(table.getViewStatement()).parseQuery().getWhere();
-            context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (plan.getStatement()), plan.getContext().getConnection()));
+            context.setResolver(FromCompiler.getResolverForQuery((SelectStatement) (delegate.getStatement()), delegate.getContext().getConnection()));
             if (recompileWhereClause) {
-                WhereCompiler.compile(plan.getContext(), plan.getStatement(), viewWhere);                
+                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere);                
             }
             if (hasKeyRangeExpressions) {
-                WhereCompiler.compile(plan.getContext(), plan.getStatement(), viewWhere, keyRangeExpressions, true);
+                WhereCompiler.compile(delegate.getContext(), delegate.getStatement(), viewWhere, keyRangeExpressions, true);
             }
         }
 
         if (joinInfo != null) {
-            Scan scan = plan.getContext().getScan();
+            Scan scan = delegate.getContext().getScan();
             HashJoinInfo.serializeHashJoinIntoScan(scan, joinInfo);
         }
         
-        return plan.iterator(dependencies);
+        return ((BaseQueryPlan) delegate).iterator(dependencies);
     }
 
     private Expression createKeyRangeExpression(Expression lhsExpression,
             Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
             ImmutableBytesWritable ptr, boolean hasFilters) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, true);
+            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, Determinism.ALWAYS);
         
         PDataType type = rhsExpression.getDataType();
         if (!useInClause(hasFilters)) {
@@ -254,20 +232,9 @@ public class HashJoinPlan implements QueryPlan {
     }
 
     @Override
-    public long getEstimatedSize() {
-        return plan.getEstimatedSize();
-    }
-
-    @Override
-    public List<KeyRange> getSplits() {
-        return plan.getSplits();
-    }
-
-    @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-        List<String> planSteps = Lists.newArrayList(plan.getExplainPlan().getPlanSteps());
+        List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
         int count = subPlans.length;
-        planSteps.add("    PARALLEL EQUI/SEMI/ANTI-JOIN " + count + " TABLES:");
         for (int i = 0; i < count; i++) {
             planSteps.addAll(subPlans[i].getPreSteps(this));
         }
@@ -286,33 +253,8 @@ public class HashJoinPlan implements QueryPlan {
     }
 
     @Override
-    public ParameterMetaData getParameterMetaData() {
-        return plan.getParameterMetaData();
-    }
-
-    @Override
-    public StatementContext getContext() {
-        return plan.getContext();
-    }
-
-    @Override
-    public GroupBy getGroupBy() {
-        return plan.getGroupBy();
-    }
-
-    @Override
-    public TableRef getTableRef() {
-        return plan.getTableRef();
-    }
-
-    @Override
     public FilterableStatement getStatement() {
         return statement;
-    }
-
-    @Override
-    public boolean isDegenerate() {
-        return false;
     }
 
     protected interface SubPlan {
@@ -396,38 +338,53 @@ public class HashJoinPlan implements QueryPlan {
         private final int index;
         private final QueryPlan plan;
         private final List<Expression> hashExpressions;
+        private final boolean singleValueOnly;
         private final Expression keyRangeLhsExpression;
         private final Expression keyRangeRhsExpression;
-        private final TupleProjector clientProjector;
         private final boolean hasFilters;
         
         public HashSubPlan(int index, QueryPlan subPlan, 
                 List<Expression> hashExpressions,
+                boolean singleValueOnly,
                 Expression keyRangeLhsExpression, 
                 Expression keyRangeRhsExpression, 
-                TupleProjector clientProjector, boolean hasFilters) {
+                boolean hasFilters) {
             this.index = index;
             this.plan = subPlan;
             this.hashExpressions = hashExpressions;
+            this.singleValueOnly = singleValueOnly;
             this.keyRangeLhsExpression = keyRangeLhsExpression;
             this.keyRangeRhsExpression = keyRangeRhsExpression;
-            this.clientProjector = clientProjector;
             this.hasFilters = hasFilters;
         }
 
         @Override
         public Object execute(HashJoinPlan parent) throws SQLException {
-            ScanRanges ranges = parent.plan.getContext().getScanRanges();
+            ScanRanges ranges = parent.delegate.getContext().getScanRanges();
             List<ImmutableBytesWritable> keyRangeRhsValues = null;
             if (keyRangeRhsExpression != null) {
                 keyRangeRhsValues = Lists.<ImmutableBytesWritable>newArrayList();
             }
-            ServerCache cache = parent.hashClient.addHashCache(ranges, plan.iterator(), 
-                    clientProjector, plan.getEstimatedSize(), hashExpressions, parent.plan.getTableRef(), keyRangeRhsExpression, keyRangeRhsValues);
-            long endTime = System.currentTimeMillis();
-            boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
-            if (!isSet && (endTime - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
-                LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", parent.plan.context.getConnection()));
+            ServerCache cache = null;
+            if (hashExpressions != null) {
+                cache = parent.hashClient.addHashCache(ranges, plan.iterator(), 
+                        plan.getEstimatedSize(), hashExpressions, singleValueOnly, parent.delegate.getTableRef(), keyRangeRhsExpression, keyRangeRhsValues);
+                long endTime = System.currentTimeMillis();
+                boolean isSet = parent.firstJobEndTime.compareAndSet(0, endTime);
+                if (!isSet && (endTime - parent.firstJobEndTime.get()) > parent.maxServerCacheTimeToLive) {
+                    LOG.warn(addCustomAnnotations("Hash plan [" + index + "] execution seems too slow. Earlier hash cache(s) might have expired on servers.", parent.delegate.getContext().getConnection()));
+                }
+            } else {
+                assert(keyRangeRhsExpression != null);
+                ResultIterator iterator = plan.iterator();
+                for (Tuple result = iterator.next(); result != null; result = iterator.next()) {
+                    // Evaluate key expressions for hash join key range optimization.
+                    ImmutableBytesWritable value = new ImmutableBytesWritable();
+                    keyRangeRhsExpression.reset();
+                    if (keyRangeRhsExpression.evaluate(result, value)) {
+                        keyRangeRhsValues.add(value);
+                    }
+                }
             }
             if (keyRangeRhsValues != null) {
                 parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), hasFilters));
@@ -439,8 +396,10 @@ public class HashJoinPlan implements QueryPlan {
         public void postProcess(Object result, HashJoinPlan parent)
                 throws SQLException {
             ServerCache cache = (ServerCache) result;
-            parent.joinInfo.getJoinIds()[index].set(cache.getId());
-            parent.dependencies.add(cache);
+            if (cache != null) {
+                parent.joinInfo.getJoinIds()[index].set(cache.getId());
+                parent.dependencies.add(cache);
+            }
         }
 
         @Override
@@ -448,7 +407,13 @@ public class HashJoinPlan implements QueryPlan {
             List<String> steps = Lists.newArrayList();
             boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
             boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
-            steps.add("    BUILD HASH TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)") + (skipMerge ? " (SKIP MERGE)" : ""));
+            if (hashExpressions != null) {
+                steps.add("    PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
+                        + "-JOIN TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)") + (skipMerge ? " (SKIP MERGE)" : ""));
+            }
+            else {
+                steps.add("    SKIP-SCAN-JOIN TABLE " + index);
+            }
             for (String step : plan.getExplainPlan().getPlanSteps()) {
                 steps.add("        " + step);
             }

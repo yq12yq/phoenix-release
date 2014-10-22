@@ -17,10 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertTrue;
-
 import javax.annotation.concurrent.NotThreadSafe;
-
+import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -68,13 +66,12 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @AfterClass
     public static void dropTables() throws Exception {
-      HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
-      try {
-        assertTrue(destroyDriver(driver));
-      } finally {
-          driver = null;
-          disableAndDropTables(admin);
-      }
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try {
+          assertTrue(destroyDriver(driver));
+        } finally {
+            driver = null;
+            disableAndDropTables(admin);
+        }
     }
-        
 }

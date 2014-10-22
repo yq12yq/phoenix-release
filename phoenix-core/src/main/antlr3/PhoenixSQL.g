@@ -104,7 +104,9 @@ tokens
     MAXVALUE='maxvalue';
     CYCLE='cycle';
     CASCADE='cascade';
-    ANALYZE='analyze';
+    UPDATE='update';
+    STATISTICS='statistics';    
+    COLUMNS='columns';
 }
 
 
@@ -149,6 +151,7 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 }
@@ -496,8 +499,8 @@ alter_table_node returns [AlterTableStatement ret]
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]
-	:   ANALYZE t=from_table_name
-		{ret = factory.updateStatistics(factory.namedTable(null, t));}
+	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)?
+		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())));}
 	;
 
 prop_name returns [String ret]
@@ -717,7 +720,6 @@ boolean_expression returns [ParseNode ret]
                   |  (IS n=NOT? NULL {$ret = factory.isNull(l,n!=null); } )
                   |  ( n=NOT? ((LIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_SENSITIVE); } )
                       |        (ILIKE r=value_expression {$ret = factory.like(l,r,n!=null,LikeType.CASE_INSENSITIVE); } )
-                      |        (EXISTS LPAREN r=subquery_expression RPAREN {$ret = factory.exists(l,r,n!=null);} )
                       |        (BETWEEN r1=value_expression AND r2=value_expression {$ret = factory.between(l,r1,r2,n!=null); } )
                       |        ((IN ((r=bind_expression {$ret = factory.inList(Arrays.asList(l,r),n!=null);} )
                                 | (LPAREN r=subquery_expression RPAREN {$ret = factory.in(l,r,n!=null);} )
@@ -725,6 +727,7 @@ boolean_expression returns [ParseNode ret]
                                 )))
                       ))
                    |  { $ret = l; } )
+    |   EXISTS LPAREN s=subquery_expression RPAREN {$ret = factory.exists(s,false);}
     ;
 
 bind_expression  returns [BindParseNode ret]
@@ -946,13 +949,12 @@ SL_COMMENT2: '--';
 
 // Bind names start with a colon and followed by 1 or more letter/digit/underscores
 BIND_NAME
-    : COLON (LETTER|DIGIT|'_')+
+    : COLON (DIGIT)+
     ;
 
-// Valid names can have a single underscore, but not multiple
-// Turn back on literal testing, all names are literals.
+
 NAME
-    :    LETTER (FIELDCHAR)* ('\"' (DBL_QUOTE_CHAR)* '\"')?
+    :    LETTER (FIELDCHAR)*
     |    '\"' (DBL_QUOTE_CHAR)* '\"'
     ;
 
@@ -1170,4 +1172,10 @@ SL_COMMENT
 DOT
     : '.'
     ;
+    
+OTHER      
+    : . { if (true) // to prevent compile error
+              throw new RuntimeException("Unexpected char: '" + $text + "'"); } 
+    ;
+
 

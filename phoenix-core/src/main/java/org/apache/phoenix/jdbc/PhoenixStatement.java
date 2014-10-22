@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.ColumnProjector;
@@ -53,6 +54,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.StatementPlan;
+import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -109,6 +111,7 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.trace.util.Tracing;
@@ -300,6 +303,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
             SelectStatement select = SubselectRewriter.flatten(this, stmt.getConnection());
             ColumnResolver resolver = FromCompiler.getResolverForQuery(select, stmt.getConnection());
             select = StatementNormalizer.normalize(select, resolver);
+            SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, stmt.getConnection());
+            if (transformedSelect != select) {
+                resolver = FromCompiler.getResolverForQuery(transformedSelect, stmt.getConnection());
+                select = StatementNormalizer.normalize(transformedSelect, resolver);
+            }
             QueryPlan plan = new QueryCompiler(stmt, select, resolver).compile();
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
@@ -419,6 +427,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 }
 
                 @Override
+                public List<List<Scan>> getScans() {
+                    return Collections.emptyList();
+                }
+
+                @Override
                 public StatementContext getContext() {
                     return plan.getContext();
                 }
@@ -431,6 +444,11 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
                 @Override
                 public boolean isDegenerate() {
                     return false;
+                }
+
+                @Override
+                public boolean isRowKeyOrdered() {
+                    return true;
                 }
                 
             };
@@ -654,9 +672,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
     
     private static class ExecutableUpdateStatisticsStatement extends UpdateStatisticsStatement implements
             CompilableStatement {
-
-        public ExecutableUpdateStatisticsStatement(NamedTableNode table) {
-            super(table);
+        public ExecutableUpdateStatisticsStatement(NamedTableNode table, StatisticsCollectionScope scope) {
+            super(table, scope);
         }
 
         @SuppressWarnings("unchecked")
@@ -677,7 +694,7 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
 
                 @Override
                 public ExplainPlan getExplainPlan() throws SQLException {
-                    return new ExplainPlan(Collections.singletonList("ANALYZE"));
+                    return new ExplainPlan(Collections.singletonList("UPDATE STATISTICS"));
                 }
 
                 @Override
@@ -852,8 +869,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, org.apache.pho
         }
 
         @Override
-        public UpdateStatisticsStatement updateStatistics(NamedTableNode table) {
-            return new ExecutableUpdateStatisticsStatement(table);
+        public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope) {
+            return new ExecutableUpdateStatisticsStatement(table, scope);
         }
     }
     

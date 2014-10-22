@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -153,6 +154,7 @@ public class TestUtil {
     public static final String ATABLE_SCHEMA_NAME = "";
     public static final String BTABLE_NAME = "BTABLE";
     public static final String STABLE_NAME = "STABLE";
+    public static final String STABLE_PK_NAME = "ID";
     public static final String STABLE_SCHEMA_NAME = "";
     public static final String GROUPBYTEST_NAME = "GROUPBYTEST";
     public static final String CUSTOM_ENTITY_DATA_FULL_NAME = "CORE.CUSTOM_ENTITY_DATA";
@@ -181,14 +183,17 @@ public class TestUtil {
     public static final String JOIN_CUSTOMER_TABLE = "CustomerTable";
     public static final String JOIN_ITEM_TABLE = "ItemTable";
     public static final String JOIN_SUPPLIER_TABLE = "SupplierTable";
+    public static final String JOIN_COITEM_TABLE = "CoitemTable";
     public static final String JOIN_ORDER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ORDER_TABLE + '"';
     public static final String JOIN_CUSTOMER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_CUSTOMER_TABLE + '"';
     public static final String JOIN_ITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_ITEM_TABLE + '"';
     public static final String JOIN_SUPPLIER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_SUPPLIER_TABLE + '"';
+    public static final String JOIN_COITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_COITEM_TABLE + '"';
     public static final String JOIN_ORDER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ORDER_TABLE;
     public static final String JOIN_CUSTOMER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_CUSTOMER_TABLE;
     public static final String JOIN_ITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_ITEM_TABLE;
     public static final String JOIN_SUPPLIER_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_SUPPLIER_TABLE;
+    public static final String JOIN_COITEM_TABLE_DISPLAY_NAME = JOIN_SCHEMA + "." + JOIN_COITEM_TABLE;
 
     /**
      * Read-only properties used by all tests
@@ -450,5 +455,72 @@ public class TestUtil {
             upsertRow(conn, "ASC", i, inputList.get(i));
             upsertRow(conn, "DESC", i, inputList.get(i));
         }
+    }
+    
+    public static List<KeyRange> getAllSplits(Connection conn, String tableName) throws SQLException {
+        return getSplits(conn, tableName, null, null, null, null);
+    }
+    
+    public static List<KeyRange> getAllSplits(Connection conn, String tableName, String where) throws SQLException {
+        return getSplits(conn, tableName, null, null, null, where);
+    }
+    
+    public static List<KeyRange> getSplits(Connection conn, String tableName, String pkCol, byte[] lowerRange, byte[] upperRange, String whereClauseSuffix) throws SQLException {
+        String whereClauseStart = 
+                (lowerRange == null && upperRange == null ? "" : 
+                    " WHERE " + ((lowerRange != null ? (pkCol + " >= ? " + (upperRange != null ? " AND " : "")) : "") 
+                              + (upperRange != null ? (pkCol + " < ?") : "" )));
+        String whereClause = whereClauseSuffix == null ? whereClauseStart : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
+        String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
+        PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+        if (lowerRange != null) {
+            pstmt.setBytes(1, lowerRange);
+        }
+        if (upperRange != null) {
+            pstmt.setBytes(lowerRange != null ? 2 : 1, upperRange);
+        }
+        pstmt.execute();
+        List<KeyRange> keyRanges = pstmt.getQueryPlan().getSplits();
+        return keyRanges;
+    }
+    
+    public static List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
+        return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null);
+    }
+
+    public static List<KeyRange> getAllSplits(Connection conn) throws SQLException {
+        return getAllSplits(conn, STABLE_NAME);
+    }
+
+    public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + tableName;
+        conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTableIndex(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + tableName+ " INDEX";
+        conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTableColumns(Connection conn) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + STABLE_NAME+ " COLUMNS";
+        conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTable(Connection conn) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + STABLE_NAME;
+        conn.createStatement().execute(query);
+    }
+    
+    public static void analyzeTable(String url, long ts, String tableName) throws IOException, SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        analyzeTable(url, props, tableName);
+    }
+
+    public static void analyzeTable(String url, Properties props, String tableName) throws IOException, SQLException {
+        Connection conn = DriverManager.getConnection(url, props);
+        analyzeTable(conn, tableName);
+        conn.close();
     }
 }

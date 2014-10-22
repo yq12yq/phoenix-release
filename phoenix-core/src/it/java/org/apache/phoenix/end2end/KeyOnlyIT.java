@@ -19,35 +19,22 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.analyzeTable;
+import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.SequenceManager;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.iterate.DefaultParallelIteratorRegionSplitter;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -57,27 +44,30 @@ import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
-@Category({ClientManagedTimeTest.class, NeedsOwnMiniClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class KeyOnlyIT extends BaseClientManagedTimeIT {
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB, Long.toString(20l));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+    
     @Test
     public void testKeyOnly() throws Exception {
         long ts = nextTimestamp();
         ensureTableCreated(getUrl(),KEYONLY_NAME,null, ts);
         initTableValues(ts+1);
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+30));
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn3, KEYONLY_NAME);
+        conn3.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+50));
         Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn5, KEYONLY_NAME);
         String query = "SELECT i1, i2 FROM KEYONLY";
         PreparedStatement statement = conn5.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
@@ -88,18 +78,16 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertEquals(3, rs.getInt(1));
         assertEquals(4, rs.getInt(2));
         assertFalse(rs.next());
-        Scan scan = new Scan();
-        List<KeyRange> splits = getSplits(conn5, ts, scan);
-
+        List<KeyRange> splits = getAllSplits(conn5, "KEYONLY");
         assertEquals(3, splits.size());
         conn5.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+6));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+60));
         Connection conn6 = DriverManager.getConnection(getUrl(), props);
         conn6.createStatement().execute("ALTER TABLE KEYONLY ADD s1 varchar");
         conn6.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+7));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+70));
         Connection conn7 = DriverManager.getConnection(getUrl(), props);
         PreparedStatement stmt = conn7.prepareStatement(
                 "upsert into " +
@@ -111,11 +99,15 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         conn7.commit();
         conn7.close();
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+8));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+80));
         Connection conn8 = DriverManager.getConnection(getUrl(), props);
         analyzeTable(conn8, KEYONLY_NAME);
+        conn8.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+90));
+        Connection conn9 = DriverManager.getConnection(getUrl(), props);
         query = "SELECT i1 FROM KEYONLY";
-        statement = conn8.prepareStatement(query);
+        statement = conn9.prepareStatement(query);
         rs = statement.executeQuery();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
@@ -126,7 +118,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertFalse(rs.next());
         
         query = "SELECT i1,s1 FROM KEYONLY";
-        statement = conn8.prepareStatement(query);
+        statement = conn9.prepareStatement(query);
         rs = statement.executeQuery();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
@@ -139,7 +131,7 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         assertEquals("foo", rs.getString(2));
         assertFalse(rs.next());
 
-        conn8.close();
+        conn9.close();
     }
     
     @Test
@@ -149,9 +141,13 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         initTableValues(ts+1);
         Properties props = new Properties();
         
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+3));
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
+        analyzeTable(conn3, KEYONLY_NAME);
+        conn3.close();
+        
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
         Connection conn5 = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn5, KEYONLY_NAME);
         String query = "SELECT i1 FROM KEYONLY WHERE i1 < 2 or i1 = 3";
         PreparedStatement statement = conn5.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
@@ -180,42 +176,5 @@ public class KeyOnlyIT extends BaseClientManagedTimeIT {
         
         conn.commit();
         conn.close();
-    }
-
-    private void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
-        String query = "ANALYZE " + tableName;
-        conn.createStatement().execute(query);
-    }
-    
-    private static TableRef getTableRef(Connection conn, long ts) throws SQLException {
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        TableRef table = new TableRef(null, pconn.getMetaDataCache().getTable(
-                new PTableKey(pconn.getTenantId(), KEYONLY_NAME)), ts, false);
-        return table;
-    }
-
-    private static List<KeyRange> getSplits(Connection conn, long ts, final Scan scan) throws SQLException {
-        TableRef tableRef = getTableRef(conn, ts);
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        final List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(
-                tableRef.getTable().getPhysicalName().getBytes());
-        PhoenixStatement statement = new PhoenixStatement(pconn);
-        StatementContext context = new StatementContext(statement, null, scan, new SequenceManager(statement));
-        DefaultParallelIteratorRegionSplitter splitter = new DefaultParallelIteratorRegionSplitter(context, tableRef,
-                HintNode.EMPTY_HINT_NODE) {
-            @Override
-            protected List<HRegionLocation> getAllRegions() throws SQLException {
-                return DefaultParallelIteratorRegionSplitter.filterRegions(regions, scan.getStartRow(),
-                        scan.getStopRow());
-            }
-        };
-        List<KeyRange> keyRanges = splitter.getSplits();
-        Collections.sort(keyRanges, new Comparator<KeyRange>() {
-            @Override
-            public int compare(KeyRange o1, KeyRange o2) {
-                return Bytes.compareTo(o1.getLowerRange(), o2.getLowerRange());
-            }
-        });
-        return keyRanges;
     }
 }

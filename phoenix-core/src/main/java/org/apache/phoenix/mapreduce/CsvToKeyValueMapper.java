@@ -114,7 +114,7 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
             Entry<String,String> entry = iterator.next();
             clientInfos.setProperty(entry.getKey(), entry.getValue());
         }
-
+        
         // This statement also ensures that the driver class is loaded
         LOG.info("Connection with driver {} with url {}", PhoenixDriver.class.getName(), jdbcUrl);
 

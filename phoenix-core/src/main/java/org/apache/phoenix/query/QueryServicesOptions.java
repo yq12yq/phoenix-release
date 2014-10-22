@@ -24,7 +24,6 @@ import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
@@ -38,6 +37,7 @@ import static org.apache.phoenix.query.QueryServices.MAX_SERVER_CACHE_TIME_TO_LI
 import static org.apache.phoenix.query.QueryServices.MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_TENANT_MEMORY_PERC_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
@@ -47,8 +47,10 @@ import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SCAN_RESULT_CHUNK_SIZE;
 import static org.apache.phoenix.query.QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SPOOL_DIRECTORY;
 import static org.apache.phoenix.query.QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
@@ -57,8 +59,8 @@ import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -84,8 +86,6 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
     public static final int DEFAULT_MAX_QUERY_CONCURRENCY = 64;
     public static final String DEFAULT_DATE_FORMAT = DateUtil.DEFAULT_DATE_FORMAT;
-    public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
-    public static final int DEFAULT_MAX_STATS_AGE_MS = 24 * 60 * 60000; // 1 day
     public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true; 
     public static final int DEFAULT_MAX_MUTATION_SIZE = 500000;
     public static final boolean DEFAULT_ROW_KEY_ORDER_SALTED_TABLE = true; // Merge sort on client to ensure salted tables are row key ordered
@@ -144,10 +144,16 @@ public class QueryServicesOptions {
     public static final String DEFAULT_TRACING_STATS_TABLE_NAME = "SYSTEM.TRACING_STATS";
     public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
     public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
-    public static final long DEFAULT_HISTOGRAM_BYTE_DEPTH = 1024 * 1024 * 30;
-    
-    
+
+    public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
+    public static final int DEFAULT_GUIDE_POSTS_PER_REGION = 20;
+
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
+    
+    /**
+     * Use only first time SYSTEM.SEQUENCE table is created.
+     */
+    public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = SaltingUtil.MAX_BUCKET_NUM;
 
     private final Configuration config;
 
@@ -156,12 +162,6 @@ public class QueryServicesOptions {
     }
     
     public ReadOnlyProps getProps(ReadOnlyProps defaultProps) {
-        // Ensure that HBase RPC time out value is at least as large as our thread time out for query. 
-        int threadTimeOutMS = config.getInt(THREAD_TIMEOUT_MS_ATTRIB, DEFAULT_THREAD_TIMEOUT_MS);
-        int hbaseRPCTimeOut = config.getInt(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT);
-        if (threadTimeOutMS > hbaseRPCTimeOut) {
-            config.setInt(HConstants.HBASE_RPC_TIMEOUT_KEY, threadTimeOutMS);
-        }
         return new ReadOnlyProps(defaultProps, config.iterator());
     }
     
@@ -201,7 +201,6 @@ public class QueryServicesOptions {
             .setIfUnset(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES)
             .setIfUnset(SEQUENCE_CACHE_SIZE_ATTRIB, DEFAULT_SEQUENCE_CACHE_SIZE)
             .setIfUnset(SCAN_RESULT_CHUNK_SIZE, DEFAULT_SCAN_RESULT_CHUNK_SIZE)
-            .setIfUnset(HISTOGRAM_BYTE_DEPTH_ATTRIB, DEFAULT_HISTOGRAM_BYTE_DEPTH);
             ;
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -296,10 +295,6 @@ public class QueryServicesOptions {
         return set(DATE_FORMAT_ATTRIB, dateFormat);
     }
     
-    public QueryServicesOptions setStatsUpdateFrequencyMs(int frequencyMs) {
-        return set(STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
-    }
-       
     public QueryServicesOptions setCallQueueRoundRobin(boolean isRoundRobin) {
         return set(CALL_QUEUE_PRODUCER_ATTRIB_NAME, isRoundRobin);
     }
@@ -437,7 +432,21 @@ public class QueryServicesOptions {
         return set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, walEditCodec);
     }
 
-    public QueryServicesOptions setHistogramByteDepth(long byteDepth) {
-        return set(HISTOGRAM_BYTE_DEPTH_ATTRIB, byteDepth);
+    public QueryServicesOptions setStatsHistogramDepthBytes(long byteDepth) {
+        return set(STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, byteDepth);
     }
+
+    public QueryServicesOptions setStatsUpdateFrequencyMs(int frequencyMs) {
+        return set(STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
+    }
+    
+    public QueryServicesOptions setMinStatsUpdateFrequencyMs(int frequencyMs) {
+        return set(MIN_STATS_UPDATE_FREQ_MS_ATTRIB, frequencyMs);
+    }    
+    
+    public QueryServicesOptions setSequenceSaltBuckets(int saltBuckets) {
+        config.setInt(SEQUENCE_SALT_BUCKETS_ATTRIB, saltBuckets);
+        return this;
+    }
+    
 }

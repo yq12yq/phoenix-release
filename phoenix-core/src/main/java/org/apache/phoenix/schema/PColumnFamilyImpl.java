@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -35,7 +34,6 @@ public class PColumnFamilyImpl implements PColumnFamily {
     private final Map<String, PColumn> columnByString;
     private final Map<byte[], PColumn> columnByBytes;
     private final int estimatedSize;
-    private List<byte[]> guidePosts = Collections.emptyList();
 
     @Override
     public int getEstimatedSize() {
@@ -43,23 +41,10 @@ public class PColumnFamilyImpl implements PColumnFamily {
     }
     
     public PColumnFamilyImpl(PName name, List<PColumn> columns) {
-       this(name, columns, null);
-    }
-    
-    public PColumnFamilyImpl(PName name, List<PColumn> columns, List<byte[]> guidePosts) {
         Preconditions.checkNotNull(name);
         // Include guidePosts also in estimating the size
-        int guidePostsSize = 0;
-        if(guidePosts != null) {
-            guidePostsSize = guidePosts.size();
-            for(byte[] gps : guidePosts) {
-                guidePostsSize += gps.length;
-            }
-            Collections.sort(guidePosts, Bytes.BYTES_COMPARATOR);
-            this.guidePosts = guidePosts;
-        }
         long estimatedSize = SizedUtil.OBJECT_SIZE + SizedUtil.POINTER_SIZE * 5 + SizedUtil.INT_SIZE + name.getEstimatedSize() +
-                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size()) + SizedUtil.sizeOfArrayList(guidePostsSize);
+                SizedUtil.sizeOfMap(columns.size()) * 2 + SizedUtil.sizeOfArrayList(columns.size());
         this.name = name;
         this.columns = ImmutableList.copyOf(columns);
         ImmutableMap.Builder<String, PColumn> columnByStringBuilder = ImmutableMap.builder();
@@ -100,10 +85,5 @@ public class PColumnFamilyImpl implements PColumnFamily {
             throw new ColumnNotFoundException(name);
         }
         return column;
-    }
-
-    @Override
-    public List<byte[]> getGuidePosts() {
-        return guidePosts;
     }
 }

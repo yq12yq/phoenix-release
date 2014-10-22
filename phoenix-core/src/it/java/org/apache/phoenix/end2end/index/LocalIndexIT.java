@@ -162,7 +162,7 @@ public class LocalIndexIT extends BaseIndexIT {
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME);
+                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
     
@@ -686,10 +686,11 @@ public class LocalIndexIT extends BaseIndexIT {
                 query = "SELECT t_id,k1,k3 FROM " + DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
                 assertEquals(
-                    "CLIENT PARALLEL " + (4+i) + "-WAY RANGE SCAN OVER "
-                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME)+" [-32767]\n"+
-                            "CLIENT MERGE SORT",
-                    QueryUtil.getExplainPlan(rs));
+                    "CLIENT PARALLEL "
+                            + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
+                            + "-WAY RANGE SCAN OVER "
+                            + MetaDataUtil.getLocalIndexTableName(DATA_TABLE_NAME) + " [-32767]\n"
+                            + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 for (int j = 0; j < 26; j++) {

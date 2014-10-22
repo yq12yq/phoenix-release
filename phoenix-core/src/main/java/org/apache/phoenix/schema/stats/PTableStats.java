@@ -15,10 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
-import java.util.List;
-import java.util.TreeMap;
+import java.util.SortedMap;
+
+import com.google.common.collect.ImmutableSortedMap;
 
 
 /*
@@ -26,10 +27,24 @@ import java.util.TreeMap;
  * statistics object.
  */
 public interface PTableStats {
+    public static final PTableStats EMPTY_STATS = new PTableStats() {
+        @Override
+        public SortedMap<byte[], GuidePostsInfo> getGuidePosts() {
+            return ImmutableSortedMap.of();
+        }
+
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
+    };
+
     /**
+     * TODO: Change from TreeMap to Map
      * Returns a tree map of the guide posts collected against a column family
      * @return
      */
-    TreeMap<byte[], List<byte[]>> getGuidePosts();
+    SortedMap<byte[], GuidePostsInfo> getGuidePosts();
 
+    int getEstimatedSize();
 }

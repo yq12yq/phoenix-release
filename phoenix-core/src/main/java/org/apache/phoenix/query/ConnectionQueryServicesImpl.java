@@ -32,6 +32,8 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -50,6 +52,7 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
+import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
@@ -75,8 +78,6 @@ import org.apache.phoenix.coprocessor.ServerCachingEndpointImpl;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.AddColumnRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableRequest;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheForTableResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
@@ -85,6 +86,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.DropTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampRequest;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos.IncrementTableTimeStampResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
@@ -98,6 +101,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnsIndexBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -106,7 +110,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
-import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -124,10 +127,12 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.stat.StatisticsCollector;
+import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -135,10 +140,13 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -150,12 +158,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
+    // Max number of cached table stats for view or shared index physical tables
+    private static final int MAX_TABLE_STATS_CACHE_ENTRIES = 512;
     protected final Configuration config;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
+    private final Cache<ImmutableBytesPtr, PTableStats> tableStatsCache;
     
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -172,6 +183,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private HConnection connection;
     private volatile boolean initialized;
+    private volatile int nSequenceSaltBuckets;
     
     // writes guarded by "this"
     private volatile boolean closed;
@@ -200,14 +212,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         for (Entry<String,String> entry : services.getProps()) {
             config.set(entry.getKey(), entry.getValue());
         }
+        if (info != null) {
+            for (Object key : info.keySet()) {
+                config.set((String) key, info.getProperty((String) key));
+            }
+        }
         for (Entry<String,String> entry : connectionInfo.asProps()) {
             config.set(entry.getKey(), entry.getValue());
         }
-        if(info != null) {
-            for(Object key : info.keySet()){
-                config.set((String)key, info.getProperty((String)key));
-            }
-        }
+
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
         this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
@@ -222,6 +235,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
+        long halfStatsUpdateFreq = config.getLong(
+                QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2;
+        tableStatsCache = CacheBuilder.newBuilder()
+                .maximumSize(MAX_TABLE_STATS_CACHE_ENTRIES)
+                .expireAfterWrite(halfStatsUpdateFreq, TimeUnit.MILLISECONDS)
+                .build();
     }
     
     private void openConnection() throws SQLException {
@@ -320,6 +340,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                 } finally {
                     try {
+                        tableStatsCache.invalidateAll();
                         super.close();
                     } catch (SQLException e) {
                         if (sqlE == null) {
@@ -602,12 +623,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
             }
             // TODO: better encapsulation for this
-            // Since indexes can't have indexes, don't install our indexing coprocessor for indexes. Also,
-            // don't install on the metadata table until we fix the TODO there.
-            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) && !SchemaUtil.isMetaTable(tableName) && !descriptor.hasCoprocessor(Indexer.class.getName())) {
+            // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
+            // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
+            // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
+            if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW) 
+                    && !SchemaUtil.isMetaTable(tableName)
+                    && !SchemaUtil.isStatsTable(tableName) 
+                    && !descriptor.hasCoprocessor(Indexer.class.getName())) {
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                 Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
+            }
+            if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
+                descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
+                        null, 1, null);
             }
             
             if (descriptor.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null
@@ -742,12 +771,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, tableType , props, families, splits);
             
             if (!tableExist) {
-                /*
-                 * Remove the splitPolicy attribute due to an HBase bug (see below)
-                 */
-                if (isMetaTable) {
-                    newDesc.remove(HTableDescriptor.SPLIT_POLICY);
-                }
                 if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
                 }
@@ -764,31 +787,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (isMetaTable) {
                     checkClientServerCompatibility();
-                    /*
-                     * Now we modify the table to add the split policy, since we know that the client and
-                     * server and compatible. This works around a nasty, known HBase bug where if a split
-                     * policy class cannot be found on the server, the HBase table is left in a horrible
-                     * "ghost" state where it can't be used and can't be deleted without bouncing the master. 
-                     */
-                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    admin.disableTable(tableName);
-                    admin.modifyTable(tableName, newDesc);
-                    admin.enableTable(tableName);
                 }
                 return null;
             } else {
-                if (!modifyExistingMetaData || existingDesc.equals(newDesc)) {
-                    // Table is already created. Note that the presplits are ignored in this case
-                    if (isMetaTable) {
-                        checkClientServerCompatibility();
-                    }
-                    return existingDesc;
-                }
-
                 if (isMetaTable) {
                     checkClientServerCompatibility();
                 }
                          
+                if (!modifyExistingMetaData || existingDesc.equals(newDesc)) {
+                    return existingDesc;
+                }
+
                 // TODO: Take advantage of online schema change ability by setting "hbase.online.schema.update.enable" to true
                 admin.disableTable(tableName);
                 admin.modifyTable(tableName, newDesc);
@@ -1014,6 +1023,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
+                    this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
@@ -1048,6 +1058,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
@@ -1214,17 +1225,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (dropMetadata) {
                 dropTables(result.getTableNamesToDelete());
             }
+            invalidateTables(result.getTableNamesToDelete());
             if (tableType == PTableType.TABLE) {
-                byte[] physicalTableName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+                byte[] physicalName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
                 long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
-                ensureViewIndexTableDropped(physicalTableName, timestamp);
-                ensureLocalIndexTableDropped(physicalTableName, timestamp);
+                ensureViewIndexTableDropped(physicalName, timestamp);
+                ensureLocalIndexTableDropped(physicalName, timestamp);
+                tableStatsCache.invalidate(new ImmutableBytesPtr(physicalName));
             }
             break;
         default:
             break;
         }
           return result;
+    }
+    
+    private void invalidateTables(final List<byte[]> tableNamesToDelete) {
+        if (tableNamesToDelete != null) {
+            for ( byte[] tableName : tableNamesToDelete ) {
+                tableStatsCache.invalidate(new ImmutableBytesPtr(tableName));
+            }
+        }
     }
     
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
@@ -1429,6 +1450,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (dropMetadata) {
                 dropTables(result.getTableNamesToDelete());
             }
+            invalidateTables(result.getTableNamesToDelete());
             break;
         default:
             break;
@@ -1498,42 +1520,38 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     PhoenixRuntime.CURRENT_SCN_ATTRIB,
                                     Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                            String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             metaConnection = new PhoenixConnection(
-                                    ConnectionQueryServicesImpl.this, url, scnProps, newEmptyMetaData());
+                                    ConnectionQueryServicesImpl.this, globalUrl, scnProps, newEmptyMetaData());
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
                                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
-                                // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
-                                // any new columns we've added.
-                                metaConnection = addColumnsIfNotExists(metaConnection, 
-                                  PhoenixDatabaseMetaData.SYSTEM_CATALOG, 
-                                  MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, 
-                                  PhoenixDatabaseMetaData.INDEX_TYPE + " " + PDataType.UNSIGNED_TINYINT.getSqlTypeName() + 
-                                  ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PDataType.LONG.getSqlTypeName());
                             }
+                            int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
                             try {
-                                metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SEQUENCE_METADATA);
-                                
-                                // TODO : Get this from a configuration
-                                metaConnection.createStatement().executeUpdate(
-                                        QueryConstants.CREATE_STATS_TABLE_METADATA);
-                            } catch (NewerTableAlreadyExistsException ignore) {
+                                String createSequenceTable = Sequence.getCreateTableStatement(nSaltBuckets);
+                                metaConnection.createStatement().executeUpdate(createSequenceTable);
+                                nSequenceSaltBuckets = nSaltBuckets;
+                            } catch (NewerTableAlreadyExistsException e) {
                                 // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
-
-                            } catch (TableAlreadyExistsException ignore) {
+                                Integer sequenceSaltBuckets = e.getTable().getBucketNum();
+                                nSequenceSaltBuckets = sequenceSaltBuckets == null ? 0 : sequenceSaltBuckets;
+                            } catch (TableAlreadyExistsException e) {
                                 // This will occur if we have an older SYSTEM.SEQUENCE, so we need to update it to include
                                 // any new columns we've added.
-                                String newColumns = PhoenixDatabaseMetaData.MIN_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", "
-                                        + PhoenixDatabaseMetaData.MAX_VALUE + " " + PDataType.LONG.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.CYCLE_FLAG + " "
-                                        + PDataType.BOOLEAN.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " "
-                                        + PDataType.BOOLEAN.getSqlTypeName();
-                                metaConnection = addColumnsIfNotExists(metaConnection,
-                                        PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
-                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP, newColumns);
+                                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets)) {
+                                    metaConnection.removeTable(null,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                                            PhoenixDatabaseMetaData.TYPE_SEQUENCE,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+                                    clearCache();
+                                }
+                                nSequenceSaltBuckets = nSaltBuckets;
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
@@ -1598,6 +1616,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * Clears the Phoenix meta data cache on each region server
      * @throws SQLException
      */
+    @Override
     public void clearCache() throws SQLException {
         try {
             SQLException sqlE = null;
@@ -1624,6 +1643,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
+                    tableStatsCache.invalidateAll();
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
@@ -1695,7 +1715,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public long createSequence(String tenantId, String schemaName, String sequenceName,
             long startWith, long incrementBy, long cacheSize, long minValue, long maxValue,
             boolean cycle, long timestamp) throws SQLException {
-        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName, nSequenceSaltBuckets);
         Sequence newSequences = new Sequence(sequenceKey);
         Sequence sequence = sequenceMap.putIfAbsent(sequenceKey, newSequences);
         if (sequence == null) {
@@ -1706,7 +1726,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Now that we have the lock we need, create the sequence
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
             HTableInterface htable =
-                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             try {
                 Result result = htable.append(append);
                 return sequence.createSequence(result, minValue, maxValue, cycle);
@@ -1722,7 +1742,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public long dropSequence(String tenantId, String schemaName, String sequenceName, long timestamp) throws SQLException {
-        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName);
+        SequenceKey sequenceKey = new SequenceKey(tenantId, schemaName, sequenceName, nSequenceSaltBuckets);
         Sequence newSequences = new Sequence(sequenceKey);
         Sequence sequence = sequenceMap.putIfAbsent(sequenceKey, newSequences);
         if (sequence == null) {
@@ -1732,7 +1752,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.dropSequence(timestamp);
-            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             try {
                 Result result = htable.append(append);
                 return sequence.dropSequence(result);
@@ -1777,7 +1797,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public void validateSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions, Sequence.ValueOp action) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 0, action);
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, action);
     }
     
     /**
@@ -1793,11 +1813,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public void incrementSequences(List<SequenceKey> sequenceKeys, long timestamp, long[] values, SQLException[] exceptions) throws SQLException {
-        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, 1, Sequence.ValueOp.RESERVE_SEQUENCE);
+        incrementSequenceValues(sequenceKeys, timestamp, values, exceptions, Sequence.ValueOp.INCREMENT_SEQUENCE);
     }
 
     @SuppressWarnings("deprecation")
-    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, int factor, Sequence.ValueOp action) throws SQLException {
+    private void incrementSequenceValues(List<SequenceKey> keys, long timestamp, long[] values, SQLException[] exceptions, Sequence.ValueOp op) throws SQLException {
         List<Sequence> sequences = Lists.newArrayListWithExpectedSize(keys.size());
         for (SequenceKey key : keys) {
             Sequence newSequences = new Sequence(key);
@@ -1818,11 +1838,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (int i = 0; i < sequences.size(); i++) {
                 Sequence sequence = sequences.get(i);
                 try {
-                    values[i] = sequence.incrementValue(timestamp, factor, action);
+                    values[i] = sequence.incrementValue(timestamp, op);
                 } catch (EmptySequenceCacheException e) {
                     indexes[toIncrementList.size()] = i;
                     toIncrementList.add(sequence);
-                    Increment inc = sequence.newIncrement(timestamp, action);
+                    Increment inc = sequence.newIncrement(timestamp, op);
                     incrementBatch.add(inc);
                 } catch (SQLException e) {
                     exceptions[i] = e;
@@ -1831,7 +1851,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toIncrementList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -1859,7 +1879,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 Sequence sequence = toIncrementList.get(i);
                 Result result = (Result)resultObjects[i];
                 try {
-                    values[indexes[i]] = sequence.incrementValue(result, factor);
+                    values[indexes[i]] = sequence.incrementValue(result, op);
                 } catch (SQLException e) {
                     exceptions[indexes[i]] = e;
                 }
@@ -1872,7 +1892,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
    
     @Override
-    public void clearCacheForTable(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
+    public void incrementTableTimeStamp(final byte[] tenantId, final byte[] schemaName, final byte[] tableName,
             final long clientTS) throws SQLException {
         // clear the meta data cache for the table here
         try {
@@ -1880,17 +1900,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
             try {
                 htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
-                        new Batch.Call<MetaDataService, ClearCacheForTableResponse>() {
+                        new Batch.Call<MetaDataService, IncrementTableTimeStampResponse>() {
                             @Override
-                            public ClearCacheForTableResponse call(MetaDataService instance) throws IOException {
+                            public IncrementTableTimeStampResponse call(MetaDataService instance) throws IOException {
                                 ServerRpcController controller = new ServerRpcController();
-                                BlockingRpcCallback<ClearCacheForTableResponse> rpcCallback = new BlockingRpcCallback<ClearCacheForTableResponse>();
-                                ClearCacheForTableRequest.Builder builder = ClearCacheForTableRequest.newBuilder();
+                                BlockingRpcCallback<IncrementTableTimeStampResponse> rpcCallback = new BlockingRpcCallback<IncrementTableTimeStampResponse>();
+                                IncrementTableTimeStampRequest.Builder builder = IncrementTableTimeStampRequest.newBuilder();
                                 builder.setTenantId(HBaseZeroCopyByteString.wrap(tenantId));
                                 builder.setTableName(HBaseZeroCopyByteString.wrap(tableName));
                                 builder.setSchemaName(HBaseZeroCopyByteString.wrap(schemaName));
                                 builder.setClientTimestamp(clientTS);
-                                instance.clearCacheForTable(controller, builder.build(), rpcCallback);
+                                instance.incrementTableTimeStamp(controller, builder.build(), rpcCallback);
                                 if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
                                 return rpcCallback.get();
                             }
@@ -1901,6 +1921,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
+                    if (tenantId.length == 0) tableStatsCache.invalidate(new ImmutableBytesPtr(SchemaUtil.getTableNameAsBytes(schemaName, tableName)));
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
@@ -1949,7 +1970,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toReturnList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -2000,7 +2021,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (mutations.isEmpty()) {
             return;
         }
-        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES);
+        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
         SQLException sqlE = null;
         try {
             hTable.batch(mutations);
@@ -2084,4 +2105,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         throw new IllegalStateException("Connection to the cluster is closed");
     }
     
+    @Override
+    public PTableStats getTableStats(final byte[] physicalName, final long clientTimeStamp) throws SQLException {
+        try {
+            return tableStatsCache.get(new ImmutableBytesPtr(physicalName), new Callable<PTableStats>() {
+                @Override
+                public PTableStats call() throws Exception {
+                    /*
+                     *  The shared view index case is tricky, because we don't have
+                     *  table metadata for it, only an HBase table. We do have stats,
+                     *  though, so we'll query them directly here and cache them so
+                     *  we don't keep querying for them.
+                     */
+                    HTableInterface statsHTable = ConnectionQueryServicesImpl.this.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
+                    try {
+                        return StatisticsUtil.readStatistics(statsHTable, physicalName, clientTimeStamp);
+                    } catch (IOException e) {
+                        logger.warn("Unable to read from stats table", e);
+                        // Just cache empty stats. We'll try again after some time anyway.
+                        return PTableStats.EMPTY_STATS;
+                    } finally {
+                        try {
+                            statsHTable.close();
+                        } catch (IOException e) {
+                            // Log, but continue. We have our stats anyway now.
+                            logger.warn("Unable to close stats table", e);
+                        }
+                    }
+                }
+                
+            });
+        } catch (ExecutionException e) {
+            throw ServerUtil.parseServerException(e);
+        }
+    }
+    
+    @Override
+    public int getSequenceSaltBuckets() {
+        return nSequenceSaltBuckets;
+    }
 }

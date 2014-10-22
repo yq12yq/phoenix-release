@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.schema.stats.PTableStats;
 
 
 /**
@@ -123,7 +124,11 @@ public interface PTable {
         /**
          * Link from a view to its physical table
          */
-        PHYSICAL_TABLE((byte)2);
+        PHYSICAL_TABLE((byte)2),
+        /**
+         * Link from a view to its parent table
+         */
+        PARENT_TABLE((byte)3);
 
         private final byte[] byteValue;
         private final byte serializedValue;
@@ -251,13 +256,6 @@ public interface PTable {
      */
     int newKey(ImmutableBytesWritable key, byte[][] values);
 
-    /**
-     * Return the statistics table associated with this PTable. A list of 
-     * guide posts are return 
-     * @return the statistics table.
-     */
-    List<byte[]> getGuidePosts();
-
     RowKeySchema getRowKeySchema();
 
     /**
@@ -291,6 +289,12 @@ public interface PTable {
      * on or null if not an index.
      */
     PName getParentTableName();
+    /**
+     * Gets the schema name of the data table for an index table.
+     * @return the schema name of the data table that this index is
+     * on or null if not an index.
+     */
+    PName getParentSchemaName();
     
     /**
      * For a view, return the name of table in Phoenix that physically stores data.
@@ -316,5 +320,5 @@ public interface PTable {
     
     int getEstimatedSize();
     IndexType getIndexType();
-    
+    PTableStats getTableStats();
 }

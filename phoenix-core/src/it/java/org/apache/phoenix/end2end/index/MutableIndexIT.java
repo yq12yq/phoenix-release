@@ -34,10 +34,16 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -62,6 +68,50 @@ public class MutableIndexIT extends BaseMutableIndexIT {
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
+    @Test
+    public void testIndexCreateWithoutOptions()  throws Exception {
+        createIndexOnTableWithSpecifiedDefaultCF(false);
+    }
+    
+    @Test
+    public void testIndexCreateWithOptions()  throws Exception {
+        createIndexOnTableWithSpecifiedDefaultCF(true);
+    }
+    
+    private void createIndexOnTableWithSpecifiedDefaultCF(boolean hasOptions) throws Exception {
+        String query;
+        ResultSet rs;
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(
+                "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) DEFAULT_COLUMN_FAMILY='A'");
+        query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+
+        String options = hasOptions ? "SALT_BUCKETS=10, MULTI_TENANT=true, IMMUTABLE_ROWS=true, DISABLE_WAL=true" : "";
+        conn.createStatement().execute(
+                "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2) " + options);
+        query = "SELECT * FROM " + INDEX_TABLE_FULL_NAME;
+        rs = conn.createStatement().executeQuery(query);
+        assertFalse(rs.next());
+        
+        //check options set correctly on index
+        TableName indexName = TableName.create(SCHEMA_NAME, INDEX_TABLE_NAME);
+        NamedTableNode indexNode = NamedTableNode.create(null, indexName, null);
+        ColumnResolver resolver = FromCompiler.getResolver(indexNode, conn.unwrap(PhoenixConnection.class));
+        PTable indexTable = resolver.getTables().get(0).getTable();
+        // Can't set IMMUTABLE_ROWS, MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
+        assertNull(indexTable.getDefaultFamilyName());
+        assertFalse(indexTable.isMultiTenant());
+        assertFalse(indexTable.isImmutableRows());
+        if(hasOptions) {
+            assertEquals(10, indexTable.getBucketNum().intValue());
+            assertTrue(indexTable.isWALDisabled());
+        }
     }
 
     @Test
@@ -1199,4 +1249,85 @@ public class MutableIndexIT extends BaseMutableIndexIT {
     	}
     }
 
+    @Test
+    public void testSkipScanFilterWhenTableHasMultipleColumnFamilies() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            createTestTable();
+            populateTestTable();
+            String upsert = "UPSERT INTO " + DATA_TABLE_FULL_NAME
+                    + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "varchar4");
+            stmt.setString(2, "char1");
+            stmt.setInt(3, 1);
+            stmt.setLong(4, 1L);
+            stmt.setBigDecimal(5, new BigDecimal("1.1"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 2);
+            stmt.setLong(9, 2L);
+            stmt.setBigDecimal(10, new BigDecimal("2.1"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 3);
+            stmt.setLong(14, 3L);
+            stmt.setBigDecimal(15, new BigDecimal("3.1"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar5");
+            stmt.setString(2, "char2");
+            stmt.setInt(3, 2);
+            stmt.setLong(4, 2L);
+            stmt.setBigDecimal(5, new BigDecimal("2.2"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 3);
+            stmt.setLong(9, 3L);
+            stmt.setBigDecimal(10, new BigDecimal("3.2"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 4);
+            stmt.setLong(14, 4L);
+            stmt.setBigDecimal(15, new BigDecimal("4.2"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            
+            stmt.setString(1, "varchar6");
+            stmt.setString(2, "char3");
+            stmt.setInt(3, 3);
+            stmt.setLong(4, 3L);
+            stmt.setBigDecimal(5, new BigDecimal("3.3"));
+            stmt.setString(6, "varchar_a");
+            stmt.setString(7, "chara");
+            stmt.setInt(8, 4);
+            stmt.setLong(9, 4L);
+            stmt.setBigDecimal(10, new BigDecimal("4.3"));
+            stmt.setString(11, "varchar_b");
+            stmt.setString(12, "charb");
+            stmt.setInt(13, 5);
+            stmt.setLong(14, 5L);
+            stmt.setBigDecimal(15, new BigDecimal("5.3"));
+            stmt.setDate(16, null);
+            stmt.executeUpdate();
+            conn.commit();
+            String query = "SELECT char_col1, int_col1, long_col2 from " + DATA_TABLE_FULL_NAME + " where varchar_pk in ('varchar3','varchar6')";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals(5L, rs.getLong(3));
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertEquals(5L, rs.getLong(3));
+            assertFalse(rs.next());
+            
+        } finally {
+            conn.close();
+        }
+    }
 }

@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -61,7 +62,11 @@ public interface QueryPlan extends StatementPlan {
 
     List<KeyRange> getSplits();
 
+    List<List<Scan>> getScans();
+
     FilterableStatement getStatement();
 
     public boolean isDegenerate();
+    
+    public boolean isRowKeyOrdered();
 }

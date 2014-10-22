@@ -42,6 +42,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -73,6 +74,7 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDataType;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
@@ -85,6 +87,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -174,9 +177,11 @@ public class UpsertCompiler {
         private RowProjector projector;
         private int[] columnIndexes;
         private int[] pkSlotIndexes;
+        private final TableRef tableRef;
 
         private UpsertingParallelIteratorFactory (PhoenixConnection connection, TableRef tableRef) {
-            super(connection, tableRef);
+            super(connection);
+            this.tableRef = tableRef;
         }
 
         @Override
@@ -217,7 +222,7 @@ public class UpsertCompiler {
         List<PColumn> allColumnsToBe = Collections.emptyList();
         boolean isTenantSpecific = false;
         boolean isSharedViewIndex = false;
-        String tenantId = null;
+        String tenantIdStr = null;
         ColumnResolver resolver = null;
         int[] columnIndexesToBe;
         int nColumnsToSet = 0;
@@ -249,7 +254,7 @@ public class UpsertCompiler {
                 boolean isSalted = table.getBucketNum() != null;
                 isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
                 isSharedViewIndex = table.getViewIndexId() != null;
-                tenantId = isTenantSpecific ? connection.getTenantId().getString() : null;
+                tenantIdStr = isTenantSpecific ? connection.getTenantId().getString() : null;
                 int posOffset = isSalted ? 1 : 0;
                 // Setup array of column indexes parallel to values that are going to be set
                 allColumnsToBe = table.getColumns();
@@ -370,9 +375,15 @@ public class UpsertCompiler {
                     select = SubselectRewriter.flatten(select, connection);
                     ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
                     select = StatementNormalizer.normalize(select, selectResolver);
-                    select = prependTenantAndViewConstants(table, select, tenantId, addViewColumnsToBe);
+                    select = prependTenantAndViewConstants(table, select, tenantIdStr, addViewColumnsToBe);
+                    SelectStatement transformedSelect = SubqueryRewriter.transform(select, selectResolver, connection);
+                    if (transformedSelect != select) {
+                        selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
+                        select = StatementNormalizer.normalize(transformedSelect, selectResolver);
+                    }
                     sameTable = select.getFrom().size() == 1
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
+                    tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
                     /* We can run the upsert in a coprocessor if:
                      * 1) from has only 1 table and the into table matches from table
                      * 2) the select query isn't doing aggregation (which requires a client-side final merge)
@@ -511,7 +522,7 @@ public class UpsertCompiler {
                         }
                         // Add literal null for missing PK columns
                         pos = projectedExpressions.size();
-                        Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), true);
+                        Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), Determinism.ALWAYS);
                         projectedExpressions.add(literalNull);
                         allColumnsIndexes[pos] = column.getPosition();
                     } 
@@ -686,6 +697,8 @@ public class UpsertCompiler {
         // initialze values with constant byte values first
         final byte[][] values = new byte[nValuesToSet][];
         if (isTenantSpecific) {
+            PName tenantId = connection.getTenantId();
+            tenantId = ScanUtil.padTenantIdIfNecessary(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
             values[nodeIndex++] = connection.getTenantId().getBytes();
         }
         if (isSharedViewIndex) {
@@ -796,6 +809,24 @@ public class UpsertCompiler {
         };
     }
     
+    private TableRef adjustTimestampToMinOfSameTable(TableRef upsertRef, List<TableRef> selectRefs) {
+        long minTimestamp = Long.MAX_VALUE;
+        for (TableRef selectRef : selectRefs) {
+            if (selectRef.equals(upsertRef)) {
+                minTimestamp = Math.min(minTimestamp, selectRef.getTimeStamp());
+            }
+        }
+        if (minTimestamp != Long.MAX_VALUE) {
+            // If we found the same table is selected from that is being upserted to,
+            // reset the timestamp of the upsert (which controls the Put timestamp)
+            // to the lowest timestamp we found to ensure that the data being selected
+            // will not see the data being upserted. This prevents infinite loops
+            // like the one in PHOENIX-1257.
+            return new TableRef(upsertRef, minTimestamp);
+        }
+        return upsertRef;
+    }
+
     private static final class UpsertValuesCompiler extends ExpressionCompiler {
         private PColumn column;
         
@@ -812,7 +843,7 @@ public class UpsertCompiler {
             if (isTopLevel()) {
                 context.getBindManager().addParamMetaData(node, column);
                 Object value = context.getBindManager().getBindValue(node);
-                return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(), true);
+                return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(), Determinism.ALWAYS);
             }
             return super.visit(node);
         }    
@@ -820,7 +851,7 @@ public class UpsertCompiler {
         @Override
         public Expression visit(LiteralParseNode node) throws SQLException {
             if (isTopLevel()) {
-                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getSortOrder(), true);
+                return LiteralExpression.newConstant(node.getValue(), column.getDataType(), column.getSortOrder(), Determinism.ALWAYS);
             }
             return super.visit(node);
         }

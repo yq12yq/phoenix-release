@@ -38,6 +38,7 @@ import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.HashJoinPlan.HashSubPlan;
 import org.apache.phoenix.execute.HashJoinPlan.WhereClauseSubPlan;
 import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -157,8 +158,7 @@ public class QueryCompiler {
             QueryPlan plan = compileSubquery(subquery);
             ProjectedPTableWrapper projectedTable = table.createProjectedTable(plan.getProjector());
             context.setResolver(projectedTable.createColumnResolver());
-            context.setClientTupleProjector(projectedTable.createTupleProjector());
-            return plan;
+            return new TupleProjectionPlan(plan, projectedTable.createTupleProjector(), table.compilePostFilterExpression(context));
         }
         
         boolean[] starJoinVector = joinTable.getStarJoinVector();
@@ -197,7 +197,6 @@ public class QueryCompiler {
                 StatementContext subContext = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
                 QueryPlan joinPlan = compileJoinQuery(subContext, binds, joinSpec.getJoinTable(), true);
                 ColumnResolver resolver = subContext.getResolver();
-                TupleProjector clientProjector = subContext.getClientTupleProjector();
                 boolean hasPostReference = joinSpec.getJoinTable().hasPostReference();
                 if (hasPostReference) {
                     PTableWrapper subProjTable = ((JoinedTableColumnResolver) (resolver)).getPTableWrapper();
@@ -215,15 +214,17 @@ public class QueryCompiler {
                 Pair<List<Expression>, List<Expression>> joinConditions = joinSpec.compileJoinConditions(context, leftResolver, resolver);
                 joinExpressions[i] = joinConditions.getFirst();
                 List<Expression> hashExpressions = joinConditions.getSecond();
-                Pair<Expression, Expression> keyRangeExpressions = getKeyExpressionCombinations(context, tableRef, joinSpec.getType(), joinExpressions[i], hashExpressions);
+                Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
+                boolean complete = getKeyExpressionCombinations(keyRangeExpressions, context, tableRef, joinSpec.getType(), joinExpressions[i], hashExpressions);
                 Expression keyRangeLhsExpression = keyRangeExpressions.getFirst();
                 Expression keyRangeRhsExpression = keyRangeExpressions.getSecond();
                 boolean hasFilters = joinSpec.getJoinTable().hasFilters();
+                boolean optimized = complete && hasFilters;
                 joinTypes[i] = joinSpec.getType();
                 if (i < count - 1) {
                     fieldPositions[i + 1] = fieldPositions[i] + (tables[i] == null ? 0 : (tables[i].getColumns().size() - tables[i].getPKColumns().size()));
                 }
-                subPlans[i] = new HashSubPlan(i, joinPlan, hashExpressions, keyRangeLhsExpression, keyRangeRhsExpression, clientProjector, hasFilters);
+                subPlans[i] = new HashSubPlan(i, joinPlan, optimized ? null : hashExpressions, joinSpec.isSingleValueOnly(), keyRangeLhsExpression, keyRangeRhsExpression, hasFilters);
             }
             if (needsProject) {
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), initialProjectedTable.createTupleProjector());
@@ -231,7 +232,7 @@ public class QueryCompiler {
             context.setCurrentTable(tableRef);
             context.setResolver(needsProject ? projectedTable.createColumnResolver() : joinTable.getOriginalResolver());
             QueryPlan plan = compileSingleQuery(context, query, binds, asSubquery, joinTable.isAllLeftJoin());
-            Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
+            Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, table);
             Integer limit = null;
             if (query.getLimit() != null && !query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
                 limit = LimitCompiler.compile(context, query);
@@ -256,7 +257,6 @@ public class QueryCompiler {
             StatementContext lhsCtx = new StatementContext(statement, context.getResolver(), subScan, new SequenceManager(statement));
             QueryPlan lhsPlan = compileJoinQuery(lhsCtx, binds, lhsJoin, true);
             ColumnResolver lhsResolver = lhsCtx.getResolver();
-            TupleProjector clientProjector = lhsCtx.getClientTupleProjector();
             PTableWrapper lhsProjTable = ((JoinedTableColumnResolver) (lhsResolver)).getPTableWrapper();
             ProjectedPTableWrapper rhsProjTable;
             TableRef rhsTableRef;
@@ -286,30 +286,32 @@ public class QueryCompiler {
             context.setCurrentTable(rhsTableRef);
             context.setResolver(projectedTable.createColumnResolver());
             QueryPlan rhsPlan = compileSingleQuery(context, rhs, binds, asSubquery, type == JoinType.Right);
-            Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context);
+            Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, rhsTable);
             Integer limit = null;
             if (rhs.getLimit() != null && !rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
                 limit = LimitCompiler.compile(context, rhs);
             }
             HashJoinInfo joinInfo = new HashJoinInfo(projectedTable.getTable(), joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Inner ? type : JoinType.Left}, new boolean[] {true}, new PTable[] {lhsProjTable.getTable()}, new int[] {fieldPosition}, postJoinFilterExpression, limit, forceProjection);
-            Pair<Expression, Expression> keyRangeExpressions = getKeyExpressionCombinations(context, rhsTableRef, type, joinExpressions, hashExpressions);
-            return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[] {new HashSubPlan(0, lhsPlan, hashExpressions, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond(), clientProjector, lhsJoin.hasFilters())});
+            Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
+            getKeyExpressionCombinations(keyRangeExpressions, context, rhsTableRef, type, joinExpressions, hashExpressions);
+            return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[] {new HashSubPlan(0, lhsPlan, hashExpressions, false, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond(), lhsJoin.hasFilters())});
         }
         
         // Do not support queries like "A right join B left join C" with hash-joins.
         throw new SQLFeatureNotSupportedException("Joins with pattern 'A right join B left join C' not supported.");
     }
     
-    private Pair<Expression, Expression> getKeyExpressionCombinations(StatementContext context, TableRef table, JoinType type, final List<Expression> joinExpressions, final List<Expression> hashExpressions) throws SQLException {
-        if (type != JoinType.Inner)
-            return new Pair<Expression, Expression>(null, null);
+    private boolean getKeyExpressionCombinations(Pair<Expression, Expression> combination, StatementContext context, TableRef table, JoinType type, final List<Expression> joinExpressions, final List<Expression> hashExpressions) throws SQLException {
+        if (type != JoinType.Inner && type != JoinType.Semi)
+            return false;
         
         Scan scanCopy = ScanUtil.newScan(context.getScan());
         StatementContext contextCopy = new StatementContext(statement, context.getResolver(), scanCopy, new SequenceManager(statement));
         contextCopy.setCurrentTable(table);
-        List<Expression> lhsCombination = WhereOptimizer.getKeyExpressionCombination(contextCopy, this.select, joinExpressions);
+        List<Expression> lhsCombination = Lists.<Expression> newArrayList();
+        boolean complete = WhereOptimizer.getKeyExpressionCombination(lhsCombination, contextCopy, this.select, joinExpressions);
         if (lhsCombination.isEmpty())
-            return new Pair<Expression, Expression>(null, null);
+            return false;
         
         List<Expression> rhsCombination = Lists.newArrayListWithExpectedSize(lhsCombination.size());
         for (int i = 0; i < lhsCombination.size(); i++) {
@@ -322,15 +324,26 @@ public class QueryCompiler {
             }
         }
         
-        if (lhsCombination.size() == 1)
-            return new Pair<Expression, Expression>(lhsCombination.get(0), rhsCombination.get(0));
+        if (lhsCombination.size() == 1) {
+            combination.setFirst(lhsCombination.get(0));
+            combination.setSecond(rhsCombination.get(0));
+        } else {
+            combination.setFirst(new RowValueConstructorExpression(lhsCombination, false));
+            combination.setSecond(new RowValueConstructorExpression(rhsCombination, false));
+        }
         
-        return new Pair<Expression, Expression>(new RowValueConstructorExpression(lhsCombination, false), new RowValueConstructorExpression(rhsCombination, false));
+        return type == JoinType.Semi && complete;
     }
     
     protected QueryPlan compileSubquery(SelectStatement subquery) throws SQLException {
+        subquery = SubselectRewriter.flatten(subquery, this.statement.getConnection());
         ColumnResolver resolver = FromCompiler.getResolverForQuery(subquery, this.statement.getConnection());
         subquery = StatementNormalizer.normalize(subquery, resolver);
+        SelectStatement transformedSubquery = SubqueryRewriter.transform(subquery, resolver, this.statement.getConnection());
+        if (transformedSubquery != subquery) {
+            resolver = FromCompiler.getResolverForQuery(transformedSubquery, this.statement.getConnection());
+            subquery = StatementNormalizer.normalize(transformedSubquery, resolver);
+        }
         QueryPlan plan = new QueryCompiler(this.statement, subquery, resolver).compile();
         return statement.getConnection().getQueryServices().getOptimizer().optimize(statement, plan);
     }

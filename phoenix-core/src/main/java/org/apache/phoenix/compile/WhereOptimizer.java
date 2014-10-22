@@ -37,6 +37,7 @@ import org.apache.phoenix.expression.BaseExpression.ExpressionComparabilityWrapp
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
@@ -58,10 +59,12 @@ import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -146,14 +149,30 @@ public class WhereOptimizer {
         RowKeySchema schema = table.getRowKeySchema();
         List<List<KeyRange>> cnf = Lists.newArrayListWithExpectedSize(schema.getMaxFields());
         KeyRange minMaxRange = keySlots.getMinMaxRange();
-        boolean hasMinMaxRange = (minMaxRange != null);
+        if (minMaxRange == null) {
+            minMaxRange = KeyRange.EVERYTHING_RANGE;
+        }
+        boolean hasMinMaxRange = (minMaxRange != KeyRange.EVERYTHING_RANGE);
         int minMaxRangeOffset = 0;
         byte[] minMaxRangePrefix = null;
+        boolean isSalted = nBuckets != null;
+        boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+        boolean hasViewIndex = table.getViewIndexId() != null;
+        if (hasMinMaxRange) {
+            int minMaxRangeSize = (isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0)
+                    + (isMultiTenant ? tenantId.getBytes().length + 1 : 0) 
+                    + (hasViewIndex ? MetaDataUtil.getViewIndexIdDataType().getByteSize() : 0);
+            minMaxRangePrefix = new byte[minMaxRangeSize];
+        }
         
         Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.iterator();
         // Add placeholder for salt byte ranges
-        if (nBuckets != null) {
+        if (isSalted) {
             cnf.add(SALT_PLACEHOLDER);
+            if (hasMinMaxRange) {
+	            System.arraycopy(SALT_PLACEHOLDER.get(0).getLowerRange(), 0, minMaxRangePrefix, minMaxRangeOffset, SaltingUtil.NUM_SALTING_BYTES);
+	            minMaxRangeOffset += SaltingUtil.NUM_SALTING_BYTES;
+            }
             // Increment the pkPos, as the salt column is in the row schema
             // Do not increment the iterator, though, as there will never be
             // an expression in the keySlots for the salt column
@@ -161,13 +180,13 @@ public class WhereOptimizer {
         }
         
         // Add tenant data isolation for tenant-specific tables
-        if (tenantId != null && table.isMultiTenant()) {
+        if (isMultiTenant) {
+            tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
             byte[] tenantIdBytes = tenantId.getBytes();
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
             cnf.add(singletonList(tenantIdKeyRange));
             if (hasMinMaxRange) {
-                minMaxRangePrefix = new byte[tenantIdBytes.length + MetaDataUtil.getViewIndexIdDataType().getByteSize() + 1];
-                System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, 0, tenantIdBytes.length);
+                System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, minMaxRangeOffset, tenantIdBytes.length);
                 minMaxRangeOffset += tenantIdBytes.length;
                 if (!schema.getField(pkPos).getDataType().isFixedWidth()) {
                     minMaxRangePrefix[minMaxRangeOffset] = QueryConstants.SEPARATOR_BYTE;
@@ -178,14 +197,11 @@ public class WhereOptimizer {
         }
         // Add unique index ID for shared indexes on views. This ensures
         // that different indexes don't interleave.
-        if (table.getViewIndexId() != null) {
+        if (hasViewIndex) {
             byte[] viewIndexBytes = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
             KeyRange indexIdKeyRange = KeyRange.getKeyRange(viewIndexBytes);
             cnf.add(singletonList(indexIdKeyRange));
             if (hasMinMaxRange) {
-                if (minMaxRangePrefix == null) {
-                    minMaxRangePrefix = new byte[viewIndexBytes.length];
-                }
                 System.arraycopy(viewIndexBytes, 0, minMaxRangePrefix, minMaxRangeOffset, viewIndexBytes.length);
                 minMaxRangeOffset += viewIndexBytes.length;
             }
@@ -194,7 +210,7 @@ public class WhereOptimizer {
         
         // Prepend minMaxRange with fixed column values so we can properly intersect the
         // range with the other range.
-        if (minMaxRange != null) {
+        if (hasMinMaxRange) {
             minMaxRange = minMaxRange.prependRange(minMaxRangePrefix, 0, minMaxRangeOffset);
         }
         boolean forcedSkipScan = statement.getHint().hasHint(Hint.SKIP_SCAN);
@@ -285,9 +301,9 @@ public class WhereOptimizer {
         // If we have fully qualified point keys with multi-column spans (i.e. RVC),
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
-        context.setScanRanges(
-                ScanRanges.create(schema, cnf, Arrays.copyOf(slotSpan, cnf.size()), forcedRangeScan, nBuckets),
-                minMaxRange);
+        slotSpan = Arrays.copyOf(slotSpan, cnf.size());
+        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, forcedRangeScan, nBuckets);
+        context.setScanRanges(scanRanges);
         if (whereClause == null) {
             return null;
         } else {
@@ -297,12 +313,14 @@ public class WhereOptimizer {
     
     /**
      * Get an optimal combination of key expressions for hash join key range optimization.
+     * @return returns true if the entire combined expression is covered by key range optimization
+     * @param result the optimal combination of key expressions
      * @param context the temporary context to get scan ranges set by pushKeyExpressionsToScan()
      * @param statement the statement being compiled
      * @param expressions the join key expressions
      * @return the optimal list of key expressions
      */
-    public static List<Expression> getKeyExpressionCombination(StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
+    public static boolean getKeyExpressionCombination(List<Expression> result, StatementContext context, FilterableStatement statement, List<Expression> expressions) throws SQLException {
         List<Integer> candidateIndexes = Lists.newArrayList();
         final List<Integer> pkPositions = Lists.newArrayList();
         for (int i = 0; i < expressions.size(); i++) {
@@ -325,7 +343,7 @@ public class WhereOptimizer {
         }
         
         if (candidateIndexes.isEmpty())
-            return Collections.<Expression> emptyList();
+            return false;
         
         Collections.sort(candidateIndexes, new Comparator<Integer>() {
             @Override
@@ -350,12 +368,13 @@ public class WhereOptimizer {
         
         int count = 0;
         int maxPkSpan = 0;
+        Expression remaining = null;
         while (count < candidates.size()) {
             Expression lhs = count == 0 ? candidates.get(0) : new RowValueConstructorExpression(candidates.subList(0, count + 1), false);
             Expression firstRhs = count == 0 ? sampleValues.get(0).get(0) : new RowValueConstructorExpression(sampleValues.get(0).subList(0, count + 1), true);
             Expression secondRhs = count == 0 ? sampleValues.get(1).get(0) : new RowValueConstructorExpression(sampleValues.get(1).subList(0, count + 1), true);
             Expression testExpression = InListExpression.create(Lists.newArrayList(lhs, firstRhs, secondRhs), false, context.getTempPtr());
-            pushKeyExpressionsToScan(context, statement, testExpression);
+            remaining = pushKeyExpressionsToScan(context, statement, testExpression);
             int pkSpan = context.getScanRanges().getPkColumnSpan();
             if (pkSpan <= maxPkSpan) {
                 break;
@@ -364,7 +383,11 @@ public class WhereOptimizer {
             count++;
         }
         
-        return candidates.subList(0, count);
+        result.addAll(candidates.subList(0, count));
+        
+        return count == candidates.size() 
+                && (context.getScanRanges().isPointLookup() || context.getScanRanges().useSkipScanFilter())
+                && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
     }
 
     private static class RemoveExtractedNodesVisitor extends TraverseNoExpressionVisitor<Expression> {
@@ -394,7 +417,7 @@ public class WhereOptimizer {
             if (l.size() != node.getChildren().size()) {
                 if (l.isEmpty()) {
                     // Don't return null here, because then our defaultReturn will kick in
-                    return LiteralExpression.newConstant(true, true);
+                    return LiteralExpression.newConstant(true, Determinism.ALWAYS);
                 }
                 if (l.size() == 1) {
                     return l.get(0);

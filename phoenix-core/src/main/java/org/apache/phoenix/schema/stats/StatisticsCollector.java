@@ -15,10 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.schema.stat;
+package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -26,10 +27,15 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
@@ -38,11 +44,12 @@ import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.StoreScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PDataType;
-import org.apache.phoenix.schema.PhoenixArray;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -50,27 +57,42 @@ import com.google.common.collect.Maps;
 
 /**
  * A default implementation of the Statistics tracker that helps to collect stats like min key, max key and
- * guideposts
+ * guideposts.
+ * TODO: review timestamps used for stats. We support the user controlling the timestamps, so we should
+ * honor that with timestamps for stats as well. The issue is for compaction, though. I don't know of
+ * a way for the user to specify any timestamp for that. Perhaps best to use current time across the
+ * board for now.
  */
 public class StatisticsCollector {
 
     private Map<String, byte[]> minMap = Maps.newHashMap();
     private Map<String, byte[]> maxMap = Maps.newHashMap();
     private long guidepostDepth;
-    private long byteCount = 0;
-    private Map<String, List<byte[]>> guidePostsMap = Maps.newHashMap();
+    private Map<String, Pair<Long,GuidePostsInfo>> guidePostsMap = Maps.newHashMap();
+    // Tracks the bytecount per family if it has reached the guidePostsDepth
     private Map<ImmutableBytesPtr, Boolean> familyMap = Maps.newHashMap();
-    protected StatisticsTable statsTable;
+    protected StatisticsWriter statsTable;
     // Ensures that either analyze or compaction happens at any point of time.
     private static final Log LOG = LogFactory.getLog(StatisticsCollector.class);
 
-    public StatisticsCollector(StatisticsTable statsTable, Configuration conf) throws IOException {
+    public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
+        Configuration config = env.getConfiguration();
+        HTableInterface statsHTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
+        long maxFileSize = statsHTable.getTableDescriptor().getMaxFileSize();
+        if (maxFileSize <= 0) { // HBase brain dead API doesn't give you the "real" max file size if it's not set...
+            maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
+        }
+        guidepostDepth =
+            config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                    maxFileSize / config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 
+                                                QueryServicesOptions.DEFAULT_GUIDE_POSTS_PER_REGION));
         // Get the stats table associated with the current table on which the CP is
         // triggered
-        this.statsTable = statsTable;
-        guidepostDepth =
-                conf.getLong(QueryServices.HISTOGRAM_BYTE_DEPTH_ATTRIB,
-                    QueryServicesOptions.DEFAULT_HISTOGRAM_BYTE_DEPTH);
+        this.statsTable = StatisticsWriter.newWriter(statsHTable, tableName, clientTimeStamp);
+    }
+    
+    public void close() throws IOException {
+        this.statsTable.close();
     }
 
     public void updateStatistic(HRegion region) {
@@ -93,19 +115,18 @@ public class StatisticsCollector {
         try {
             // update the statistics table
             for (ImmutableBytesPtr fam : familyMap.keySet()) {
-                String tableName = region.getRegionInfo().getTable().getNameAsString();
                 if (delete) {
                     if(LOG.isDebugEnabled()) {
                         LOG.debug("Deleting the stats for the region "+region.getRegionInfo());
                     }
-                    statsTable.deleteStats(tableName, region.getRegionInfo().getRegionNameAsString(), this,
-                            Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
+                    statsTable.deleteStats(region.getRegionInfo().getRegionNameAsString(), this, Bytes.toString(fam.copyBytesIfNecessary()),
+                            mutations);
                 }
                 if(LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region "+region.getRegionInfo());
                 }
-                statsTable.addStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
+                statsTable.addStats((region.getRegionInfo().getRegionNameAsString()), this, Bytes.toString(fam.copyBytesIfNecessary()),
+                        mutations);
             }
         } catch (IOException e) {
             LOG.error("Failed to update statistics table!", e);
@@ -119,11 +140,11 @@ public class StatisticsCollector {
 
     private void deleteStatsFromStatsTable(final HRegion region, List<Mutation> mutations, long currentTime) throws IOException {
         try {
+            String regionName = region.getRegionInfo().getRegionNameAsString();
             // update the statistics table
             for (ImmutableBytesPtr fam : familyMap.keySet()) {
-                String tableName = region.getRegionInfo().getTable().getNameAsString();
-                statsTable.deleteStats(tableName, (region.getRegionInfo().getRegionNameAsString()), this,
-                        Bytes.toString(fam.copyBytesIfNecessary()), mutations, currentTime);
+                statsTable.deleteStats(regionName, this, Bytes.toString(fam.copyBytesIfNecessary()),
+                        mutations);
             }
         } catch (IOException e) {
             LOG.error("Failed to delete from statistics table!", e);
@@ -135,7 +156,6 @@ public class StatisticsCollector {
         List<Cell> results = new ArrayList<Cell>();
         boolean hasMore = true;
         while (hasMore) {
-            // Am getting duplicates here. Need to avoid that
             hasMore = scanner.next(results);
             collectStatistics(results);
             count += results.size();
@@ -148,7 +168,7 @@ public class StatisticsCollector {
     }
 
     /**
-     * Update the current statistics based on the lastest batch of key-values from the underlying scanner
+     * Update the current statistics based on the latest batch of key-values from the underlying scanner
      * 
      * @param results
      *            next batch of {@link KeyValue}s
@@ -189,24 +209,19 @@ public class StatisticsCollector {
     public void collectStatsDuringSplit(Configuration conf, HRegion l, HRegion r,
             HRegion region) {
         try {
-            if (familyMap != null) {
-                familyMap.clear();
-            }
             // Create a delete operation on the parent region
             // Then write the new guide posts for individual regions
-            // TODO : Try making this atomic
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
             long currentTime = TimeKeeper.SYSTEM.getCurrentTime();
+            deleteStatsFromStatsTable(region, mutations, currentTime);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Collecting stats for the daughter region " + l.getRegionInfo());
             }
-            collectStatsForSplitRegions(conf, l, region, true, mutations, currentTime);
-            clear();
+            collectStatsForSplitRegions(conf, l, mutations, currentTime);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Collecting stats for the daughter region " + r.getRegionInfo());
             }
-            collectStatsForSplitRegions(conf, r, region, false, mutations, currentTime);
-            clear();
+            collectStatsForSplitRegions(conf, r, mutations, currentTime);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Committing stats for the daughter regions as part of split " + r.getRegionInfo());
             }
@@ -217,32 +232,29 @@ public class StatisticsCollector {
         }
     }
 
-    private void collectStatsForSplitRegions(Configuration conf, HRegion daughter, HRegion parent, boolean delete,
+    private void collectStatsForSplitRegions(Configuration conf, HRegion daughter,
             List<Mutation> mutations, long currentTime) throws IOException {
+        IOException toThrow = null;
+        clear();
         Scan scan = createScan(conf);
         RegionScanner scanner = null;
         int count = 0;
         try {
             scanner = daughter.getScanner(scan);
             count = scanRegion(scanner, count);
+            writeStatsToStatsTable(daughter, false, mutations, currentTime);
         } catch (IOException e) {
             LOG.error(e);
-            throw e;
+            toThrow = e;
         } finally {
-            if (scanner != null) {
                 try {
-                    if (delete) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Deleting the stats for the parent region " + parent.getRegionInfo());
-                        }
-                        deleteStatsFromStatsTable(parent, mutations, currentTime);
-                    }
-                    writeStatsToStatsTable(daughter, false, mutations, currentTime);
+                    if (scanner != null) scanner.close();
                 } catch (IOException e) {
                     LOG.error(e);
-                    throw e;
+                    if (toThrow != null) toThrow = e;
+                } finally {
+                    if (toThrow != null) throw toThrow;
                 }
-            }
         }
     }
 
@@ -257,7 +269,7 @@ public class StatisticsCollector {
 
     protected InternalScanner getInternalScanner(HRegion region, Store store,
             InternalScanner internalScan, String family) {
-        return new StatisticsScanner(this, statsTable, region.getRegionInfo(), internalScan,
+        return new StatisticsScanner(this, statsTable, region, internalScan,
                 Bytes.toBytes(family));
     }
 
@@ -269,12 +281,13 @@ public class StatisticsCollector {
     }
 
     public void updateStatistic(KeyValue kv) {
+        @SuppressWarnings("deprecation")
         byte[] cf = kv.getFamily();
         familyMap.put(new ImmutableBytesPtr(cf), true);
         
         String fam = Bytes.toString(cf);
-        byte[] row = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength())
-                .copyBytesIfNecessary();
+        byte[] row = ByteUtil.copyKeyBytesIfNecessary(
+                new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength()));
         if (!minMap.containsKey(fam) && !maxMap.containsKey(fam)) {
             minMap.put(fam, row);
             // Ideally the max key also should be added in this case
@@ -289,19 +302,19 @@ public class StatisticsCollector {
                 maxMap.put(fam, row);
             }
         }
-        byteCount += kv.getLength();
         // TODO : This can be moved to an interface so that we could collect guide posts in different ways
+        Pair<Long,GuidePostsInfo> gps = guidePostsMap.get(fam);
+        if (gps == null) {
+            gps = new Pair<Long,GuidePostsInfo>(0L,new GuidePostsInfo(0, Collections.<byte[]>emptyList()));
+            guidePostsMap.put(fam, gps);
+        }
+        int kvLength = kv.getLength();
+        long byteCount = gps.getFirst() + kvLength;
+        gps.setFirst(byteCount);
         if (byteCount >= guidepostDepth) {
-            if (guidePostsMap.get(fam) != null) {
-                guidePostsMap.get(fam).add(
-                        row);
-            } else {
-                List<byte[]> guidePosts = new ArrayList<byte[]>();
-                guidePosts.add(row);
-                guidePostsMap.put(fam, guidePosts);
+            if (gps.getSecond().addGuidePost(row, byteCount)) {
+                gps.setFirst(0L);
             }
-            // reset the count for the next key
-            byteCount = 0;
         }
     }
 
@@ -315,19 +328,10 @@ public class StatisticsCollector {
         return null;
     }
 
-    public byte[] getGuidePosts(String fam) {
-        if (!guidePostsMap.isEmpty()) {
-            List<byte[]> guidePosts = guidePostsMap.get(fam);
-            if (guidePosts != null) {
-                byte[][] array = new byte[guidePosts.size()][];
-                int i = 0;
-                for (byte[] element : guidePosts) {
-                    array[i] = element;
-                    i++;
-                }
-                PhoenixArray phoenixArray = new PhoenixArray(PDataType.VARBINARY, array);
-                return PDataType.VARBINARY_ARRAY.toBytes(phoenixArray);
-            }
+    public GuidePostsInfo getGuidePosts(String fam) {
+        Pair<Long,GuidePostsInfo> pair = guidePostsMap.get(fam);
+        if (pair != null) {
+            return pair.getSecond();
         }
         return null;
     }
