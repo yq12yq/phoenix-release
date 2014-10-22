@@ -436,7 +436,6 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	            boolean success = job.waitForCompletion(true);
 	            if (!success) {
 	                LOG.error("Import job failed, check JobTracker for details");
-	                htable.close();
 	                return false;
 	            }
 	

@@ -243,21 +243,14 @@ public class PhoenixTableMetricsWriter implements MetricsWriter {
             LOG.trace("Logging metrics to phoenix table via: " + stmt);
             LOG.trace("With tags: " + variableValues);
         }
-        PreparedStatement ps = null;
         try {
-          try {
-            ps = conn.prepareStatement(stmt);
+            PreparedStatement ps = conn.prepareStatement(stmt);
             // add everything that wouldn't/may not parse
             int index = 1;
             for (String tag : variableValues) {
                 ps.setString(index++, tag);
             }
             ps.execute();
-          } finally {
-            if (ps != null) {
-              ps.close();
-            }
-          }
         } catch (SQLException e) {
             LOG.error("Could not write metric: \n" + record + " to prepared statement:\n" + stmt, e);
         }

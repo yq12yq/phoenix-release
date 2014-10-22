@@ -22,7 +22,6 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADAT
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -1448,9 +1447,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         PhoenixConnection metaConnection = new PhoenixConnection(this, oldMetaConnection.getURL(), props, oldMetaConnection.getMetaDataCache());
         SQLException sqlE = null;
         try {
-          Statement s = metaConnection.createStatement();
-          s.executeUpdate("ALTER TABLE " + tableName + " ADD IF NOT EXISTS " + columns );
-          s.close();
+            metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD IF NOT EXISTS " + columns );
         } catch (SQLException e) {
             logger.warn("addColumnsIfNotExists failed due to:" + e);
             sqlE = e;

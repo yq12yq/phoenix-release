@@ -208,10 +208,7 @@ public class PostDDLCompiler {
                                 try {
                                     Tuple row = iterator.next();
                                     ImmutableBytesWritable ptr = context.getTempPtr();
-                                    Object obj = projector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
-                                    if (obj != null) {
-                                      totalMutationCount += (Long)obj;
-                                    }
+                                    totalMutationCount += (Long)projector.getColumnProjector(0).getValue(row, PDataType.LONG, ptr);
                                 } catch (SQLException e) {
                                     sqlE = e;
                                 } finally {
