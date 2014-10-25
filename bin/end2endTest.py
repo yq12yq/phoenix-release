@@ -30,7 +30,10 @@ import phoenix_utils
 
 phoenix_utils.setPath()
 
-phoenix_jar_path = os.getenv(phoenix_utils.phoenix_class_path, phoenix_utils.phoenix_test_jar_path)
+phoenix_jar_path = phoenix_utils.phoenix_class_path
+
+if phoenix_jar_path == '':
+    phoenix_jar_path = phoenix_utils.phoenix_test_jar_path
 
 # HBase configuration folder path (where hbase-site.xml reside) for
 # HBase/Phoenix client side property override
