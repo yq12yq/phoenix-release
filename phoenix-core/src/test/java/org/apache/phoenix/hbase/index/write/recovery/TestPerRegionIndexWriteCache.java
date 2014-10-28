@@ -108,7 +108,8 @@ public class TestPerRegionIndexWriteCache {
   
   @After
   public void cleanUp() throws Exception {
-	  TEST_UTIL.cleanupTestDir();
+	  FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
+	  newFS.delete(TEST_UTIL.getDataTestDir(), true);
   }
   
   
