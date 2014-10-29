@@ -282,6 +282,9 @@ public class ServerCacheClient {
     	ConnectionQueryServices services = connection.getQueryServices();
     	Throwable lastThrowable = null;
     	TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
+    	if(cacheUsingTableRef == null || cacheUsingTableRef.getTable() == null) {
+    	    return;
+    	}
     	byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
     	HTableInterface iterateOverTable = services.getTable(tableName);
     	try {
