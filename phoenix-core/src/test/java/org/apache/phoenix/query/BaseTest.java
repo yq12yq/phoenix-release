@@ -498,11 +498,12 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void dropNonSystemTables() throws Exception {
+    protected static void dropAllTables() throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
-            disableAndDropNonSystemTables();
-        } finally {
             destroyDriver();
+        } finally {
+            disableAndDropTables(admin);
         }
     }
 
@@ -1336,32 +1337,6 @@ public abstract class BaseTest {
                 }
                 admin.deleteTable(table.getName());
             }
-        } finally {
-            admin.close();
-        }
-    }
-    
-    /**
-     * Disable and drop all the tables
-     */
-    protected static void disableAndDropNonSystemTables() throws Exception {
-        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
-        try {
-            HTableDescriptor[] tables = admin.listTables();
-            for (HTableDescriptor table : tables) {
-                String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
-                if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                	continue;
-                }
-                try{
-                  admin.disableTable(table.getName());
-                } catch(IOException ex) {
-                  if(ex instanceof TableNotEnabledException) {
-                    //ignored
-                  }
-                }
-                admin.deleteTable(table.getName());
-            }    
         } finally {
             admin.close();
         }

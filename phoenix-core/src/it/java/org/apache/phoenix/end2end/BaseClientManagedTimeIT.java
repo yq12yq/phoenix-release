@@ -83,6 +83,6 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
     
     @AfterClass
     public static void doTeardown() throws Exception {
-        dropNonSystemTables();
+        dropAllTables();
     }
 }
