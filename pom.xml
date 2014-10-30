@@ -24,12 +24,9 @@
 
   <modules>
     <module>phoenix-core</module>
-    <module>phoenix-hadoop-compat</module>
     <module>phoenix-flume</module>
     <module>phoenix-pig</module>
     <module>phoenix-assembly</module>
-    <!--Temporary inclusion - to be removed in next patch, for ease of review -->
-    <module>phoenix-hadoop2-compat</module>
   </modules>
 
   <distributionManagement>
@@ -69,9 +66,9 @@
   </parent>
 
   <scm>
-    <connection>scm:git:http://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</connection>
-    <url>https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</url>
-    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-phoenix.git</developerConnection>
+    <connection>scm:git:http://git-wip-us.apache.org/repos/asf/phoenix.git</connection>
+    <url>https://git-wip-us.apache.org/repos/asf/phoenix.git</url>
+    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/phoenix.git</developerConnection>
   </scm>
 
   <properties>
@@ -423,36 +420,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop-compat</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop-compat</artifactId>
-        <version>${project.version}</version>
-        <classifier>tests</classifier>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop2-compat</artifactId>
-        <version>${project.version}</version>
-        <classifier>tests</classifier>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-flume</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-pig</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hadoop2-compat</artifactId>
         <version>${project.version}</version>
       </dependency>
 
