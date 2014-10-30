@@ -17,17 +17,22 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.util.Map;
+
 import javax.annotation.concurrent.NotThreadSafe;
 import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 /**
  * Base class for tests that let HBase set timestamps.
@@ -61,7 +66,9 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @AfterClass
