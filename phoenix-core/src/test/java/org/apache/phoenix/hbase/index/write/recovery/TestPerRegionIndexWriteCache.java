@@ -72,6 +72,7 @@ public class TestPerRegionIndexWriteCache {
   public void setUp() throws Exception {
       FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
       Path hbaseRootDir = TEST_UTIL.getDataTestDir();
+      newFS.delete(hbaseRootDir, true);
       
       HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
       Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName); 
