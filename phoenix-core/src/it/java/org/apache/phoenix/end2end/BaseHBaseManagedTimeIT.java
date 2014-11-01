@@ -73,6 +73,7 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @AfterClass
     public static void dropTables() throws Exception {
+        if(driver == null) return;
         HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
           assertTrue(destroyDriver(driver));

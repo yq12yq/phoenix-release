@@ -26,12 +26,10 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellScannable;
 import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ConnectionManager;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
@@ -39,15 +37,22 @@ import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.HBaseManagedTimeTest;
 import org.apache.phoenix.hbase.index.IndexQosRpcControllerFactory;
+import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Comprehensive test that ensures we are adding custom index handlers
  */
+@Category(HBaseManagedTimeTest.class)
 public class IndexHandlerIT extends BaseHBaseManagedTimeIT{
 
     public static class CountingIndexClientRpcFactory extends RpcControllerFactory {
@@ -90,19 +95,12 @@ public class IndexHandlerIT extends BaseHBaseManagedTimeIT{
         @Override
         public void setPriority(int pri) {
             Integer count = priorityCounts.get(pri);
-            if (count == null || count == 0) {
+            if (count == 0) {
                 count = new Integer(0);
             }
             count = count.intValue() + 1;
             priorityCounts.put(pri, count);
 
-        }
-        
-        @Override
-        public void setPriority(final org.apache.hadoop.hbase.TableName tn) {
-          if(tn == TestTable) {
-            setPriority(QueryServicesOptions.DEFAULT_INDEX_MIN_PRIORITY);
-          }
         }
     }
 
@@ -111,12 +109,14 @@ public class IndexHandlerIT extends BaseHBaseManagedTimeIT{
     private static final byte[] qual = Bytes.toBytes("qual");
     private static final HColumnDescriptor FAM1 = new HColumnDescriptor(family);
 
-    public static TableName TestTable = TableName.valueOf("IndexHandlerIT");
+    @Rule
+    public TableName TestTable = new TableName();
 
     @Before
     public void setup() throws Exception {
-        
-        HTableDescriptor desc = new HTableDescriptor(TestTable);
+        HTableDescriptor desc =
+                new HTableDescriptor(org.apache.hadoop.hbase.TableName.valueOf(TestTable
+                        .getTableNameString()));
         desc.addFamily(FAM1);
 
         // create the table
@@ -127,11 +127,10 @@ public class IndexHandlerIT extends BaseHBaseManagedTimeIT{
     @After
     public void cleanup() throws Exception {
         HBaseAdmin admin = utility.getHBaseAdmin();
-        admin.disableTable(TestTable);
-        admin.deleteTable(TestTable);
+        admin.disableTable(TestTable.getTableName());
+        admin.deleteTable(TestTable.getTableName());
     }
 
-    @SuppressWarnings("deprecation")
     @Test
     public void testClientWritesWithPriority() throws Exception {
         Configuration conf = new Configuration(utility.getConfiguration());
@@ -140,9 +139,8 @@ public class IndexHandlerIT extends BaseHBaseManagedTimeIT{
             CountingIndexClientRpcFactory.class.getName());
         // and set the index table as the current table
         conf.setStrings(IndexQosRpcControllerFactory.INDEX_TABLE_NAMES_KEY,
-            TestTable.getNameAsString());
-        HConnection connection = ConnectionManager.createConnection(conf);
-        HTable table = new HTable(TestTable, connection);
+            TestTable.getTableNameString());
+        HTable table = new HTable(conf, TestTable.getTableName());
 
         // do a write to the table
         Put p = new Put(row);

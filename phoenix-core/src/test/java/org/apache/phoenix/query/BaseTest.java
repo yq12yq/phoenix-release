@@ -155,7 +155,7 @@ import com.google.common.collect.Sets;
  */
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
-    private static IntegrationTestingUtility utility = null; 
+    protected static IntegrationTestingUtility utility = null; 
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
 
     static {

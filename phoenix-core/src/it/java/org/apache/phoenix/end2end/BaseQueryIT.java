@@ -88,7 +88,8 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     
     @Before
     public void initTable() throws Exception {
-         ts = nextTimestamp();
+        ts = nextTimestamp();
+        deletePriorTables(ts, getUrl());
         initATableValues(tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts);
         if (indexDDL != null && indexDDL.length() > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
