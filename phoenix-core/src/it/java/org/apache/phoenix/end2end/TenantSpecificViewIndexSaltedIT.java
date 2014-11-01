@@ -18,33 +18,49 @@ package org.apache.phoenix.end2end;
  * specific language governing permissions and limitations
  * under the License.
  *
-*/
+ */
 
 
+import java.util.Map;
+
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import com.google.common.collect.Maps;
+
 @Category(HBaseManagedTimeTest.class)
 public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndexIT {
-    private static final Integer SALT_BUCKETS = 3;
-    
-    @Test
-    public void testUpdatableSaltedView() throws Exception {
-        testUpdatableView(SALT_BUCKETS);
-    }
-    
-    @Test
-    public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
-        testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS);
-    }
-    
-    @Test
-    public void testUpdatableSaltedViewWithLocalIndex() throws Exception {
-        testUpdatableView(SALT_BUCKETS, true);
-    }
 
-    @Test
-    public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
-        testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS, true);
-    }
+  @BeforeClass
+  public static void doSetup() throws Exception {
+    Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+    props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+    props.put(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Integer.toString(600000));
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
+
+  private static final Integer SALT_BUCKETS = 3;
+
+  @Test
+  public void testUpdatableSaltedView() throws Exception {
+    testUpdatableView(SALT_BUCKETS);
+  }
+
+  @Test
+  public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
+    testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS);
+  }
+
+  @Test
+  public void testUpdatableSaltedViewWithLocalIndex() throws Exception {
+    testUpdatableView(SALT_BUCKETS, true);
+  }
+
+  @Test
+  public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
+    testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS, true);
+  }
 }

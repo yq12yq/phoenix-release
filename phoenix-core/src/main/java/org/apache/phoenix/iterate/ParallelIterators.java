@@ -102,7 +102,7 @@ public class ParallelIterators extends ExplainTable implements ResultIterators {
         PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException;
     }
 
-    private static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
+    private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000; // 1min
     private static final int ESTIMATED_GUIDEPOSTS_PER_REGION = 20;
 
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
