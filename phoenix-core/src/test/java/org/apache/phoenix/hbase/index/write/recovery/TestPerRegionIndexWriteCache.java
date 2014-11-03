@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.hadoop.fs.FileSystem;
@@ -51,7 +52,7 @@ import com.google.common.collect.Multimap;
 
 public class TestPerRegionIndexWriteCache {
   private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
-  private static final TableName tableName = TableName.valueOf("t1"); 
+  private static TableName tableName = null;
   private static final byte[] row = Bytes.toBytes("row");
   private static final byte[] family = Bytes.toBytes("family");
   private static final byte[] qual = Bytes.toBytes("qual");
@@ -66,17 +67,18 @@ public class TestPerRegionIndexWriteCache {
 
   HRegion r1;
   HRegion r2;
+  HLog wal;
 
   @SuppressWarnings("deprecation")
 @Before
   public void setUp() throws Exception {
       FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
       Path hbaseRootDir = TEST_UTIL.getDataTestDir();
-      newFS.delete(hbaseRootDir, true);
-      
+      Random rn = new Random();
+      tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
       HRegionInfo hri = new HRegionInfo(tableName, null, null, false);
       Path basedir = FSUtils.getTableDir(hbaseRootDir, tableName); 
-      HLog wal = HLogFactory.createHLog(newFS, 
+      wal = HLogFactory.createHLog(newFS, 
           hbaseRootDir, "logs", TEST_UTIL.getConfiguration());
       HTableDescriptor htd = new HTableDescriptor(tableName);
       HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
@@ -109,8 +111,13 @@ public class TestPerRegionIndexWriteCache {
   
   @After
   public void cleanUp() throws Exception {
-	  FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
-	  newFS.delete(TEST_UTIL.getDataTestDir(), true);
+      try{
+          r1.close();
+          r2.close();
+          wal.close();
+      } catch (Exception ignored) {}
+      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
+      newFS.delete(TEST_UTIL.getDataTestDir(), true);
   }
   
   
