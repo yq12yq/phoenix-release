@@ -520,7 +520,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
         }
         throw new IOException("Local index region isn't co-located with its data region=" + 
-        	userRegion.getRegionInfo().getEncodedName()); 
+        	userRegion.getRegionInfo().getEncodedName() + " table=" + userRegion.getTableDesc().getName()); 
     }
 
     private static PTable deserializeTable(byte[] b) {

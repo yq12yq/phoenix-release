@@ -284,7 +284,9 @@ public class IndexLoadBalancer implements LoadBalancer {
                 TableName mappedTableName = getMappedTableToColocate(regionInfo.getTable());
                 startKey.set(regionInfo.getStartKey());
                 ServerName sn = this.colocationInfo.get(mappedTableName).get(startKey);
-                if (sn.equals(server)) {
+                if(sn == null) {
+                    continue;
+                } else if (sn.equals(server)) {
                     continue;
                 } else {
                     RegionPlan rp = new RegionPlan(regionInfo, server, sn);
