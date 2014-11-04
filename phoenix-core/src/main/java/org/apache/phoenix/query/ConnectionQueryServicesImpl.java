@@ -1503,7 +1503,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                         return null;
                     }
-                    synchronized (this) {
+                    synchronized (ConnectionQueryServicesImpl.this) {
                         if (initialized) {
                             if (initializationException != null) {
                                 // Throw previous initialization exception, as we won't resuse this instance
