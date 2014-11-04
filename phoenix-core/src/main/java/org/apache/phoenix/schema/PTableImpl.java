@@ -83,7 +83,7 @@ public class PTableImpl implements PTable {
     private PTableKey key;
     private PName name;
     private PName schemaName = PName.EMPTY_NAME;
-    private PName tableName;
+    private PName tableName = PName.EMPTY_NAME;
     private PName tenantId;
     private PTableType type;
     private PIndexState state;

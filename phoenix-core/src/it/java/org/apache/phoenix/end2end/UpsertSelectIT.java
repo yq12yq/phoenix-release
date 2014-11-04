@@ -63,9 +63,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
   @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
   public static void doSetup() throws Exception {
       Map<String,String> props = getDefaultProps();
-      props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(500));
-      props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
-
+      props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
       // Must update config before starting server
       setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }

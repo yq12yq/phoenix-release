@@ -804,6 +804,7 @@ public abstract class BaseTest {
                     logger.info("Table " + fullTableName + " is already deleted.");
                 }
             }
+            rs.close();
             if (lastTenantId != null) {
                 conn.close();
             }
@@ -819,6 +820,7 @@ public abstract class BaseTest {
         while (rs.next()) {
             conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
         }
+        rs.close();
     }
     
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
