@@ -384,7 +384,8 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
             	List<File> tmpFiles = context.getTmpFiles();
             	if (tmpFiles != null) {
             		for (File file : tmpFiles) 
-            			file.deleteOnExit();
+            		    if (file != null)
+            		        file.deleteOnExit();
             	}
             }
             stmt.close();
