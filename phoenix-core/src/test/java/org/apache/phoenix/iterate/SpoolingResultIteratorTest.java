@@ -24,6 +24,7 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.ClientManagedTimeTest;
 import org.apache.phoenix.memory.DelegatingMemoryManager;
 import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.memory.MemoryManager;
@@ -32,9 +33,10 @@ import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.AssertResults;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 
-
+@Category(ClientManagedTimeTest.class)
 public class SpoolingResultIteratorTest {
     private final static byte[] A = Bytes.toBytes("a");
     private final static byte[] B = Bytes.toBytes("b");
@@ -52,7 +54,7 @@ public class SpoolingResultIteratorTest {
             };
 
         MemoryManager memoryManager = new DelegatingMemoryManager(new GlobalMemoryManager(threshold, 0));
-        ResultIterator scanner = new SpoolingResultIterator(iterator, memoryManager, threshold, maxSizeSpool,"/tmp");
+        ResultIterator scanner = new SpoolingResultIterator(null, iterator, memoryManager, threshold, maxSizeSpool,"/tmp");
         AssertResults.assertResults(scanner, expectedResults);
     }
 

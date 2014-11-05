@@ -65,13 +65,13 @@ public class SpoolingResultIterator implements PeekingResultIterator {
         }
         @Override
         public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan) throws SQLException {
-            return new SpoolingResultIterator(scanner, services);
+            return new SpoolingResultIterator(context, scanner, services);
         }
 
     }
 
-    public SpoolingResultIterator(ResultIterator scanner, QueryServices services) throws SQLException {
-        this (scanner, services.getMemoryManager(),
+    public SpoolingResultIterator(StatementContext context, ResultIterator scanner, QueryServices services) throws SQLException {
+        this (context, scanner, services.getMemoryManager(),
                 services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES),
                 services.getProps().getLong(QueryServices.MAX_SPOOL_TO_DISK_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SPOOL_TO_DISK_BYTES),
                 services.getProps().get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY));
@@ -86,7 +86,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
     *  the memory manager) is exceeded.
     * @throws SQLException
     */
-    SpoolingResultIterator(ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk, final String spoolDirectory) throws SQLException {
+    SpoolingResultIterator(StatementContext context, ResultIterator scanner, MemoryManager mm, final int thresholdBytes, final long maxSpoolToDisk, final String spoolDirectory) throws SQLException {
         boolean success = false;
         final MemoryChunk chunk = mm.allocate(0, thresholdBytes);
         DeferredFileOutputStream spoolTo = null;
@@ -113,12 +113,15 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 }
                 maxSize = Math.max(length, maxSize);
             }
+            out.close();
             if (spoolTo.isInMemory()) {
                 byte[] data = spoolTo.getData();
                 chunk.resize(data.length);
                 spoolFrom = new InMemoryResultIterator(data, chunk);
             } else {
                 spoolFrom = new OnDiskResultIterator(maxSize, spoolTo.getFile());
+                if (context != null)
+                	context.getTmpFiles().add(spoolTo.getFile());
             }
             success = true;
         } catch (IOException e) {

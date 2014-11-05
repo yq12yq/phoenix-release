@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import java.io.File;
 import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
@@ -75,6 +76,7 @@ public class StatementContext {
     private TimeRange scanTimeRange = null;
     
     private Map<SelectStatement, Object> subqueryResults;
+    private List<File> tmpFiles;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -102,6 +104,7 @@ public class StatementContext {
         this.whereConditionColumns = new ArrayList<Pair<byte[],byte[]>>();
         this.dataColumns = this.currentTable == null ? Collections.<PColumn, Integer>emptyMap() : Maps.<PColumn, Integer>newLinkedHashMap();
         this.subqueryResults = Maps.<SelectStatement, Object>newHashMap();
+        this.tmpFiles = new ArrayList<File>();
     }
 
     /**
@@ -253,6 +256,15 @@ public class StatementContext {
     }
     
     public void setSubqueryResult(SelectStatement select, Object result) {
-        subqueryResults.put(select, result);
+    	 subqueryResults.put(select, result);
     }
+
+    public List<File> getTmpFiles() {
+    	 return tmpFiles;
+    }
+
+    public void setTmpFiles(List<File> tmpFiles) {
+    	 this.tmpFiles = tmpFiles;
+    }
+
 }
