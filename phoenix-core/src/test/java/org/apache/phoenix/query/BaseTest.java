@@ -793,6 +793,9 @@ public abstract class BaseTest {
                     // Open tenant-specific connection when we find a new one
                     Properties props = new Properties(globalConn.getClientInfo());
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    if (ts != HConstants.LATEST_TIMESTAMP) {
+                        props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
+                    }
                     conn = DriverManager.getConnection(url, props);
                     lastTenantId = tenantId;
                 }

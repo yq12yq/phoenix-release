@@ -132,6 +132,9 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             } finally {
                 try {
                     if (spoolTo != null) {
+                        if(!success && spoolTo.getFile() != null){
+                            spoolTo.getFile().delete();
+                        }
                         spoolTo.close();
                     }
                 } catch (IOException ignored) {
