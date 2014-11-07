@@ -51,32 +51,32 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 		setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableView() throws Exception {
 		testUpdatableView(null);
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableViewLocalIndex() throws Exception {
 		testUpdatableView(null, true);
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
 		testUpdatableViewsWithSameNameDifferentTenants(null);
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
 		testUpdatableViewsWithSameNameDifferentTenants(null, true);
 	}
 
-	@Test
+//	@Test
 	public void testMultiCFViewIndex() throws Exception {
 		testMultiCFViewIndex(false);
 	}
 
-	@Test
+//	@Test
 	public void testMultiCFViewLocalIndex() throws Exception {
 		testMultiCFViewIndex(true);
 	}

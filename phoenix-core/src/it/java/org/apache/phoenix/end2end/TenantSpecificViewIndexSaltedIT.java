@@ -44,22 +44,22 @@ public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndex
 
 	private static final Integer SALT_BUCKETS = 3;
 
-	@Test
+//	@Test
 	public void testUpdatableSaltedView() throws Exception {
 		testUpdatableView(SALT_BUCKETS);
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
 		testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS);
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableSaltedViewWithLocalIndex() throws Exception {
 		testUpdatableView(SALT_BUCKETS, true);
 	}
 
-	@Test
+//	@Test
 	public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
 		testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS, true);
 	}
