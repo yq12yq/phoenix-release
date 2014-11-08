@@ -67,7 +67,8 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     

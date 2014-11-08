@@ -82,32 +82,37 @@ public class StatisticsUtil {
         Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         ResultScanner scanner = statsHTable.getScanner(s);
-        Result result = null;
-        long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
-        while ((result = scanner.next()) != null) {
-            CellScanner cellScanner = result.cellScanner();
-            while (cellScanner.advance()) {
-                Cell current = cellScanner.current();
-                int tableNameLength = tableNameBytes.length + 1;
-                int cfOffset = current.getRowOffset() + tableNameLength;
-                int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
-                        - tableNameLength);
-                ptr.set(current.getRowArray(), cfOffset, cfLength);
-                byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                GuidePostsInfo newInfo = GuidePostsInfo.fromBytes(current.getValueArray(), current.getValueOffset(), current.getValueLength());
-                GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newInfo);
-                if (oldInfo != null) {
-                    newInfo.combine(oldInfo);
-                }
-                if (current.getTimestamp() > timeStamp) {
-                    timeStamp = current.getTimestamp();
+        try{
+            Result result = null;
+            long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+            TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(Bytes.BYTES_COMPARATOR);
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                while (cellScanner.advance()) {
+                    Cell current = cellScanner.current();
+                    int tableNameLength = tableNameBytes.length + 1;
+                    int cfOffset = current.getRowOffset() + tableNameLength;
+                    int cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
+                            - tableNameLength);
+                    ptr.set(current.getRowArray(), cfOffset, cfLength);
+                    byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    GuidePostsInfo newInfo = GuidePostsInfo.fromBytes(current.getValueArray(), current.getValueOffset(), current.getValueLength());
+                    GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newInfo);
+                    if (oldInfo != null) {
+                        newInfo.combine(oldInfo);
+                    }
+                    if (current.getTimestamp() > timeStamp) {
+                        timeStamp = current.getTimestamp();
+                    }
                 }
             }
+            if (!guidePostsPerCf.isEmpty()) {
+                return new PTableStatsImpl(guidePostsPerCf, timeStamp);
+            }
+        } finally {
+            scanner.close();
         }
-        if (!guidePostsPerCf.isEmpty()) {
-            return new PTableStatsImpl(guidePostsPerCf, timeStamp);
-        }
+        
         return PTableStats.EMPTY_STATS;
     }
 }
