@@ -20,7 +20,6 @@ package org.apache.phoenix.jdbc;
 import static java.util.Collections.emptyMap;
 
 import java.io.EOFException;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Reader;
@@ -56,8 +55,6 @@ import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.call.CallRunner;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -70,6 +67,7 @@ import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PArrayDataType;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDataType;
@@ -87,6 +85,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.cloudera.htrace.Sampler;
 
 import com.google.common.base.Objects;
@@ -374,21 +374,6 @@ public class PhoenixConnection implements Connection, org.apache.phoenix.jdbc.Jd
         // create new list to prevent close of statements
         // from modifying this list.
         this.statements = Lists.newArrayList();
-        for (SQLCloseable statement : statements) {
-            PhoenixStatement stmt = (PhoenixStatement)statement;
-            QueryPlan plan = stmt.getQueryPlan();
-            if (plan != null) {
-            	StatementContext context = plan.getContext();
-            	if (context == null)
-            		continue;
-            	List<File> tmpFiles = context.getTmpFiles();
-            	if (tmpFiles != null) {
-            		for (File file : tmpFiles) 
-            			file.deleteOnExit();
-            	}
-            }
-            stmt.close();
-        } 
         try {
             mutationState.rollback(this);
         } finally {
