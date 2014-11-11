@@ -1,0 +1,17 @@
+Champlain Phoenix is based on Apache Phoenix 4.2
+
+Following are the changes on top of Apache Phoenix 4.2
+
+Bug fixes:
+
+PHOENIX-1405: Problem referencing lower-case column names with Phoenix / Pig / Spark
+PHOENIX-1416: Given a schema name, DatabaseMetadata.getTables and getColumns calls erroneously match tables without schema
+PHOENIX-1402: Don't recalculate stats on split
+PHOENIX-1404: Ignore call to ResultSet#setFetchSize
+PHOENIX-1346: Base exception gets wrapped as incompatible jar exception
+PHOENIX-1406: Use preCompact hook instead of preCompactScannerOpen for stats collection
+PHOENIX-1397: RVC combined with OR on first row key column results in NPE
+PHOENIX-1401: SYSTEM.SEQUENCE table is not pre-split as expected
+PHOENIX-1403: Correct synchronization in ConnectionQueryServicesImpl.init
+PHOENIX-1400: Copy small attribute in ScanUtil
+PHOENIX-1396: Avoid unnecessary ResultSpooler.bin files creation/deletion every time SpoolingResultIterator
