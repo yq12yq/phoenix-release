@@ -73,6 +73,7 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
         // Must update config before starting server
         props.put(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, Boolean.FALSE.toString());
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
         return props;
     }
     
