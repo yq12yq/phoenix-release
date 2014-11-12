@@ -75,7 +75,7 @@ public class StatisticsCollector {
     public StatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         Configuration config = env.getConfiguration();
         HTableInterface statsHTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
-        int guidepostPerRegion = config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 0);
+        int guidepostPerRegion = config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, 1);
         if (guidepostPerRegion > 0) {
             long maxFileSize = statsHTable.getTableDescriptor().getMaxFileSize();
             if (maxFileSize <= 0) { // HBase brain dead API doesn't give you the "real" max file size if it's not set...
