@@ -119,6 +119,9 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 spoolFrom = new InMemoryResultIterator(data, chunk);
             } else {
                 spoolFrom = new OnDiskResultIterator(maxSize, spoolTo.getFile());
+                if (spoolTo.getFile() != null) {
+                    spoolTo.getFile().deleteOnExit();
+                }
             }
             success = true;
         } catch (IOException e) {
