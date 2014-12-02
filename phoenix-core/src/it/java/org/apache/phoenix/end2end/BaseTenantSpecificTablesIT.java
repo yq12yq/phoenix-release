@@ -76,6 +76,7 @@ public abstract class BaseTenantSpecificTablesIT extends BaseOwnClusterClientMan
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
+        props.put(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, "0");
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
         PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;

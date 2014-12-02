@@ -52,6 +52,7 @@ public class MultiCfQueryExecIT extends BaseClientManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
+        props.put(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB, "0");
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
