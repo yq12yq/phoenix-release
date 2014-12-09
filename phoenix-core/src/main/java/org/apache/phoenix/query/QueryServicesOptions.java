@@ -156,7 +156,11 @@ public class QueryServicesOptions {
      * Use only first time SYSTEM.SEQUENCE table is created.
      */
     public static final int DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS = SaltingUtil.MAX_BUCKET_NUM;
-
+    /**
+     * Default value for coprocessor priority is between SYSTEM and USER priority.
+     */
+    public static final boolean DEFAULT_KEEP_DELETED_CELLS = false;
+    
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
