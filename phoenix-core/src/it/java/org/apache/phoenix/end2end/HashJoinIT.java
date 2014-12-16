@@ -87,6 +87,8 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used
         props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }

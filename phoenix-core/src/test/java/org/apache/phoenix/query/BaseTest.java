@@ -758,6 +758,8 @@ public abstract class BaseTest {
     
     protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
         Properties props = new Properties();
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
         if (ts != HConstants.LATEST_TIMESTAMP) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
         }
