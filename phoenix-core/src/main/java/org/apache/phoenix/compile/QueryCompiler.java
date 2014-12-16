@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
@@ -109,6 +110,9 @@ public class QueryCompiler {
         if (select.getHint().hasHint(Hint.NO_CACHE)) {
             scan.setCacheBlocks(false);
         }
+
+        // Apply select hint NATIVE_TIME_RANGE
+        applyNativeTimeStampHintToScan();
 
         this.originalScan = ScanUtil.newScan(scan);
     }
@@ -402,6 +406,24 @@ public class QueryCompiler {
         }
         
         return plan;
+    }
+      
+    private void applyNativeTimeStampHintToScan() {
+      Pair<Long, Long> hintTimeRange = this.select.getHint().getNativeTimeStampRange();
+      if(hintTimeRange != null) {
+          Long minTimeStamp = hintTimeRange.getFirst();
+          Long maxTimeStamp = hintTimeRange.getSecond();
+          if(statement.getConnection().getSCN() != null && 
+                 statement.getConnection().getSCN() < maxTimeStamp) {
+              maxTimeStamp = statement.getConnection().getSCN();
+          }
+
+          try {
+              this.scan.setTimeRange(minTimeStamp, maxTimeStamp);
+          } catch (IOException e) {
+              throw new RuntimeException(e);
+          }
+      }
     }
 }
 

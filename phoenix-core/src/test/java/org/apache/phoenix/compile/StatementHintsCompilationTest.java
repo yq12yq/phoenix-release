@@ -28,14 +28,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -103,4 +107,22 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
                 "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n" + 
                 "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
     }
+    
+    @Test
+    public void testSelectNativeTimeStampHint() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+            Long.toString(500));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        String query = "SELECT /*+ NATIVE_TIME_RANGE(100, 200) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'";
+        
+        Scan scan = compileStatement(query).getScan();
+        assertEquals(100, scan.getTimeRange().getMin());
+        assertEquals(200, scan.getTimeRange().getMax());
+        
+        conn.close();
+    }
+    
 }

@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -179,11 +180,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         // TODO: include time range in explain plan?
         PhoenixConnection connection = context.getConnection();
         if (context.getScanTimeRange() == null) {
-          Long scn = connection.getSCN();
-          if (scn == null) {
-            scn = context.getCurrentTime();
-          }
-          ScanUtil.setTimeRange(scan, scn);
+           Long scn = connection.getSCN();
+           if (scn == null) {
+               scn = context.getCurrentTime();
+            }
+            TimeRange scanTimeRange = scan.getTimeRange();
+            ScanUtil.setTimeRange(scan, scanTimeRange.getMin(), Math.min(scanTimeRange.getMax(), scn));
         } else {
             ScanUtil.setTimeRange(scan, context.getScanTimeRange());
         }
