@@ -251,12 +251,16 @@ public class ScanUtil {
     }
 
     public static void setTimeRange(Scan scan, long ts) {
-        try {
-            scan.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, ts);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        setTimeRange(scan, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ts);
     }
+    
+    public static void setTimeRange(Scan scan, long minTS, long maxTS) {
+      try {
+          scan.setTimeRange(minTS, maxTS);
+      } catch (IOException e) {
+          throw new RuntimeException(e);
+      }
+  }
 
     public static void setTimeRange(Scan scan, TimeRange range) {
         try {
