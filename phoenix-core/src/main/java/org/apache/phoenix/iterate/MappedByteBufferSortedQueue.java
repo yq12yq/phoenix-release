@@ -159,6 +159,7 @@ public class MappedByteBufferSortedQueue extends AbstractQueue<ResultEntry> {
             for (MappedByteBufferPriorityQueue queue : queues) {
                 queue.close();
             }
+            queues.clear();
         }
     }
 
