@@ -145,7 +145,16 @@ public class ServerUtil {
         // It's ok to not ever do a pool.close() as we're storing a single
         // table only. The HTablePool holds no other resources that this table
         // which will be closed itself when it's no longer needed.
-        HTablePool pool = new HTablePool(env.getConfiguration(),1);
-        return pool.getTable(tableName);
+        try {
+              HTablePool pool = new HTablePool(env.getConfiguration(),1);
+              return pool.getTable(tableName);
+        } catch (RuntimeException t) {
+            // handle cases that an IOE is wrapped inside a RuntimeException like HTableInterface#createHTableInterface
+            if(t.getCause() instanceof IOException) {
+                throw (IOException)t.getCause();
+            } else {
+                throw t;
+            }
+        }
     }
 }
