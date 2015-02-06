@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.2.0</version>
+  <version>4.2.3-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -57,6 +57,14 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>sonatype-nexus-snapshots</id>
+      <name>Sonatype Nexus Snapshots</name>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
   </repositories>
 
   <parent>
@@ -101,7 +109,7 @@
     <flume.version>1.4.0</flume.version>
     <findbugs.version>1.3.2</findbugs.version>
     <jline.version>2.11</jline.version>
-    <snappy.version>1.1.0.1</snappy.version>
+    <snappy.version>0.3</snappy.version>
     <netty.version>3.6.6.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>2.04</htrace.version>
@@ -110,16 +118,16 @@
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
-    <junit.version>4.11</junit.version>
+    <junit.version>4.12-beta-3</junit.version>
 
     <!-- Plugin versions -->
-    <maven-eclipse-plugin.version>2.8</maven-eclipse-plugin.version>
-    <maven-build-helper-plugin.version>1.7</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.16</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.17</maven-failsafe-plugin.version>
+    <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
+    <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
+    <maven-surefire-plugin.version>2.18</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.18</maven-failsafe-plugin.version>
     
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
-    <maven.assembly.version>2.4</maven.assembly.version>
+    <maven.assembly.version>2.5.2</maven.assembly.version>
     <maven.rat.version>0.8</maven.rat.version>
     
     <!-- Plugin options -->
@@ -139,8 +147,8 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.0</version>
           <configuration>
-            <source>1.6</source>
-            <target>1.6</target>
+            <source>1.7</source>
+            <target>1.7</target>
           </configuration>
         </plugin>
         <!--This plugin's configuration is used to store Eclipse m2e settings 
@@ -259,7 +267,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>true</reuseForks>
+                 <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -275,7 +283,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>true</reuseForks>
+                 <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -291,7 +299,7 @@
                  <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
-                 <reuseForks>true</reuseForks>
+                 <reuseForks>false</reuseForks>
                  <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -481,6 +489,12 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-common</artifactId>
         <version>${hadoop-two.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -506,6 +520,12 @@
         <artifactId>pig</artifactId>
         <version>${pig.version}</version>
         <classifier>h2</classifier>
+        <exclusions>
+          <exclusion>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- Make sure we have all the antlr dependencies -->
@@ -538,6 +558,12 @@
         <groupId>org.apache.flume</groupId>
         <artifactId>flume-ng-core</artifactId>
         <version>${flume.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>net.sourceforge.findbugs</groupId>
@@ -545,8 +571,8 @@
         <version>${findbugs.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.xerial.snappy</groupId>
-        <artifactId>snappy-java</artifactId>
+        <groupId>org.iq80.snappy</groupId>
+        <artifactId>snappy</artifactId>
         <version>${snappy.version}</version>
       </dependency>
       <dependency>

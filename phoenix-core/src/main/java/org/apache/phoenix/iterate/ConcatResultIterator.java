@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ServerUtil;
 
 
 /**
@@ -39,8 +40,13 @@ public class ConcatResultIterator implements PeekingResultIterator {
         this.resultIterators = iterators;
     }
     
+    private ConcatResultIterator(List<PeekingResultIterator> iterators) {
+        this.resultIterators = null;
+        this.iterators = iterators;
+    }
+    
     private List<PeekingResultIterator> getIterators() throws SQLException {
-        if (iterators == null) {
+        if (iterators == null && resultIterators != null) {
             iterators = resultIterators.getIterators();
         }
         return iterators;
@@ -48,10 +54,33 @@ public class ConcatResultIterator implements PeekingResultIterator {
     
     @Override
     public void close() throws SQLException {
-        if (iterators != null) {
-            for (;index < iterators.size(); index++) {
-                PeekingResultIterator iterator = iterators.get(index);
-                iterator.close();
+        SQLException toThrow = null;
+        try {
+            if (resultIterators != null) {
+                resultIterators.close();
+            }
+        } catch (Exception e) {
+           toThrow = ServerUtil.parseServerException(e);
+        } finally {
+            try {
+                if (iterators != null) {
+                    for (;index < iterators.size(); index++) {
+                        PeekingResultIterator iterator = iterators.get(index);
+                        try {
+                            iterator.close();
+                        } catch (Exception e) {
+                            if (toThrow == null) {
+                                toThrow = ServerUtil.parseServerException(e);
+                            } else {
+                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                            }
+                        }
+                    }
+                }
+            } finally {
+                if (toThrow != null) {
+                    throw toThrow;
+                }
             }
         }
     }
@@ -59,7 +88,9 @@ public class ConcatResultIterator implements PeekingResultIterator {
 
     @Override
     public void explain(List<String> planSteps) {
-        resultIterators.explain(planSteps);
+        if (resultIterators != null) {
+            resultIterators.explain(planSteps);
+        }
     }
 
     private PeekingResultIterator currentIterator() throws SQLException {
@@ -83,16 +114,20 @@ public class ConcatResultIterator implements PeekingResultIterator {
 
     @Override
     public Tuple next() throws SQLException {
-        return currentIterator().next();
+        Tuple next = currentIterator().next();
+        if (next == null) {
+            close(); // Close underlying ResultIterators to free resources sooner rather than later
+        }
+        return next;
     }
 
 	@Override
 	public String toString() {
-		return "ConcatResultIterator [resultIterators=" + resultIterators
-				+ ", iterators=" + iterators + ", index=" + index + "]";
+		return "ConcatResultIterator [" + resultIterators == null ? ("iterators=" + iterators) : ("resultIterators=" + resultIterators) 
+				+ ", index=" + index + "]";
 	}
 
-    public static PeekingResultIterator newConcatResultIterator(final List<PeekingResultIterator> concatIterators) {
+    public static PeekingResultIterator newIterator(final List<PeekingResultIterator> concatIterators) {
         if (concatIterators.isEmpty()) {
             return PeekingResultIterator.EMPTY_ITERATOR;
         } 
@@ -100,24 +135,6 @@ public class ConcatResultIterator implements PeekingResultIterator {
         if (concatIterators.size() == 1) {
             return concatIterators.get(0);
         }
-        return new ConcatResultIterator(new ResultIterators() {
-
-            @Override
-            public List<PeekingResultIterator> getIterators() throws SQLException {
-                return concatIterators;
-            }
-
-            @Override
-            public int size() {
-                return concatIterators.size();
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-                // TODO: review what we should for explain plan here
-                concatIterators.get(0).explain(planSteps);
-            }
-            
-        });
+        return new ConcatResultIterator(concatIterators);
     }
 }

@@ -30,6 +30,10 @@ public class DelegateResultIterator implements ResultIterator {
         this.delegate = delegate;
     }
     
+    protected ResultIterator getDelegate() {
+    	return delegate;
+    }
+    
     @Override
     public void close() throws SQLException {
         delegate.close();

@@ -26,11 +26,13 @@ import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
@@ -38,11 +40,13 @@ import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRo
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.protobuf.ServiceException;
@@ -63,24 +67,31 @@ public class StatisticsWriter implements Closeable {
      * @throws IOException
      *             if the table cannot be created due to an underlying HTable creation error
      */
-    public static StatisticsWriter newWriter(HTableInterface hTable, String tableName, long clientTimeStamp) throws IOException {
+    public static StatisticsWriter newWriter(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
         }
-        StatisticsWriter statsTable = new StatisticsWriter(hTable, tableName, clientTimeStamp);
+        HTableInterface statsWriterTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
+        HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
+        StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName, clientTimeStamp);
         if (clientTimeStamp != StatisticsCollector.NO_TIMESTAMP) { // Otherwise we do this later as we don't know the ts yet
             statsTable.commitLastStatsUpdatedTime();
         }
         return statsTable;
     }
 
-    private final HTableInterface statisticsTable;
+    private final HTableInterface statsWriterTable;
+    // In HBase 0.98.4 or above, the reader and writer will be the same.
+    // In pre HBase 0.98.4, there was a bug in using the HTable returned
+    // from a coprocessor for scans, so in that case it'll be different.
+    private final HTableInterface statsReaderTable;
     private final byte[] tableName;
     private final long clientTimeStamp;
 
-    private StatisticsWriter(HTableInterface statsTable, String tableName, long clientTimeStamp) {
-        this.statisticsTable = statsTable;
-        this.tableName = PDataType.VARCHAR.toBytes(tableName);
+    private StatisticsWriter(HTableInterface statsReaderTable, HTableInterface statsWriterTable, String tableName, long clientTimeStamp) {
+        this.statsReaderTable = statsReaderTable;
+        this.statsWriterTable = statsWriterTable;
+        this.tableName = Bytes.toBytes(tableName);
         this.clientTimeStamp = clientTimeStamp;
     }
 
@@ -89,18 +100,17 @@ public class StatisticsWriter implements Closeable {
      */
     @Override
     public void close() throws IOException {
-        statisticsTable.close();
+        statsWriterTable.close();
     }
 
-    public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
+    public void splitStats(HRegion p, HRegion l, HRegion r, StatisticsCollector tracker, ImmutableBytesPtr cfKey, List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
         if (!useMaxTimeStamp) {
             mutations.add(getLastStatsUpdatedTimePut(clientTimeStamp));
         }
         long readTimeStamp = useMaxTimeStamp ? HConstants.LATEST_TIMESTAMP : clientTimeStamp;
-        byte[] famBytes = PDataType.VARCHAR.toBytes(fam);
-        Result result = StatisticsUtil.readRegionStatistics(statisticsTable, tableName, famBytes, p.getRegionName(), readTimeStamp);
+        Result result = StatisticsUtil.readRegionStatistics(statsReaderTable, tableName, cfKey, p.getRegionName(), readTimeStamp);
         if (result != null && !result.isEmpty()) {
         	Cell cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
 
@@ -108,7 +118,7 @@ public class StatisticsWriter implements Closeable {
                 long writeTimeStamp = useMaxTimeStamp ? cell.getTimestamp() : clientTimeStamp;
 
                 GuidePostsInfo guidePosts = GuidePostsInfo.fromBytes(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-                byte[] pPrefix = StatisticsUtil.getRowKey(tableName, famBytes, p.getRegionName());
+                byte[] pPrefix = StatisticsUtil.getRowKey(tableName, cfKey, p.getRegionName());
                 mutations.add(new Delete(pPrefix, writeTimeStamp));
                 
 	        	long byteSize = 0;
@@ -129,14 +139,14 @@ public class StatisticsWriter implements Closeable {
 	            if (midEndIndex > 0) {
 	                GuidePostsInfo lguidePosts = new GuidePostsInfo(byteSize, guidePosts.getGuidePosts().subList(0, midEndIndex));
 	                tracker.clear();
-	                tracker.addGuidePost(fam, lguidePosts, byteSize, cell.getTimestamp());
-	                addStats(l.getRegionName(), tracker, fam, mutations);
+	                tracker.addGuidePost(cfKey, lguidePosts, byteSize, cell.getTimestamp());
+	                addStats(l.getRegionName(), tracker, cfKey, mutations);
 	            }
 	            if (midStartIndex < guidePosts.getGuidePosts().size()) {
 	                GuidePostsInfo rguidePosts = new GuidePostsInfo(byteSize, guidePosts.getGuidePosts().subList(midStartIndex, guidePosts.getGuidePosts().size()));
 	                tracker.clear();
-	                tracker.addGuidePost(fam, rguidePosts, byteSize, cell.getTimestamp());
-	                addStats(r.getRegionName(), tracker, fam, mutations);
+	                tracker.addGuidePost(cfKey, rguidePosts, byteSize, cell.getTimestamp());
+	                addStats(r.getRegionName(), tracker, cfKey, mutations);
 	            }
         	}
         }
@@ -147,7 +157,7 @@ public class StatisticsWriter implements Closeable {
      * then we use Upsert queries to update the table
      * If the region gets splitted or the major compaction happens we update using HTable.put()
      * @param tracker - the statistics tracker
-     * @param fam -  the family for which the stats is getting collected.
+     * @param cfKey -  the family for which the stats is getting collected.
      * @param mutations - list of mutations that collects all the mutations to commit in a batch
      * @param tablekey - The table name
      * @param schemaName - the schema name associated with the table          
@@ -157,7 +167,7 @@ public class StatisticsWriter implements Closeable {
      *             if we fail to do any of the puts. Any single failure will prevent any future attempts for the remaining list of stats to
      *             update
      */
-    public void addStats(byte[] regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations) throws IOException {
+    public void addStats(byte[] regionName, StatisticsCollector tracker, ImmutableBytesPtr cfKey, List<Mutation> mutations) throws IOException {
         if (tracker == null) { return; }
         boolean useMaxTimeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP;
         long timeStamp = clientTimeStamp;
@@ -165,10 +175,9 @@ public class StatisticsWriter implements Closeable {
             timeStamp = tracker.getMaxTimeStamp();
             mutations.add(getLastStatsUpdatedTimePut(timeStamp));
         }
-        byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
-                regionName);
+        byte[] prefix = StatisticsUtil.getRowKey(tableName, cfKey, regionName);
         Put put = new Put(prefix);
-        GuidePostsInfo gp = tracker.getGuidePosts(fam);
+        GuidePostsInfo gp = tracker.getGuidePosts(cfKey);
         if (gp != null) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_COUNT_BYTES,
                     timeStamp, PDataType.LONG.toBytes((gp.getGuidePosts().size())));
@@ -176,16 +185,6 @@ public class StatisticsWriter implements Closeable {
                     timeStamp, PDataType.VARBINARY.toBytes(gp.toBytes()));
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES,
                     timeStamp, PDataType.LONG.toBytes(gp.getByteCount()));
-        }
-        byte[] minKey = tracker.getMinKey(fam);
-        if (minKey != null) {
-	        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MIN_KEY_BYTES,
-	                timeStamp, PDataType.VARBINARY.toBytes(minKey));
-        }
-        byte[] maxKey = tracker.getMaxKey(fam);
-        if (maxKey != null) {
-	        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.MAX_KEY_BYTES,
-	                timeStamp, PDataType.VARBINARY.toBytes(maxKey));
         }
         // Add our empty column value so queries behave correctly
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
@@ -211,7 +210,7 @@ public class StatisticsWriter implements Closeable {
                 mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
             }
             MutateRowsRequest mrm = mrmBuilder.build();
-            CoprocessorRpcChannel channel = statisticsTable.coprocessorService(row);
+            CoprocessorRpcChannel channel = statsWriterTable.coprocessorService(row);
             MultiRowMutationService.BlockingInterface service =
                     MultiRowMutationService.newBlockingStub(channel);
             try {
@@ -235,14 +234,13 @@ public class StatisticsWriter implements Closeable {
         // Always use wallclock time for this, as it's a mechanism to prevent
         // stats from being collected too often.
         Put put = getLastStatsUpdatedTimePut(clientTimeStamp);
-        statisticsTable.put(put);
+        statsWriterTable.put(put);
     }
     
-    public void deleteStats(byte[] regionName, StatisticsCollector tracker, String fam, List<Mutation> mutations)
+    public void deleteStats(byte[] regionName, StatisticsCollector tracker, ImmutableBytesPtr fam, List<Mutation> mutations)
             throws IOException {
         long timeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP ? tracker.getMaxTimeStamp() : clientTimeStamp;
-        byte[] prefix = StatisticsUtil.getRowKey(tableName, PDataType.VARCHAR.toBytes(fam),
-                regionName);
+        byte[] prefix = StatisticsUtil.getRowKey(tableName, fam, regionName);
         mutations.add(new Delete(prefix, timeStamp - 1));
     }
 }

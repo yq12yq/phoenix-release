@@ -50,6 +50,7 @@
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
         <include>com.github.stephenc.high-scale-lib:high-scale-lib</include>
+        <include>org.iq80.snappy:snappy</include>
       </includes>
       <unpackOptions>
         <excludes>

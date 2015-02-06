@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -43,7 +44,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -60,7 +60,6 @@ import com.google.common.collect.Lists;
  * @since 0.1
  */
 
-@Category(ClientManagedTimeTest.class)
 @RunWith(Parameterized.class)
 public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static final String tenantId = getOrganizationId();
@@ -86,7 +85,7 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-    
+
     protected long ts;
     protected Date date;
     private String indexDDL;
@@ -138,7 +137,11 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
         int compareResult = Bytes.compareTo(lhsOutPtr.get(), lhsOutPtr.getOffset(), lhsOutPtr.getLength(), rhsOutPtr.get(), rhsOutPtr.getOffset(), rhsOutPtr.getLength());
         return ByteUtil.compare(op, compareResult);
     }
-    
+
+    protected static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + tableName;
+        conn.createStatement().execute(query);
+    }
     
     private static AtomicInteger runCount = new AtomicInteger(0);
     protected static int nextRunCount() {

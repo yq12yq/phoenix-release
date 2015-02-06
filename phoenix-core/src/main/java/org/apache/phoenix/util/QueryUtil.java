@@ -34,18 +34,19 @@ import javax.annotation.Nullable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Addressing;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.query.QueryServices;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import org.apache.phoenix.query.QueryServices;
 
 public final class QueryUtil {
 
@@ -72,6 +73,10 @@ public final class QueryUtil {
      */
     public static final int DATA_TYPE_NAME_POSITION = 6;
 
+    private static final String SELECT = "SELECT";
+    private static final String FROM = "FROM";
+    private static final String WHERE = "WHERE";
+    
     /**
      * Private constructor
      */
@@ -187,6 +192,20 @@ public final class QueryUtil {
         return buf.toString();
     }
 
+    public static String getExplainPlan(ResultIterator iterator) throws SQLException {
+        List<String> steps = Lists.newArrayList();
+        iterator.explain(steps);
+        StringBuilder buf = new StringBuilder();
+        for (String step : steps) {
+            buf.append(step);
+            buf.append('\n');
+        }
+        if (buf.length() > 0) {
+            buf.setLength(buf.length()-1);
+        }
+        return buf.toString();
+    }
+
     public static Connection getConnection(Configuration conf) throws ClassNotFoundException,
             SQLException {
         return getConnection(new Properties(), conf);
@@ -238,5 +257,13 @@ public final class QueryUtil {
         server = Joiner.on(',').join(servers);
 
         return getUrl(server, port);
+    }
+    
+    public static String getViewStatement(String schemaName, String tableName, Expression whereClause) {
+        // Only form we currently support for VIEWs: SELECT * FROM t WHERE ...
+        return SELECT + " " + WildcardParseNode.NAME + " " + FROM + " " +
+                (schemaName == null || schemaName.length() == 0 ? "" : ("\"" + schemaName + "\".")) +
+                ("\"" + tableName + "\" ") +
+                (WHERE + " " + whereClause.toString());
     }
 }

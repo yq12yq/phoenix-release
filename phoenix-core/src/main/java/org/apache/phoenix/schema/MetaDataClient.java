@@ -66,6 +66,7 @@ import static org.apache.phoenix.schema.PDataType.VARCHAR;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -97,11 +98,13 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -113,6 +116,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixParameterMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
@@ -362,7 +366,7 @@ public class MetaDataClient {
                 // which is not really necessary unless you want to filter or add
                 // columns
                 addIndexesFromPhysicalTable(result);
-                connection.addTable(resultTable);
+                connection.addTable(result.getTable());
                 return result;
             } else {
                 // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
@@ -375,7 +379,9 @@ public class MetaDataClient {
                 if (table != null) {
                     result.setTable(table);
                     if (code == MutationCode.TABLE_ALREADY_EXISTS) {
-                        addIndexesFromPhysicalTable(result);
+                        if (addIndexesFromPhysicalTable(result)) {
+                            connection.addTable(result.getTable());
+                        }
                         return result;
                     }
                     if (code == MutationCode.TABLE_NOT_FOUND && tryCount + 1 == maxTryCount) {
@@ -430,11 +436,39 @@ public class MetaDataClient {
             }
         }
         for (PTable index : indexes) {
-            for (PColumn pkColumn : index.getPKColumns()) {
-                try {
-                    IndexUtil.getDataColumn(table, pkColumn.getName().getString());
+            if (index.getViewIndexId() == null) {
+                boolean containsAllReqdCols = true;
+                // Ensure that all indexed columns from index on physical table
+                // exist in the view too (since view columns may be removed)
+                List<PColumn> pkColumns = index.getPKColumns();
+                for (int i = index.getBucketNum() == null ? 0 : 1; i < pkColumns.size(); i++) {
+                    try {
+                        PColumn pkColumn = pkColumns.get(i);
+                        IndexUtil.getDataColumn(table, pkColumn.getName().getString());
+                    } catch (IllegalArgumentException e) { // Ignore this index and continue with others
+                        containsAllReqdCols = false;
+                        break;
+                    }
+                }
+                // Ensure that constant columns (i.e. columns matched in the view WHERE clause)
+                // all exist in the index on the physical table.
+                for (PColumn col : table.getColumns()) {
+                    if (col.getViewConstant() != null) {
+                        try {
+                            // TODO: it'd be possible to use a local index that doesn't have all view constants
+                            String indexColumnName = IndexUtil.getIndexColumnName(col);
+                            index.getColumn(indexColumnName);
+                        } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
+                            containsAllReqdCols = false;
+                            break;
+                        }
+                    }
+                }
+                if (containsAllReqdCols) {
+                    // Tack on view statement to index to get proper filtering for view
+                    String viewStatement = IndexUtil.rewriteViewStatement(connection, index, physicalTable, table.getViewStatement());
+                    index = PTableImpl.makePTable(index, viewStatement);
                     allIndexes.add(index);
-                } catch (IllegalArgumentException e) { // Ignore, and continue, as column was not found
                 }
             }
         }
@@ -694,7 +728,7 @@ public class MetaDataClient {
         connection.rollback();
         try {
             connection.setAutoCommit(true);
-            MutationState state;
+            MutationPlan mutationPlan;
             
             // For local indexes, we optimize the initial index population by *not* sending Puts over
             // the wire for the index rows, as we don't need to do that. Instead, we tap into our
@@ -703,7 +737,7 @@ public class MetaDataClient {
                 final PhoenixStatement statement = new PhoenixStatement(connection);
                 String tableName = getFullTableName(dataTableRef);
                 String query = "SELECT count(*) FROM " + tableName;
-                QueryPlan plan = statement.compileQuery(query);
+                final QueryPlan plan = statement.compileQuery(query);
                 TableRef tableRef = plan.getContext().getResolver().getTables().get(0);
                 // Set attribute on scan that UngroupedAggregateRegionObserver will switch on.
                 // We'll detect that this attribute was set the server-side and write the index
@@ -746,24 +780,54 @@ public class MetaDataClient {
                 for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
                     scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
                 }
-                Cell kv = plan.iterator().next().getValue(0);
-                ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-                // A single Cell will be returned with the count(*) - we decode that here
-                long rowCount = PDataType.LONG.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
-                // The contract is to return a MutationState that contains the number of rows modified. In this
-                // case, it's the number of rows in the data table which corresponds to the number of index
-                // rows that were added.
-                state = new MutationState(0, connection, rowCount);
+                
+                // Go through MutationPlan abstraction so that we can create local indexes
+                // with a connectionless connection (which makes testing easier).
+                mutationPlan = new MutationPlan() {
+
+                    @Override
+                    public StatementContext getContext() {
+                        return plan.getContext();
+                    }
+
+                    @Override
+                    public ParameterMetaData getParameterMetaData() {
+                        return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                    }
+
+                    @Override
+                    public ExplainPlan getExplainPlan() throws SQLException {
+                        return ExplainPlan.EMPTY_PLAN;
+                    }
+
+                    @Override
+                    public PhoenixConnection getConnection() {
+                        return connection;
+                    }
+
+                    @Override
+                    public MutationState execute() throws SQLException {
+                        Cell kv = plan.iterator().next().getValue(0);
+                        ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+                        // A single Cell will be returned with the count(*) - we decode that here
+                        long rowCount = PDataType.LONG.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
+                        // The contract is to return a MutationState that contains the number of rows modified. In this
+                        // case, it's the number of rows in the data table which corresponds to the number of index
+                        // rows that were added.
+                        return new MutationState(0, connection, rowCount);
+                    }
+                    
+                };
             } else {
                 PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
-                MutationPlan plan = compiler.compile(index);
+                mutationPlan = compiler.compile(index);
                 try {
-                    plan.getContext().setScanTimeRange(new TimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE));
+                    mutationPlan.getContext().setScanTimeRange(new TimeRange(dataTableRef.getLowerBoundTimeStamp(), Long.MAX_VALUE));
                 } catch (IOException e) {
                     throw new SQLException(e);
                 }
-                state = connection.getQueryServices().updateData(plan);
             }            
+            MutationState state = connection.getQueryServices().updateData(mutationPlan);
             indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null, 
                 TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
                 dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
@@ -973,7 +1037,7 @@ public class MetaDataClient {
                 }
                 // Set DEFAULT_COLUMN_FAMILY_NAME of index to match data table
                 // We need this in the props so that the correct column family is created
-                if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW) {
+                if (dataTable.getDefaultFamilyName() != null && dataTable.getType() != PTableType.VIEW && indexId == null) {
                     statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
                 }
                 CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
@@ -1173,11 +1237,10 @@ public class MetaDataClient {
             }
             
             boolean removedProp = false;
-            // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an index
+            // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an INDEX or a non mapped VIEW
             if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
                 Boolean multiTenantProp = (Boolean) tableProps.remove(PhoenixDatabaseMetaData.MULTI_TENANT);
                 multiTenant = Boolean.TRUE.equals(multiTenantProp);
-                // Remove, but add back after our check below
                 defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);  
                 removedProp = (defaultFamilyName != null);
             }
@@ -1189,7 +1252,8 @@ public class MetaDataClient {
             }
             // Delay this check as it is supported to have IMMUTABLE_ROWS and SALT_BUCKETS defined on views
             if ((statement.getTableType() == PTableType.VIEW || indexId != null) && !tableProps.isEmpty()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build().buildException();
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WITH_PROPERTIES).build()
+                        .buildException();
             }
             if (removedProp) {
                 tableProps.put(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME, defaultFamilyName);  
@@ -1556,6 +1620,11 @@ public class MetaDataClient {
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, viewType, indexId, indexType);
                 connection.addTable(table);
+                if (tableType == PTableType.VIEW) {
+                    // Set wasUpdated to true to force attempt to add
+                    // indexes from physical table to view.
+                    addIndexesFromPhysicalTable(new MetaDataMutationResult(code, result.getMutationTime(), table, true));
+                }
                 return table;
             }
         } finally {

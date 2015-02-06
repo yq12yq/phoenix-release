@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +39,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
@@ -370,6 +372,19 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         testAssertQueryPlanDetails(false, true, false);
     }
 
+    @Test
+    public void testQueryOptimizerShouldSelectThePlanWithMoreNumberOfPKColumns() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn2 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute("create table index_test_table (a varchar not null,b varchar not null,c varchar not null,d varchar,e varchar, f varchar constraint pk primary key(a,b,c))");
+        conn1.createStatement().execute(
+            "create index INDEX_TEST_TABLE_INDEX_D on INDEX_TEST_TABLE(A,D) include(B,C,E,F)");
+        conn1.createStatement().execute(
+            "create index INDEX_TEST_TABLE_INDEX_F on INDEX_TEST_TABLE(A,F) include(B,C,D,E)");
+        ResultSet rs = conn2.createStatement().executeQuery("explain select * from INDEX_TEST_TABLE where A in ('1','2','3','4','5') and F in ('1111','2222','3333')");
+        assertEquals("CLIENT PARALLEL 1-WAY SKIP SCAN ON 15 KEYS OVER INDEX_TEST_TABLE_INDEX_F ['1','1111'] - ['5','3333']", QueryUtil.getExplainPlan(rs));
+    }
+
     private void testAssertQueryPlanDetails(boolean multitenant, boolean useIndex, boolean salted) throws Exception {
         String sql;
         PreparedStatement stmt;
@@ -509,9 +524,45 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         stmt.setString(1, "1000");
         QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
         assertEquals("Query should use index", PTableType.INDEX, plan.getTableRef().getTable().getType());
-        
     }
     
+    @Test
+    public void testAssertQueryAgainstTenantSpecificViewDoesNotGoThroughIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl(), new Properties());
+        
+        // create table
+        conn.createStatement().execute("create table "
+                + "XYZ.ABC"
+                + "   (organization_id char(15) not null, \n"
+                + "    entity_id char(15) not null,\n"
+                + "    a_string_array varchar(100) array[] not null,\n"
+                + "    b_string varchar(100),\n"
+                + "    a_string varchar,\n"
+                + "    a_date date,\n"
+                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id, a_string_array)\n"
+                + ")" + "MULTI_TENANT=true");
+
+        
+        // create index
+        conn.createStatement().execute("CREATE INDEX ABC_IDX ON XYZ.ABC (a_string) INCLUDE (a_date)");
+        
+        conn.close();
+        
+        // switch to a tenant specific connection
+        conn = DriverManager.getConnection(getUrl("tenantId"));
+        
+        // create a tenant specific view
+        conn.createStatement().execute("CREATE VIEW ABC_VIEW AS SELECT * FROM XYZ.ABC where b_string='foo'");
+        
+        // query against the tenant specific view
+        String sql = "SELECT a_date FROM ABC_VIEW where a_string = ?";
+        PreparedStatement stmt = conn.prepareStatement(sql);
+        stmt.setString(1, "1000");
+        QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        // should not use index as index does not contain b_string
+        assertEquals("Query should not use index", PTableType.VIEW, plan.getTableRef().getTable().getType());
+    }
+
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
         Connection conn = stmt.getConnection();
         QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);

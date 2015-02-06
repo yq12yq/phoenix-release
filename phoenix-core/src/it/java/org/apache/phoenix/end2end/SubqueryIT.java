@@ -57,14 +57,13 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-@Category(HBaseManagedTimeTest.class)
+
 @RunWith(Parameterized.class)
 public class SubqueryIT extends BaseHBaseManagedTimeIT {
     
@@ -976,6 +975,45 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
             assertTrue (rs.next());
             assertEquals(rs.getString(1), "000000000000002");
             assertEquals(rs.getString(2), "T6");
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSubqueryWithDelete() throws Exception {
+        String tempTable = "TEMP_SUBQUERY_TABLE";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        try {            
+            conn.createStatement().execute("CREATE TABLE " + tempTable 
+                    + "   (item_id varchar not null primary key, " 
+                    + "    name varchar)");
+            conn.createStatement().execute("UPSERT INTO " + tempTable + "(item_id, name)"
+                    + "   SELECT \"item_id\", name FROM " + JOIN_ITEM_TABLE_FULL_NAME);
+
+            String query = "SELECT count(*) FROM " + JOIN_ITEM_TABLE_FULL_NAME;
+            PreparedStatement statement = conn.prepareStatement(query);
+            ResultSet rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getInt(1), 7);
+            assertFalse(rs.next());
+            
+            conn.createStatement().execute("DELETE FROM " + tempTable + " WHERE item_id IN ("
+                    + "   SELECT \"item_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + ")");
+            
+            query = "SELECT name FROM " + tempTable + " ORDER BY item_id";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T4");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "T5");
+            assertTrue (rs.next());
+            assertEquals(rs.getString(1), "INVALID-1");
 
             assertFalse(rs.next());
         } finally {

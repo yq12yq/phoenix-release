@@ -81,9 +81,8 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
-@Category(ClientManagedTimeTest.class)
+
 public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 	
     @BeforeClass
@@ -180,8 +179,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         ResultSet rs;
         rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
+        assertEquals(rs.getString(1),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
+        assertEquals(rs.getString(2),null);
         assertFalse(rs.next());
 
         rs = dbmd.getSchemas(null, null);

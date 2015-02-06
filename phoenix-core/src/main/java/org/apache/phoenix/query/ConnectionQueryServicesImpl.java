@@ -110,6 +110,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
+import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -481,6 +482,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     latestMetaDataLock.wait(waitTime);
                 } catch (InterruptedException e) {
+                    // restore the interrupt status
+                    Thread.currentThread().interrupt();
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                         .setRootCause(e).build().buildException(); // FIXME
                 }
@@ -612,18 +615,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void addCoprocessors(byte[] tableName, HTableDescriptor descriptor, PTableType tableType) throws SQLException {
         // The phoenix jar must be available on HBase classpath
+        int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
             if (!descriptor.hasCoprocessor(ScanRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
             }
             if (!descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
             if (!descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
-                descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
             }
             if (!descriptor.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
-                descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, 1, null);
+                descriptor.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
             }
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
@@ -635,11 +639,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !descriptor.hasCoprocessor(Indexer.class.getName())) {
                 Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                 opts.put(CoveredColumnsIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
-                Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts);
+                Indexer.enableIndexing(descriptor, PhoenixIndexBuilder.class, opts, priority);
             }
             if (SchemaUtil.isStatsTable(tableName) && !descriptor.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 descriptor.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
-                        null, 1, null);
+                        null, priority, null);
             }
             
             if (descriptor.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null
@@ -647,13 +651,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                 if (!descriptor.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
                     descriptor.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
-                        null, 1, null);
+                        null, priority, null);
                 }
             } else {
                 if (!descriptor.hasCoprocessor(LocalIndexSplitter.class.getName())
                         && !SchemaUtil.isMetaTable(tableName)
                         && !SchemaUtil.isSequenceTable(tableName)) {
-                    descriptor.addCoprocessor(LocalIndexSplitter.class.getName(), null, 1, null);
+                    descriptor.addCoprocessor(LocalIndexSplitter.class.getName(), null, priority, null);
                 }
             }
 
@@ -661,14 +665,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName)) {
                 if (!descriptor.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
-                    descriptor.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, 1, null);
+                    descriptor.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
                 }
                 if (!descriptor.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
-                    descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, 2, null);
+                    descriptor.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
                 if (!descriptor.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, 1, null);
+                    descriptor.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
                 }
             }
         } catch (IOException e) {
@@ -740,6 +744,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
+    private boolean allowOnlineTableSchemaUpdate() {
+        return props.getBoolean(
+                QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE,
+                QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);    
+    }
+    
     /**
      * 
      * @param tableName
@@ -777,6 +787,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
                 }
+                // Remove the splitPolicy attribute to prevent HBASE-12570
+                if (isMetaTable) {
+                    newDesc.remove(HTableDescriptor.SPLIT_POLICY);
+                }
                 try {
                     if (splits == null) {
                         admin.createTable(newDesc);
@@ -790,6 +804,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 if (isMetaTable) {
                     checkClientServerCompatibility();
+                    /*
+                     * Now we modify the table to add the split policy, since we know that the client and
+                     * server and compatible. This works around HBASE-12570 which causes the cluster to be
+                     * brought down.
+                     */
+                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
+                    if (allowOnlineTableSchemaUpdate()) {
+                        // No need to wait/poll for this update
+                        admin.modifyTable(tableName, newDesc);
+                    } else {
+                        admin.disableTable(tableName);
+                        admin.modifyTable(tableName, newDesc);
+                        admin.enableTable(tableName);
+                    }
                 }
                 return null;
             } else {
@@ -805,7 +833,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 admin.disableTable(tableName);
                 admin.modifyTable(tableName, newDesc);
                 admin.enableTable(tableName);
-                
                 return newDesc;
             }
 
@@ -830,7 +857,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return null; // will never make it here
     }
-
+    
     private static boolean isInvalidMutableIndexConfig(Long serverVersion) {
         if (serverVersion == null) {
             return false;
@@ -1685,6 +1712,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e) {
             throw new PhoenixIOException(e);
         } catch (InterruptedException e) {
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build()
                     .buildException();
         } finally {
@@ -1875,6 +1904,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e){
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e){
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                 .setRootCause(e).build().buildException(); // FIXME ?
             } finally {
@@ -1994,6 +2025,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } catch (IOException e){
                 sqlE = ServerUtil.parseServerException(e);
             } catch (InterruptedException e){
+                // restore the interrupt status
+                Thread.currentThread().interrupt();
                 sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
                 .setRootCause(e).build().buildException(); // FIXME ?
             } finally {
@@ -2044,6 +2077,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (IOException e){
             sqlE = ServerUtil.parseServerException(e);
         } catch (InterruptedException e){
+            // restore the interrupt status
+            Thread.currentThread().interrupt();
             sqlE = new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION)
             .setRootCause(e).build().buildException(); // FIXME ?
         } finally {
