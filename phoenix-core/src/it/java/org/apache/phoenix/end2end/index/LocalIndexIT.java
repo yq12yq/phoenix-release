@@ -165,10 +165,16 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HTableDescriptor htd = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DEFAULT_DATA_TABLE_NAME)));
         assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
-        try (HTable userTable = new HTable(admin.getConfiguration(),TableName.valueOf(DEFAULT_DATA_TABLE_NAME))) {
-            try (HTable indexTable = new HTable(admin.getConfiguration(),TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DEFAULT_DATA_TABLE_NAME)))) {
+        HTable userTable = new HTable(admin.getConfiguration(),TableName.valueOf(DEFAULT_DATA_TABLE_NAME));
+        try {
+        	HTable indexTable = new HTable(admin.getConfiguration(),TableName.valueOf(MetaDataUtil.getLocalIndexTableName(DEFAULT_DATA_TABLE_NAME)));
+            try {
                 assertArrayEquals("Both user table and index table should have same split keys.", userTable.getStartKeys(), indexTable.getStartKeys());
+            } finally {
+            	indexTable.close();
             }
+        } finally {
+        	userTable.close();
         }
     }
 

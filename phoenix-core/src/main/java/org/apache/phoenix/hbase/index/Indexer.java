@@ -264,7 +264,8 @@ public class Indexer extends BaseRegionObserver {
       }
 
       // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
+      TraceScope scope = Trace.startSpan("Starting to build index updates");
+      try {
           Span current = scope.getSpan();
           if (current == null) {
               current = NullSpan.INSTANCE;
@@ -279,6 +280,8 @@ public class Indexer extends BaseRegionObserver {
 
           // write them, either to WAL or the index tables
           doPre(indexUpdates, edit, durability);
+      } finally {
+    	  scope.close();
       }
   }
 
@@ -421,7 +424,8 @@ public class Indexer extends BaseRegionObserver {
       }
 
       // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Completing index writes")) {
+      TraceScope scope = Trace.startSpan("Completing index writes");
+      try {
           Span current = scope.getSpan();
           if (current == null) {
               current = NullSpan.INSTANCE;
@@ -465,6 +469,8 @@ public class Indexer extends BaseRegionObserver {
                   ikv.markBatchFinished();
               }
           }
+      } finally {
+    	  scope.close();
       }
   }
 

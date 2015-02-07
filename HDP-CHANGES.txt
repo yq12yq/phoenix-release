@@ -1,24 +1,24 @@
-Champlain Phoenix is based on Apache Phoenix 4.2
+Champlain Phoenix is based on Apache Phoenix 4.2.2
 
-Following are the changes on top of Apache Phoenix 4.2
+Following are the changes on top of Apache Phoenix 4.2.2
 
 Bug fixes:
+==========
+PHOENIX-1248 CsvBulkLoadTool is failing with IAE when local index specified for --index-table parameter
+PHOENIX-1336 Exception when select from local index:Cache of region boundaries are out of date
+PHOENIX-1596 Turning tracing on causes region servers to crash
+PHOENIX-1601 - Performance.py script not working in binary distribution
+PHOENIX-1575 Identical sql type values for UNSIGNED_TIMESTAMP and UNSIGNED_DATE
+PHOENIX-1592 ORDER BY not closing ResultIterator properly
+PHOENIX-1551 Upgrading from Phoenix 4.0.x to 4.2.2 and throw can't find SYSTEM.STATS
+PHOENIX-1571 Replace hard-coded date
+PHOENIX-1469 Binary columns do not work correctly for indexing
+PHOENIX-1532 Phoenix tarball assembly does not include server jar
+PHOENIX-1537 Set reuseForks to false for integration tests
+PHOENIX-1362 Min/max aggregate query on CHAR and BINARY types always return null
+PHOENIX-1533 Last key part not taken into child/parent optimization
 
-PHOENIX-1442: Alter Index double normalize Index Table Name
-PHOENIX-1434: Stats are not maintained correctly through splits
-PHOENIX-1395: ResultSpooler spill files are left behind in /tmp folder
-PHOENIX-1405: Problem referencing lower-case column names with Phoenix / Pig / Spark
-PHOENIX-1416: Given a schema name, DatabaseMetadata.getTables and getColumns calls erroneously match tables without schema
-PHOENIX-1402: Don't recalculate stats on split
-PHOENIX-1404: Ignore call to ResultSet#setFetchSize
-PHOENIX-1346: Base exception gets wrapped as incompatible jar exception
-PHOENIX-1406: Use preCompact hook instead of preCompactScannerOpen for stats collection
-PHOENIX-1397: RVC combined with OR on first row key column results in NPE
-PHOENIX-1401: SYSTEM.SEQUENCE table is not pre-split as expected
-PHOENIX-1403: Correct synchronization in ConnectionQueryServicesImpl.init
-PHOENIX-1400: Copy small attribute in ScanUtil
-PHOENIX-1396: Avoid unnecessary ResultSpooler.bin files creation/deletion every time SpoolingResultIterator
 
 Default Configuration Change:
-
+=============================
 Update default value of STATS_GUIDEPOST_PER_REGION_ATTRIB from 0 to 1
