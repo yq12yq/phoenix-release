@@ -80,13 +80,18 @@ public class End2EndTestDriver extends AbstractHBaseTool {
 
       @Override
       public boolean isCandidateClass(Class<?> c) {
-        Annotation[] annotations = c.getAnnotations();
-        for (Annotation curAnnotation : annotations) {
+        for (Annotation curAnnotation : c.getAnnotations()) {
           if (curAnnotation.toString().contains("NeedsOwnMiniClusterTest")) {
             // Skip tests that aren't designed to run against a live cluster
             return false;
           }
-        }  
+        }
+        
+        // Check if the class is sub-class of BaseOwnClusterIT
+        if(BaseOwnClusterIT.class.isAssignableFrom(c)){
+          return false;
+        }
+
         return testFilterRe.matcher(c.getName()).find() &&
           // Our pattern will match the below NON-IntegrationTest. Rather than
           // do exotic regex, just filter it out here
