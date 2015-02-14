@@ -1164,6 +1164,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
             }
             ensureViewIndexTableCreated(tableName, tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null, MetaDataUtil.getClientTimeStamp(m));
+            tableProps.put(MetaDataUtil.PARENT_TABLE_KEY, Bytes.toString(tableName));
+            tableProps.put(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME, Boolean.TRUE);
             ensureLocalIndexTableCreated(MetaDataUtil.getLocalIndexPhysicalName(tableName), tableProps, familiesPlusDefault, splits);
         }
         
