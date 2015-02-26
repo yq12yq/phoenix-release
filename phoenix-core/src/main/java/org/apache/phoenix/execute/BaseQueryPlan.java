@@ -28,6 +28,7 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
@@ -183,6 +184,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
            Long scn = connection.getSCN();
            if (scn == null) {
                scn = context.getCurrentTime();
+               // Add one to server time since max of time range is exclusive
+               // and we need to account of OSs with lower resolution clocks.
+               if(scn < HConstants.LATEST_TIMESTAMP) {
+                   scn++;
+               }
             }
             TimeRange scanTimeRange = scan.getTimeRange();
             ScanUtil.setTimeRange(scan, scanTimeRange.getMin(), Math.min(scanTimeRange.getMax(), scn));

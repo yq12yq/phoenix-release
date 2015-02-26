@@ -1066,6 +1066,10 @@ public class MetaDataClient {
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {
         Long scn = connection.getSCN();
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
+        if(timestamp == HConstants.LATEST_TIMESTAMP) {
+            // Get timestamp from RS hosting system.catalog
+            timestamp = getCurrentTime(QueryConstants.SYSTEM_SCHEMA_NAME, PhoenixDatabaseMetaData.TYPE_SEQUENCE);
+        }
         String schemaName = statement.getSequenceName().getSchemaName();
         String sequenceName = statement.getSequenceName().getTableName();
         String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
