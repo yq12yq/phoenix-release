@@ -184,11 +184,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
            Long scn = connection.getSCN();
            if (scn == null) {
                scn = context.getCurrentTime();
-               // Add one to server time since max of time range is exclusive
-               // and we need to account of OSs with lower resolution clocks.
-               if(scn < HConstants.LATEST_TIMESTAMP) {
-                   scn++;
-               }
             }
             TimeRange scanTimeRange = scan.getTimeRange();
             ScanUtil.setTimeRange(scan, scanTimeRange.getMin(), Math.min(scanTimeRange.getMax(), scn));
