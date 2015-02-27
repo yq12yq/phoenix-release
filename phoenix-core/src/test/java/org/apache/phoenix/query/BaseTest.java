@@ -124,6 +124,7 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ConfigUtil;
@@ -824,9 +825,15 @@ public abstract class BaseTest {
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
                 + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
         while (rs.next()) {
-            conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil.getEscapedTableName(rs.getString(1), rs.getString(2)));
+            try {
+                conn.createStatement().execute("DROP SEQUENCE " + SchemaUtil
+                        .getEscapedTableName(rs.getString(1), rs.getString(2)));
+            } catch(SequenceNotFoundException ignored) {
+            }
         }
         rs.close();
+        // TODO: deal with the windows low time resolution
+        Thread.sleep(150);
     }
     
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
