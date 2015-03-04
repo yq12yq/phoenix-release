@@ -107,6 +107,7 @@ import java.util.Set;
 
 import javax.annotation.Nonnull;
 
+import org.apache.commons.lang.SystemUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -759,6 +760,10 @@ public abstract class BaseTest {
     }
     
     protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
+        if(SystemUtils.IS_OS_WINDOWS) {
+            // deal with the windows low time resolution
+            Thread.sleep(200);
+        }
         Properties props = new Properties();
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
@@ -772,6 +777,10 @@ public abstract class BaseTest {
         }
         finally {
             conn.close();
+        }
+        if(SystemUtils.IS_OS_WINDOWS) {
+            // deal with the windows low time resolution
+            Thread.sleep(200);
         }
     }
     
@@ -832,8 +841,6 @@ public abstract class BaseTest {
             }
         }
         rs.close();
-        // TODO: deal with the windows low time resolution
-        Thread.sleep(150);
     }
     
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {

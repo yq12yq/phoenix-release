@@ -222,7 +222,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         ResultSet rs = statement.executeQuery();
         
         // add 1 second to compensate time clock skew when tests run in a multi-node cluster
-        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 1000 :
+        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 5000 :
           System.currentTimeMillis()));
         assertTrue (rs.next());
         assertEquals(null, rs.getString(1));
@@ -400,8 +400,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
         
-        // add 1 second to compensate time clock skew when tests run in a multi-node cluster
-        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 1000 :
+        // add 5 second to compensate time clock skew when tests run in a multi-node cluster
+        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 5000 :
           System.currentTimeMillis()));
         
         assertTrue (rs.next());
@@ -442,7 +442,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         statement = conn.prepareStatement(query);
         rs = statement.executeQuery();
         // 1000 below is to compensate time clock skew if tests are running in multi-node cluster
-        now = new Date(System.currentTimeMillis() + (isDistributedClusterModeEnabled() ? 1000 : 0));
+        now = new Date(System.currentTimeMillis() + (isDistributedClusterModeEnabled() ? 5000 : 0));
         
         assertTrue (rs.next());
         assertEquals("x", rs.getString(1));
