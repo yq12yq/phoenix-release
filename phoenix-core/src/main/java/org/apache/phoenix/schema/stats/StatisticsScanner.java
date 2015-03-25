@@ -51,22 +51,30 @@ public class StatisticsScanner implements InternalScanner {
     }
 
     @Override
-    public boolean next(List<Cell> result) throws IOException {
-        boolean ret = delegate.next(result);
+    public NextState next(List<Cell> result) throws IOException {
+        NextState ret = delegate.next(result);
         updateStat(result);
         return ret;
     }
 
     @Override
-    public boolean next(List<Cell> result, int limit) throws IOException {
-        boolean ret = delegate.next(result, limit);
+    public NextState next(List<Cell> result, int limit) throws IOException {
+        NextState ret = delegate.next(result, limit);
+        updateStat(result);
+        return ret;
+    }
+
+    @Override
+    public NextState next(List<Cell> result, int limit, long remainingResultSize)
+        throws IOException {
+        NextState ret = delegate.next(result, limit, remainingResultSize);
         updateStat(result);
         return ret;
     }
 
     /**
      * Update the current statistics based on the lastest batch of key-values from the underlying scanner
-     * 
+     *
      * @param results
      *            next batch of {@link KeyValue}s
      */
@@ -122,4 +130,5 @@ public class StatisticsScanner implements InternalScanner {
             }
         }
     }
+
 }

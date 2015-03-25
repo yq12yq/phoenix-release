@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.InternalScanner.NextState;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -63,8 +64,8 @@ public class LocalTable implements LocalHBaseState {
     HRegion region = this.env.getRegion();
     RegionScanner scanner = region.getScanner(s);
     List<Cell> kvs = new ArrayList<Cell>(1);
-    boolean more = scanner.next(kvs);
-    assert !more : "Got more than one result when scanning" + " a single row in the primary table!";
+    NextState nextState = scanner.next(kvs);
+    assert !nextState.hasMoreValues() : "Got more than one result when scanning" + " a single row in the primary table!";
 
     Result r = Result.create(kvs);
     scanner.close();

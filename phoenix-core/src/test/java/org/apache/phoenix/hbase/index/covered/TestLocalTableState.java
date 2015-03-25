@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.hadoop.hbase.regionserver.InternalScanner.NextState;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -37,7 +38,6 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
@@ -71,14 +71,14 @@ public class TestLocalTableState {
     RegionScanner scanner = Mockito.mock(RegionScanner.class);
     Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenReturn(scanner);
     final byte[] stored = Bytes.toBytes("stored-value");
-    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
+    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<NextState>() {
       @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
+      public NextState answer(InvocationOnMock invocation) throws Throwable {
         List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
         KeyValue kv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
         kv.setSequenceId(0);
         list.add(kv);
-        return false;
+        return NextState.makeState(NextState.State.NO_MORE_VALUES);
       }
     });
 
@@ -116,13 +116,13 @@ public class TestLocalTableState {
     final byte[] stored = Bytes.toBytes("stored-value");
     final KeyValue storedKv = new KeyValue(row, fam, qual, ts, Type.Put, stored);
     storedKv.setSequenceId(2);
-    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
+    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<NextState>() {
       @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
+      public NextState answer(InvocationOnMock invocation) throws Throwable {
         List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
 
         list.add(storedKv);
-        return false;
+        return NextState.makeState(NextState.State.NO_MORE_VALUES);
       }
     });
     LocalHBaseState state = new LocalTable(env);
@@ -162,13 +162,13 @@ public class TestLocalTableState {
     final KeyValue storedKv =
         new KeyValue(row, fam, qual, ts, Type.Put, Bytes.toBytes("stored-value"));
     storedKv.setSequenceId(2);
-    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<Boolean>() {
+    Mockito.when(scanner.next(Mockito.any(List.class))).thenAnswer(new Answer<NextState>() {
       @Override
-      public Boolean answer(InvocationOnMock invocation) throws Throwable {
+      public NextState answer(InvocationOnMock invocation) throws Throwable {
         List<KeyValue> list = (List<KeyValue>) invocation.getArguments()[0];
 
         list.add(storedKv);
-        return false;
+        return NextState.makeState(NextState.State.NO_MORE_VALUES);
       }
     });
     LocalHBaseState state = new LocalTable(env);

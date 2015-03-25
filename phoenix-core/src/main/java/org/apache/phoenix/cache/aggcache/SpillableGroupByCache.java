@@ -120,7 +120,7 @@ public class SpillableGroupByCache implements GroupByCache {
 
     /**
      * Instantiates a Loading LRU Cache that stores key / aggregator[] tuples used for group by queries
-     * 
+     *
      * @param estSize
      * @param estValueSize
      * @param aggs
@@ -325,7 +325,7 @@ public class SpillableGroupByCache implements GroupByCache {
 
     /**
      * Closes cache and releases spill resources
-     * 
+     *
      * @throws IOException
      */
     @Override
@@ -357,8 +357,10 @@ public class SpillableGroupByCache implements GroupByCache {
             }
 
             @Override
-            public boolean next(List<Cell> results) throws IOException {
-                if (!cacheIter.hasNext()) { return false; }
+            public NextState next(List<Cell> results) throws IOException {
+                if (!cacheIter.hasNext()) {
+                    return NextState.makeState(NextState.State.NO_MORE_VALUES);
+                }
                 Map.Entry<ImmutableBytesWritable, Aggregator[]> ce = cacheIter.next();
                 ImmutableBytesWritable key = ce.getKey();
                 Aggregator[] aggs = ce.getValue();
@@ -370,12 +372,19 @@ public class SpillableGroupByCache implements GroupByCache {
                 }
                 results.add(KeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(), SINGLE_COLUMN_FAMILY,
                         SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
-                return cacheIter.hasNext();
+                return cacheIter.hasNext()
+                    ? NextState.makeState(NextState.State.MORE_VALUES)
+                    : NextState.makeState(NextState.State.NO_MORE_VALUES);
             }
 
             @Override
             public long getMaxResultSize() {
               return s.getMaxResultSize();
+            }
+
+            @Override
+            public int getBatch() {
+                return s.getBatch();
             }
         };
     }

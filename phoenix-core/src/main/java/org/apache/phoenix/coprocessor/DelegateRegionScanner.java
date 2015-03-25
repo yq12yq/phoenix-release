@@ -56,23 +56,45 @@ public class DelegateRegionScanner implements RegionScanner {
         delegate.close();
     }
 
+    @Override
     public long getMaxResultSize() {
         return delegate.getMaxResultSize();
     }
 
-    public boolean next(List<Cell> arg0, int arg1) throws IOException {
+    @Override
+    public NextState next(List<Cell> arg0, int arg1) throws IOException {
         return delegate.next(arg0, arg1);
     }
 
-    public boolean next(List<Cell> arg0) throws IOException {
+    @Override
+    public NextState next(List<Cell> arg0) throws IOException {
         return delegate.next(arg0);
     }
 
-    public boolean nextRaw(List<Cell> arg0, int arg1) throws IOException {
+    @Override
+    public NextState next(List<Cell> result, int limit, long remainingResultSize)
+        throws IOException {
+        return delegate.next(result, limit, remainingResultSize);
+    }
+
+    @Override
+    public NextState nextRaw(List<Cell> arg0, int arg1) throws IOException {
         return delegate.nextRaw(arg0, arg1);
     }
 
-    public boolean nextRaw(List<Cell> arg0) throws IOException {
+    @Override
+    public NextState nextRaw(List<Cell> arg0) throws IOException {
         return delegate.nextRaw(arg0);
+    }
+
+    @Override
+    public NextState nextRaw(List<Cell> result, int limit, long remainingResultSize)
+        throws IOException {
+      return delegate.nextRaw(result, limit, remainingResultSize);
+    }
+
+    @Override
+    public int getBatch() {
+        return delegate.getBatch();
     }
 }

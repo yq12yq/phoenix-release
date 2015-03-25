@@ -60,7 +60,7 @@ import com.google.common.collect.ImmutableList;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
-    
+
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
     public static final String KEY_ORDERED_GROUP_BY_EXPRESSIONS = "_OrderedGroupByExpressions";
@@ -91,7 +91,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
      * are used to augment log lines emitted by Phoenix. See https://issues.apache.org/jira/browse/PHOENIX-1198.
      */
-    public static final String CUSTOM_ANNOTATIONS = "_Annot"; 
+    public static final String CUSTOM_ANNOTATIONS = "_Annot";
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
@@ -111,8 +111,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public String toString() {
         return this.getClass().getName();
     }
-    
-    
+
+
     private static void throwIfScanOutOfRegion(Scan scan, HRegion region) throws DoNotRetryIOException {
         boolean isLocalIndex = ScanUtil.isLocalIndex(scan);
         byte[] lowerInclusiveScanKey = scan.getStartRow();
@@ -136,7 +136,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     abstract protected boolean isRegionObserverFor(Scan scan);
     abstract protected RegionScanner doPostScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws Throwable;
-    
+
     @Override
     public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Scan scan, final RegionScanner s) throws IOException {
@@ -153,7 +153,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     /**
      * Wrapper for {@link #postScannerOpen(ObserverContext, Scan, RegionScanner)} that ensures no non IOException is thrown,
      * to prevent the coprocessor from becoming blacklisted.
-     * 
+     *
      */
     @Override
     public final RegionScanner postScannerOpen(
@@ -165,10 +165,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             }
             boolean success =false;
             // Save the current span. When done with the child span, reset the span back to
-            // what it was. Otherwise, this causes the thread local storing the current span 
+            // what it was. Otherwise, this causes the thread local storing the current span
             // to not be reset back to null causing catastrophic infinite loops
             // and region servers to crash. See https://issues.apache.org/jira/browse/PHOENIX-1596
-            // TraceScope can't be used here because closing the scope will end up calling 
+            // TraceScope can't be used here because closing the scope will end up calling
             // currentSpan.stop() and that should happen only when we are closing the scanner.
             final Span savedSpan = Trace.currentSpan();
             final Span child = Trace.startSpan(SCANNER_OPENED_TRACE_INFO, savedSpan).getSpan();
@@ -226,7 +226,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         return getWrappedScanner(c, s, null, null, offset, scan, dataColumns, tupleProjector,
                 dataRegion, indexMaintainer, viewConstants, null, null, projector, ptr);
     }
-    
+
     /**
      * Return wrapped scanner that catches unexpected exceptions (i.e. Phoenix bugs) and
      * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
@@ -246,28 +246,39 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final Expression[] arrayFuncRefs, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final HRegion dataRegion, final IndexMaintainer indexMaintainer,
-            final byte[][] viewConstants, final KeyValueSchema kvSchema, 
+            final byte[][] viewConstants, final KeyValueSchema kvSchema,
             final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return new RegionScanner() {
 
             @Override
-            public boolean next(List<Cell> results) throws IOException {
+            public NextState next(List<Cell> results) throws IOException {
                 try {
                     return s.next(results);
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
+                    return null; // impossible
                 }
             }
 
             @Override
-            public boolean next(List<Cell> result, int limit) throws IOException {
+            public NextState next(List<Cell> result, int limit) throws IOException {
                 try {
                     return s.next(result, limit);
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
+                    return null; // impossible
+                }
+            }
+
+            @Override
+            public NextState next(List<Cell> result, int limit, long remainingResultSize)
+                throws IOException {
+                try {
+                    return s.next(result, limit, remainingResultSize);
+                } catch (Throwable t) {
+                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+                    return null; // impossible
                 }
             }
 
@@ -297,9 +308,9 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             }
 
             @Override
-            public boolean nextRaw(List<Cell> result) throws IOException {
+            public NextState nextRaw(List<Cell> result) throws IOException {
                 try {
-                    boolean next = s.nextRaw(result);
+                    NextState next = s.nextRaw(result);
                     if (result.size() == 0) {
                         return next;
                     }
@@ -319,35 +330,41 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     return next;
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
+                    return null; // impossible
                 }
             }
 
             @Override
-            public boolean nextRaw(List<Cell> result, int limit) throws IOException {
-                try {
-                    boolean next = s.nextRaw(result, limit);
-                    if (result.size() == 0) {
-                        return next;
-                    }
-                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-                    }
-                    if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
-                        IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
-                            tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
-                    }
-                    if (projector != null) {
-                        Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
-                        result.clear();
-                        result.add(tuple.getValue(0));
-                    }
-                    // There is a scanattribute set to retrieve the specific array element
+            public NextState nextRaw(List<Cell> result, int limit) throws IOException {
+              return nextRaw(result, limit, -1);
+            }
+
+            @Override
+            public NextState nextRaw(List<Cell> result, int limit, long remainingResultSize)
+                throws IOException {
+              try {
+                NextState next = s.nextRaw(result, limit, remainingResultSize);
+                if (result.size() == 0) {
                     return next;
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
                 }
+                if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                }
+                if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
+                    IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
+                        tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
+                }
+                if (projector != null) {
+                    Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
+                    result.clear();
+                    result.add(tuple.getValue(0));
+                }
+                // There is a scanattribute set to retrieve the specific array element
+                return next;
+            } catch (Throwable t) {
+                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
+                return null; // impossible
+            }
             }
 
             private void replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
@@ -387,6 +404,12 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             public long getMaxResultSize() {
                 return s.getMaxResultSize();
             }
+
+            @Override
+            public int getBatch() {
+                return s.getBatch();
+            }
+
         };
     }
 }
