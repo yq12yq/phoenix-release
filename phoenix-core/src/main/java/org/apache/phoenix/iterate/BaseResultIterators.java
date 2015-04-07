@@ -132,7 +132,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit) throws SQLException {
-        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint());
+        super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(), plan.getStatement().getHint(), plan.getLimit());
         this.plan = plan;
         StatementContext context = plan.getContext();
         TableRef tableRef = plan.getTableRef();
@@ -556,7 +556,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Add any concatIterators that were successful so far
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
-                            concatIterators = Collections.emptyList();
+                            concatIterators = Lists.newArrayList();
                             submitWork(newNestedScans, newFutures, allIterators, newNestedScans.size());
                             allFutures.add(newFutures);
                             for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {

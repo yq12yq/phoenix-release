@@ -118,7 +118,12 @@ import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.coprocessor.RegionServerObserver;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
+import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -457,7 +462,9 @@ public abstract class BaseTest {
     }
     
     private static final String ORG_ID = "00D300000000XHP";
-    private static final int NUM_SLAVES_BASE = 1;
+    protected static int NUM_SLAVES_BASE = 1;
+    private static final String DEFAULT_SERVER_RPC_CONTROLLER_FACTORY = ServerRpcControllerFactory.class.getName();
+    private static final String DEFAULT_RPC_SCHEDULER_FACTORY = PhoenixRpcSchedulerFactory.class.getName();
     
     protected static String getZKClientPort(Configuration conf) {
         return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
@@ -531,9 +538,13 @@ public abstract class BaseTest {
     }
             
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
-        String url = checkClusterInitialized(props);
+        setUpTestDriver(props, props);
+    }
+    
+    protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        String url = checkClusterInitialized(serverProps);
         if (driver == null) {
-            driver = initAndRegisterDriver(url, props);
+            driver = initAndRegisterDriver(url, clientProps);
         }
     }
 
@@ -557,7 +568,7 @@ public abstract class BaseTest {
         setUpConfigForMiniCluster(conf, overrideProps);
         utility = new HBaseTestingUtility(conf);
         try {
-            utility.startMiniCluster();
+            utility.startMiniCluster(NUM_SLAVES_BASE);
             // add shutdown hook to kill the mini cluster
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
@@ -609,6 +620,9 @@ public abstract class BaseTest {
         }
         //no point doing sanity checks when running tests.
         conf.setBoolean("hbase.table.sanity.checks", false);
+        // set the server rpc controller and rpc scheduler factory, used to configure the cluster
+        conf.set(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, DEFAULT_SERVER_RPC_CONTROLLER_FACTORY);
+        conf.set(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, DEFAULT_RPC_SCHEDULER_FACTORY);
         
         // override any defaults based on overrideProps
         for (Entry<String,String> entry : overrideProps) {

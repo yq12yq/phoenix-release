@@ -40,7 +40,9 @@ import org.apache.phoenix.expression.function.FirstValueFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
+import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
+import org.apache.phoenix.expression.function.InstrFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
@@ -51,6 +53,7 @@ import org.apache.phoenix.expression.function.MD5Function;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
 import org.apache.phoenix.expression.function.MonthFunction;
+import org.apache.phoenix.expression.function.NowFunction;
 import org.apache.phoenix.expression.function.NthValueFunction;
 import org.apache.phoenix.expression.function.PercentRankAggregateFunction;
 import org.apache.phoenix.expression.function.PercentileContAggregateFunction;
@@ -84,13 +87,14 @@ import org.apache.phoenix.expression.function.ToTimestampFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.TruncFunction;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
 
 import com.google.common.collect.Maps;
 
 /**
  *
- * Enumeration of all Expression types that may be evaluated on the server-side.
+ * Enumeration of all Expression types that will be looked up. They may be evaluated on the server-side.
  * Used during serialization and deserialization to pass Expression between client
  * and server.
  *
@@ -199,7 +203,11 @@ public enum ExpressionType {
     SignFunction(SignFunction.class),
     YearFunction(YearFunction.class),
     MonthFunction(MonthFunction.class),
-    SecondFunction(SecondFunction.class)
+    SecondFunction(SecondFunction.class),
+    WeekFunction(WeekFunction.class),
+    HourFunction(HourFunction.class),
+    NowFunction(NowFunction.class),
+    InstrFunction(InstrFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
