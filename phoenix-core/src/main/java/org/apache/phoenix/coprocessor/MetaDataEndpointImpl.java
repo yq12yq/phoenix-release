@@ -87,8 +87,8 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
-import org.apache.hadoop.hbase.regionserver.HRegion.RowLock;
+import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -333,7 +333,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             // TODO: check that key is within region.getStartKey() and region.getEndKey()
             // and return special code to force client to lookup region from meta.
-            HRegion region = env.getRegion();
+            Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
@@ -363,7 +363,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
 
-    private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
+    private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, Region region,
             long clientTimeStamp) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         RegionScanner scanner = region.getScanner(scan);
@@ -646,7 +646,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, stats);
     }
 
-    private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, HRegion region,
+    private PTable buildDeletedTable(byte[] key, ImmutableBytesPtr cacheKey, Region region,
         long clientTimeStamp) throws IOException {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             return null;
@@ -684,7 +684,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private PTable loadTable(RegionCoprocessorEnvironment env, byte[] key,
         ImmutableBytesPtr cacheKey, long clientTimeStamp, long asOfTimeStamp)
         throws IOException, SQLException {
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable table = metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
@@ -723,7 +723,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         schemaName, tableName);
             byte[] parentKey = parentTableName == null ? null : lockKey;
 
-            HRegion region = env.getRegion();
+            Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(lockKey, region);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
@@ -787,7 +787,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
-                // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
+                // TODO: Switch this to Region#batchMutate when we want to support indexes on the
                 // system
                 // table. Basically, we get all the locks that we don't already hold for all the
                 // tableMetadata rows. This ensures we don't have deadlock situations (ensuring
@@ -797,7 +797,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // on the system table. This is an issue because of the way we manage batch mutation
                 // in the
                 // Indexer.
-                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
+                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
+                    HConstants.NO_NONCE);
 
                 // Invalidate the cache - the next getTable call will add it
                 // TODO: consider loading the table that was just created here, patching up the parent table, and updating the cache
@@ -823,9 +824,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
 
-    private static void acquireLock(HRegion region, byte[] key, List<RowLock> locks)
+    private static void acquireLock(Region region, byte[] key, List<RowLock> locks)
         throws IOException {
-        RowLock rowLock = region.getRowLock(key);
+        RowLock rowLock = region.getRowLock(key, true);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
@@ -839,7 +840,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
      * TODO: should we pass a timestamp here?
      */
     @SuppressWarnings("deprecation")
-    private TableViewFinderResult findChildViews(HRegion region, byte[] tenantId, PTable table) throws IOException {
+    private TableViewFinderResult findChildViews(Region region, byte[] tenantId, PTable table) throws IOException {
         byte[] schemaName = table.getSchemaName().getBytes();
         byte[] tableName = table.getTableName().getBytes();
         boolean isMultiTenant = table.isMultiTenant();
@@ -928,7 +929,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     parentTableName == null ? lockKey : SchemaUtil.getTableKey(tenantIdBytes,
                         schemaName, tableName);
 
-            HRegion region = env.getRegion();
+            Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
@@ -952,7 +953,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
                 Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                 // Commit the list of deletion.
-                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
+                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
+                    HConstants.NO_NONCE);
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
                     metaDataCache.put(ckey, newDeletedTableMarker(currentTime));
@@ -981,7 +983,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
         long clientTimeStamp = MetaDataUtil.getClientTimeStamp(rowsToDelete);
 
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
 
         Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
@@ -1107,7 +1109,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private static interface ColumnMutator {
       MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
-          List<Mutation> tableMetadata, HRegion region,
+          List<Mutation> tableMetadata, Region region,
           List<ImmutableBytesPtr> invalidateList, List<RowLock> locks) throws IOException,
           SQLException;
     }
@@ -1121,7 +1123,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         try {
             byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
-            HRegion region = env.getRegion();
+            Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
             if (result != null) {
                 return result;
@@ -1207,7 +1209,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     return result;
                 }
 
-                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
+                region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
+                    HConstants.NO_NONCE);
                 // Invalidate from cache
                 for (ImmutableBytesPtr invalidateKey : invalidateList) {
                     metaDataCache.invalidate(invalidateKey);
@@ -1235,7 +1238,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             MetaDataMutationResult result = mutateColumn(tableMetaData, new ColumnMutator() {
                 @Override
                 public MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
-                        List<Mutation> tableMetaData, HRegion region,
+                        List<Mutation> tableMetaData, Region region,
                         List<ImmutableBytesPtr> invalidateList, List<RowLock> locks) {
                     byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
                     byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
@@ -1319,14 +1322,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // get the co-processor environment
         // TODO: check that key is within region.getStartKey() and region.getEndKey()
         // and return special code to force client to lookup region from meta.
-        HRegion region = env.getRegion();
+        Region region = env.getRegion();
         /*
          * Lock directly on key, though it may be an index table. This will just prevent a table
          * from getting rebuilt too often.
          */
         final boolean wasLocked = (rowLock != null);
         if (!wasLocked) {
-            rowLock = region.getRowLock(key);
+            rowLock = region.getRowLock(key, true);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
@@ -1370,7 +1373,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             MetaDataMutationResult result = mutateColumn(tableMetaData, new ColumnMutator() {
                 @Override
                 public MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
-                        List<Mutation> tableMetaData, HRegion region,
+                        List<Mutation> tableMetaData, Region region,
                         List<ImmutableBytesPtr> invalidateList, List<RowLock> locks)
                         throws IOException, SQLException {
                     byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
@@ -1518,7 +1521,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
             byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
-            HRegion region = env.getRegion();
+            Region region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
@@ -1542,7 +1545,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             PIndexState newState =
                     PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
-            RowLock rowLock = region.getRowLock(key);
+            RowLock rowLock = region.getRowLock(key, true);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
@@ -1633,7 +1636,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, ByteUtil.EMPTY_BYTE_ARRAY);
                         tableMetadata.add(p);
                     }
-                    region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
+                    region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
+                        HConstants.NO_NONCE);
                     // Invalidate from cache
                     Cache<ImmutableBytesPtr,PTable> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
                     metaDataCache.invalidate(cacheKey);
@@ -1658,9 +1662,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
 
-    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, HRegion region) {
-        byte[] startKey = region.getStartKey();
-        byte[] endKey = region.getEndKey();
+    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, Region region) {
+        byte[] startKey = region.getRegionInfo().getStartKey();
+        byte[] endKey = region.getRegionInfo().getEndKey();
         if (Bytes.compareTo(startKey, key) <= 0
                 && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
                     endKey) < 0)) {

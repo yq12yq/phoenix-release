@@ -30,8 +30,8 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -106,7 +106,7 @@ public class StatisticsCollector {
         this.statsTable.close();
     }
 
-    public void updateStatistic(HRegion region) {
+    public void updateStatistic(Region region) {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
             writeStatsToStatsTable(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime());
@@ -121,7 +121,7 @@ public class StatisticsCollector {
         }
     }
     
-    private void writeStatsToStatsTable(final HRegion region,
+    private void writeStatsToStatsTable(final Region region,
             boolean delete, List<Mutation> mutations, long currentTime) throws IOException {
         try {
             // update the statistics table
@@ -202,7 +202,7 @@ public class StatisticsCollector {
         }
     }
 
-    public InternalScanner createCompactionScanner(HRegion region, Store store, InternalScanner s) throws IOException {
+    public InternalScanner createCompactionScanner(Region region, Store store, InternalScanner s) throws IOException {
         // See if this is for Major compaction
         if (logger.isDebugEnabled()) {
             logger.debug("Compaction scanner created for stats");
@@ -211,13 +211,13 @@ public class StatisticsCollector {
         return getInternalScanner(region, store, s, cfKey);
     }
 
-    public void splitStats(HRegion parent, HRegion left, HRegion right) {
+    public void splitStats(Region parent, Region left, Region right) {
         try {
             if (logger.isDebugEnabled()) {
                 logger.debug("Collecting stats for split of " + parent.getRegionInfo() + " into " + left.getRegionInfo() + " and " + right.getRegionInfo());
             }
             List<Mutation> mutations = Lists.newArrayListWithExpectedSize(3);
-            for (byte[] fam : parent.getStores().keySet()) {
+            for (byte[] fam : parent.getTableDesc().getFamiliesKeys()) {
             	statsTable.splitStats(parent, left, right, this, new ImmutableBytesPtr(fam), mutations);
             }
             if (logger.isDebugEnabled()) {
@@ -230,7 +230,7 @@ public class StatisticsCollector {
         }
     }
 
-    protected InternalScanner getInternalScanner(HRegion region, Store store,
+    protected InternalScanner getInternalScanner(Region region, Store store,
             InternalScanner internalScan, ImmutableBytesPtr family) {
         return new StatisticsScanner(this, statsTable, region, internalScan, family);
     }
