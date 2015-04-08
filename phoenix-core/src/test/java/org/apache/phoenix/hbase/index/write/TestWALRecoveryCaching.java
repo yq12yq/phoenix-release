@@ -317,9 +317,9 @@ public class TestWALRecoveryCaching {
         }
 
         LOG.info("Starting region server:" + server.getHostname());
-        cluster.startRegionServer(server.getHostname(), server.getPort());
+        cluster.startRegionServer(server.getHostname());
 
-        cluster.waitForRegionServerToStart(server.getHostname(), server.getPort(), TIMEOUT);
+        cluster.waitForRegionServerToStart(server.getHostname(), TIMEOUT);
 
         // start a server to get back to the base number of servers
         LOG.info("STarting server to replace " + server);

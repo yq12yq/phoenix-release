@@ -29,19 +29,19 @@ public abstract class BaseRegionScanner implements RegionScanner {
 
     @Override
     public boolean isFilterDone() {
-        return false;
+        return false; 
     }
 
     @Override
-    public NextState next(List<Cell> results) throws IOException {
+    public boolean next(List<Cell> results) throws IOException {
         return next(results);
     }
 
     @Override
-    public NextState next(List<Cell> result, int limit) throws IOException {
+    public boolean next(List<Cell> result, int limit) throws IOException {
         return next(result);
     }
-
+    
     @Override
     public boolean reseek(byte[] row) throws IOException {
         throw new DoNotRetryIOException("Unsupported");
@@ -53,24 +53,12 @@ public abstract class BaseRegionScanner implements RegionScanner {
     }
 
     @Override
-    public NextState nextRaw(List<Cell> result) throws IOException {
+    public boolean nextRaw(List<Cell> result) throws IOException {
         return next(result);
     }
 
     @Override
-    public NextState nextRaw(List<Cell> result, int limit) throws IOException {
+    public boolean nextRaw(List<Cell> result, int limit) throws IOException {
         return next(result, limit);
-    }
-
-    @Override
-    public NextState nextRaw(List<Cell> result, int limit, long remainingResultSize)
-        throws IOException {
-      return nextRaw(result, limit); // remainingResultSize is ignored for now
-    }
-
-    @Override
-    public NextState next(List<Cell> result, int limit, long remainingResultSize)
-        throws IOException {
-      return next(result, limit); // remainingResultSize is ignored for now
     }
 }

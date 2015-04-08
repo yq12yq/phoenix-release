@@ -199,7 +199,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             indexMaintainer = indexMaintainers.get(0);
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
         }
-
+        
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         innerScanner =
@@ -260,10 +260,10 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             }
 
             @Override
-            public NextState next(List<Cell> results) throws IOException {
+            public boolean next(List<Cell> results) throws IOException {
                 try {
                     if (isFilterDone()) {
-                        return NextState.makeState(NextState.State.NO_MORE_VALUES);
+                        return false;
                     }
 
                     for (int i = 0; i < tuple.size(); i++) {
@@ -271,12 +271,10 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     }
 
                     tuple = iterator.next();
-                    return isFilterDone()
-                        ? NextState.makeState(NextState.State.NO_MORE_VALUES)
-                        : NextState.makeState(NextState.State.MORE_VALUES);
+                    return !isFilterDone();
                 } catch (Throwable t) {
                     ServerUtil.throwIOException(region.getRegionNameAsString(), t);
-                    return null;
+                    return false;
                 }
             }
 
@@ -287,12 +285,12 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 } finally {
                     try {
                         if(iterator != null) {
-                            iterator.close();
+                            iterator.close();    
                         }
                     } catch (SQLException e) {
                         ServerUtil.throwIOException(region.getRegionNameAsString(), e);
                     } finally {
-                        chunk.close();
+                        chunk.close();                
                     }
                 }
             }
@@ -300,11 +298,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             @Override
             public long getMaxResultSize() {
                 return s.getMaxResultSize();
-            }
-
-            @Override
-            public int getBatch() {
-              return s.getBatch();
             }
         };
     }

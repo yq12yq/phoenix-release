@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.regionserver.InternalScanner.NextState;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -32,15 +31,15 @@ import org.apache.phoenix.util.ServerUtil;
 
 public class RegionScannerResultIterator extends BaseResultIterator {
     private final RegionScanner scanner;
-
+    
     public RegionScannerResultIterator(RegionScanner scanner) {
         this.scanner = scanner;
     }
-
+    
     @Override
     public Tuple next() throws SQLException {
-        // XXX: No access here to the region instance to enclose this with startRegionOperation /
-        // stopRegionOperation
+        // XXX: No access here to the region instance to enclose this with startRegionOperation / 
+        // stopRegionOperation 
         synchronized (scanner) {
             try {
                 // TODO: size
@@ -48,9 +47,8 @@ public class RegionScannerResultIterator extends BaseResultIterator {
                 // Results are potentially returned even when the return value of s.next is false
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
-                NextState nextState = scanner.nextRaw(results);
-
-                if (!nextState.hasMoreValues() && results.isEmpty()) {
+                boolean hasMore = scanner.nextRaw(results);
+                if (!hasMore && results.isEmpty()) {
                     return null;
                 }
                 // We instantiate a new tuple because in all cases currently we hang on to it

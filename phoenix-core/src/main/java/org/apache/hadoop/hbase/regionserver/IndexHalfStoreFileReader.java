@@ -47,11 +47,11 @@ import org.apache.phoenix.index.IndexMaintainer;
  * that sort lowest and 'top' is the second half of the file with keys that sort greater than those
  * of the bottom half. The top includes the split files midkey, of the key that follows if it does
  * not exist in the file.
- *
+ * 
  * <p>
  * This type works in tandem with the {@link Reference} type. This class is used reading while
  * Reference is used writing.
- *
+ * 
  * <p>
  * This file is not splitable. Calls to {@link #midkey()} return null.
  */
@@ -64,7 +64,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     private final byte[] splitkey;
     private final byte[] splitRow;
     private final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers;
-    private final byte[][] viewConstants;
+    private final byte[][] viewConstants; 
     private final int offset;
     private final HRegionInfo regionInfo;
     private final byte[] regionStartKeyInHFile;
@@ -144,7 +144,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
             final HFileScanner delegate = s;
             public boolean atEnd = false;
 
-            @Override
             public ByteBuffer getKey() {
                 if (atEnd) {
                     return null;
@@ -161,7 +160,7 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 // If it is top store file replace the StartKey of the Key with SplitKey
                 return getChangedKey(delegate.getKeyValue(), changeBottomKeys);
             }
-
+            
             private ByteBuffer getChangedKey(Cell kv, boolean changeBottomKeys) {
                 // new KeyValue(row, family, qualifier, timestamp, type, value)
                 byte[] newRowkey = getNewRowkeyByRegionStartKeyReplacedWithSplitKey(kv, changeBottomKeys);
@@ -184,7 +183,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return keyReplacedStartKey;
             }
 
-            @Override
             public String getKeyString() {
                 if (atEnd) {
                     return null;
@@ -192,7 +190,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return Bytes.toStringBinary(getKey());
             }
 
-            @Override
             public ByteBuffer getValue() {
                 if (atEnd) {
                     return null;
@@ -200,7 +197,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return delegate.getValue();
             }
 
-            @Override
             public String getValueString() {
                 if (atEnd) {
                     return null;
@@ -208,7 +204,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return Bytes.toStringBinary(getValue());
             }
 
-            @Override
             public Cell getKeyValue() {
                 if (atEnd) {
                     return null;
@@ -232,7 +227,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return changedKv;
             }
 
-            @Override
             public boolean next() throws IOException {
                 if (atEnd) {
                     return false;
@@ -254,12 +248,10 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 }
             }
 
-            @Override
             public boolean seekBefore(byte[] key) throws IOException {
                 return seekBefore(key, 0, key.length);
             }
 
-            @Override
             public boolean seekBefore(byte[] key, int offset, int length) throws IOException {
 
                 if (top) {
@@ -290,7 +282,6 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return seekBefore(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength());
             }
 
-            @Override
             public boolean seekTo() throws IOException {
                 boolean b = delegate.seekTo();
                 if (!b) {
@@ -311,12 +302,10 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 }
             }
 
-            @Override
             public int seekTo(byte[] key) throws IOException {
                 return seekTo(key, 0, key.length);
             }
 
-            @Override
             public int seekTo(byte[] key, int offset, int length) throws IOException {
                 if (top) {
                     if (getComparator().compare(key, offset, length, splitkey, 0, splitkey.length) < 0) {
@@ -353,12 +342,10 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return seekTo(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength());
             }
 
-            @Override
             public int reseekTo(byte[] key) throws IOException {
                 return reseekTo(key, 0, key.length);
             }
 
-            @Override
             public int reseekTo(byte[] key, int offset, int length) throws IOException {
                 if (top) {
                     if (getComparator().compare(key, offset, length, splitkey, 0, splitkey.length) < 0) {
@@ -388,13 +375,11 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                 return reseekTo(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength());
             }
 
-            @Override
             public org.apache.hadoop.hbase.io.hfile.HFile.Reader getReader() {
                 return this.delegate.getReader();
             }
 
             // TODO: Need to change as per IndexHalfStoreFileReader
-            @Override
             public boolean isSeeked() {
                 return this.delegate.isSeeked();
             }
@@ -440,13 +425,13 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
     /**
      * In case of top half store, the passed key will be with the start key of the daughter region.
      * But in the actual HFiles, the key will be with the start key of the old parent region. In
-     * order to make the real seek in the HFiles, we need to build the old key.
-     *
+     * order to make the real seek in the HFiles, we need to build the old key. 
+     * 
      * The logic here is just replace daughter region start key with parent region start key
      * in the key part.
-     *
+     * 
      * @param key
-     *
+     * 
      */
     private KeyValue getKeyPresentInHFiles(byte[] key) {
         KeyValue keyValue = new KeyValue(key);
