@@ -404,7 +404,7 @@ checkTests () {
       JIRA_COMMENT="$JIRA_COMMENT
 
     {color:green}+0 tests included{color}.  The patch appears to be a documentation, build,
-                        or dev-support patch that doesn't require tests."
+                        or dev patch that doesn't require tests."
       return 0
     fi
     JIRA_COMMENT="$JIRA_COMMENT
@@ -485,7 +485,7 @@ applyPatch () {
   echo ""
  
   export PATCH
-  $BASEDIR/dev-support/smart-apply-patch.sh $PATCH_DIR/patch
+  $BASEDIR/dev/smart-apply-patch.sh $PATCH_DIR/patch
   if [[ $? != 0 ]] ; then
     echo "PATCH APPLICATION FAILED"
     JIRA_COMMENT="$JIRA_COMMENT
@@ -689,9 +689,9 @@ checkProtocErrors () {
   echo "======================================================================"
   echo ""
   echo ""
-  echo "$MVN clean install -DskipTests -Pcompile-protobuf -X -D${PROJECT_NAME}PatchProcess > $PATCH_DIR/patchProtocErrors.txt 2>&1"
+  echo "$MVN clean install -DskipTests -X -D${PROJECT_NAME}PatchProcess > $PATCH_DIR/patchProtocErrors.txt 2>&1"
   export MAVEN_OPTS="${MAVEN_OPTS}"
-  $MVN clean install -DskipTests -Pcompile-protobuf -X -D${PROJECT_NAME}PatchProcess  > $PATCH_DIR/patchProtocErrors.txt 2>&1
+  $MVN clean install -DskipTests -X -D${PROJECT_NAME}PatchProcess  > $PATCH_DIR/patchProtocErrors.txt 2>&1
   checkProtocCompilationErrors $PATCH_DIR/patchProtocErrors.txt
   JIRA_COMMENT="$JIRA_COMMENT
 
@@ -850,10 +850,10 @@ runTests () {
   condemnedCount=`$PS auxwww | $GREP ${PROJECT_NAME}PatchProcess | $AWK '{print $2}' | $AWK 'BEGIN {total = 0} {total += 1} END {print total}'`
   echo "WARNING: $condemnedCount rogue build processes detected, terminating."
   $PS auxwww | $GREP ${PROJECT_NAME}PatchProcess | $AWK '{print $2}' | /usr/bin/xargs -t -I {} /bin/kill -9 {} > /dev/null
-  echo "$MVN clean test -Dsurefire.rerunFailingTestsCount=2 -P runAllTests -D${PROJECT_NAME}PatchProcess"
+  echo "$MVN clean test -Dsurefire.rerunFailingTestsCount=2 -D${PROJECT_NAME}PatchProcess"
   export MAVEN_OPTS="${MAVEN_OPTS}"
   ulimit -a
-  $MVN clean test -Dsurefire.rerunFailingTestsCount=2 -P runAllTests -D${PROJECT_NAME}PatchProcess
+  $MVN clean test -Dsurefire.rerunFailingTestsCount=2 -D${PROJECT_NAME}PatchProcess
   if [[ $? != 0 ]] ; then
      ### Find and format names of failed tests
      failed_tests=`find . -name 'TEST*.xml' | xargs $GREP  -l -E "<failure|<error" | sed -e "s|.*target/surefire-reports/TEST-|                  |g" | sed -e "s|\.xml||g"`
@@ -991,8 +991,8 @@ $comment"
     echo ""
     ### Update Jira with a comment
     export USER=hudson
-#    $JIRACLI -s https://issues.apache.org/jira -a addcomment -u hadoopqa -p $JIRA_PASSWD --comment "$comment" --issue $defect
-#    $JIRACLI -s https://issues.apache.org/jira -a logout -u hadoopqa -p $JIRA_PASSWD
+    $JIRACLI -s https://issues.apache.org/jira -a addcomment -u hadoopqa -p $JIRA_PASSWD --comment "$comment" --issue $defect
+    $JIRACLI -s https://issues.apache.org/jira -a logout -u hadoopqa -p $JIRA_PASSWD
   fi
 }
 
