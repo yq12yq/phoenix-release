@@ -12,10 +12,33 @@
 ### WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ### See the License for the specific language governing permissions and
 ### limitations under the License.
-
+param(
+    [String]
+    [Parameter( ParameterSetName='UsernamePassword', Position=0, Mandatory=$true )]
+    [Parameter( ParameterSetName='UsernamePasswordBase64', Position=0, Mandatory=$true )]
+    $username,
+    [String]
+    [Parameter( ParameterSetName='UsernamePassword', Position=1, Mandatory=$true )]
+    $password,
+    [String]
+    [Parameter( ParameterSetName='UsernamePasswordBase64', Position=1, Mandatory=$true )]
+    $passwordBase64,
+    [Parameter( ParameterSetName='CredentialFilePath', Mandatory=$true )]
+    $credentialFilePath
+    )
 function Main( $scriptDir )
 {
     Write-Log "Installing Apache Phoenix @final.name@ to $phoenixInstallPath"
+
+    ###
+    ### Create the Credential object from the given username and password or the provided credentials file
+    ###
+    $serviceCredential = Get-HadoopUserCredentials -credentialsHash @{"username" = $username; "password" = $password; `
+        "passwordBase64" = $passwordBase64; "credentialFilePath" = $credentialFilePath}
+    $username = $serviceCredential.UserName
+    Write-Log "Username: $username"
+    Write-Log "CredentialFilePath: $credentialFilePath"
+
     Install "PHOENIX" $ENV:HADOOP_NODE_INSTALL_ROOT
     Write-Log "Finished installing Apache PHOENIX"
 }
