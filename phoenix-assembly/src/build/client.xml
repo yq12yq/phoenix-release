@@ -50,6 +50,11 @@
         <include>io.netty:netty-all</include>
         <include>commons-codec:commons-codec</include>
       </includes>
+      <unpackOptions>
+        <excludes>
+          <exclude>META-INF/**/license/**</exclude>
+        </excludes>
+      </unpackOptions>
     </dependencySet>
 
     <!-- Make sure we get all the components, not just the minimal client ones (e.g.
