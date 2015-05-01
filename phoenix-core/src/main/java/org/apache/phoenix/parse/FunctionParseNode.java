@@ -116,10 +116,6 @@ public class FunctionParseNode extends CompoundParseNode {
         return ctor;
     }
 
-    private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz) {
-        return getExpressionCtor(clazz, null);
-    }
-
     private static Constructor<? extends FunctionExpression> getExpressionCtor(Class<? extends FunctionExpression> clazz, PFunction function) {
         Constructor<? extends FunctionExpression> ctor;
         try {
