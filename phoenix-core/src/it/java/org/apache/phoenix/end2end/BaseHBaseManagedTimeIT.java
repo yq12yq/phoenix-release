@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.util.Map;
+
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.hadoop.conf.Configuration;
@@ -27,6 +29,8 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 /**
  * Base class for tests that let HBase set timestamps.
@@ -51,9 +55,17 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    	setUpTestDriver(null);
     }
-    
+
+    protected static void doSetup(Map<String,String> customProps) throws Exception {
+    	Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+    	if(customProps != null) {
+    		props.putAll(customProps);
+    	}
+    	setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
     @AfterClass
     public static void doTeardown() throws Exception {
         dropNonSystemTables();

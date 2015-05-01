@@ -17,12 +17,25 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.util.Map;
+
+import org.apache.phoenix.query.QueryServices;
+import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 
 public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndexIT {
     private static final Integer SALT_BUCKETS = 3;
-    
+  
+    @BeforeClass
+    public static void doSetup() throws Exception {
+    	Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+    	props.put(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Integer.toString(600000));
+    	doSetup(props);
+    }
+
     @Test
     public void testUpdatableSaltedView() throws Exception {
         testUpdatableView(SALT_BUCKETS);
