@@ -42,11 +42,13 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
 
-public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
+@Category({ClientManagedTimeTest.class, NeedsOwnMiniClusterTest.class})
+public class KeyOnlyIT extends BaseClientManagedTimeIT {
     
     @BeforeClass
     public static void doSetup() throws Exception {
