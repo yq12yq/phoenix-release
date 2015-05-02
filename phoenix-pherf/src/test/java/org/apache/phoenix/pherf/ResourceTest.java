@@ -34,19 +34,19 @@ import static org.hamcrest.CoreMatchers.hasItem;
 import static org.junit.Assert.assertTrue;
 
 public class ResourceTest {
-    @Test
+    // @Test
     public void testSchemaResourceList() throws Exception{
         String extension = ".sql";
         assertResources(PherfConstants.SCHEMA_ROOT_PATTERN + extension, PherfConstants.RESOURCE_DATAMODEL, extension);
     }
 
-    @Test
+    // @Test
     public void testScenarioResourceList() throws Exception {
         String extension = ".xml";
         assertResources(PherfConstants.SCENARIO_ROOT_PATTERN + extension, PherfConstants.RESOURCE_SCENARIO, extension);
     }
 
-    @Test
+    // @Test
     public void testResourceListPropertyDirectory() throws Exception {
 
         ResourceList list = new ResourceList();

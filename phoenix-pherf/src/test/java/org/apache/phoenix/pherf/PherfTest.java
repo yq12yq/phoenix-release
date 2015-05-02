@@ -26,13 +26,13 @@ public class PherfTest {
     @Rule
     public final ExpectedSystemExit exit = ExpectedSystemExit.none();
 
-    @Test
+    // @Test
     public void testListArgument() {
         String[] args = {"-listFiles"};
         Pherf.main(args);
     }
 
-    @Test
+    // @Test
     public void testUnknownOption() {
         String[] args = {"-drop", "all", "-l", "-q", "-m","-bsOption"};
 

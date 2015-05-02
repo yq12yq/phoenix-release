@@ -39,7 +39,7 @@ import org.apache.phoenix.pherf.configuration.Query;
 
 public class ResultTest {
 
-    @Test
+    // @Test
     public void testMonitorWriter() throws Exception {
         String[] row = "org.apache.phoenix.pherf:type=PherfWriteThreads,6,Mon Jan 05 15:14:00 PST 2015".split(PherfConstants.RESULT_FILE_DELIMETER);
         ResultHandler resultMonitorWriter = null;
@@ -67,7 +67,7 @@ public class ResultTest {
         }
     }
 
-    @Test
+    // @Test
     public void testMonitorResult() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(1);
         MonitorManager monitor = new MonitorManager(100);
@@ -100,13 +100,13 @@ public class ResultTest {
         assertFalse("Monitor was not stopped correctly.", monitor.isRunning());
     }
 
-    @Test
+    // @Test
     public void testExtensionEnum() {
         assertEquals("Extension did not match", Extension.CSV.toString(), ".csv");
         assertEquals("Extension did not match", Extension.DETAILED_CSV.toString(), "_detail.csv");
     }
 
-    @Test
+    // @Test
     public void testResult() throws Exception {
         String filename = "testresult";
         ResultHandler xmlResultHandler = null;
