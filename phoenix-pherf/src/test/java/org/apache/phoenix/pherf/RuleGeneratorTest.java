@@ -37,7 +37,7 @@ public class RuleGeneratorTest {
     static PhoenixUtil util = new PhoenixUtil(true);
     static final String matcherScenario = PherfConstants.SCENARIO_ROOT_PATTERN + ".xml";
 
-    @Test
+    // @Test
     public void testDateGenerator() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
@@ -64,7 +64,7 @@ public class RuleGeneratorTest {
         }
     }
 
-    @Test
+    // @Test
     public void testNullChance() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
@@ -92,7 +92,7 @@ public class RuleGeneratorTest {
         }
     }
 
-    @Test
+    // @Test
     public void testSequentialDataSequence() throws Exception {
         XMLConfigParser parser = new XMLConfigParser(matcherScenario);
         DataModel model = parser.getDataModels().get(0);
@@ -173,7 +173,7 @@ public class RuleGeneratorTest {
         assertTrue("Expected count in increments did not match expected", testSet.size() == (threadCount * increments));
     }
 
-    @Test
+    // @Test
     public void testValueListRule() throws Exception {
         List<String> expectedValues = new ArrayList();
         expectedValues.add("aAAyYhnNbBs9kWk");

@@ -28,7 +28,7 @@ public class RowCalculatorTest {
      * Test rows divide evenly with large rows and small threadpool
      * @throws Exception
      */
-    @Test
+    // @Test
     public void testRowsEvenDivide() throws Exception {
         int threadPoolSize = 10;
         int tableRowCount = 100;
@@ -40,7 +40,7 @@ public class RowCalculatorTest {
      *
      * @throws Exception
      */
-    @Test
+    // @Test
     public void testRowsNotEvenDivide() throws Exception {
         int threadPoolSize = 9;
         int tableRowCount = 100;
@@ -52,7 +52,7 @@ public class RowCalculatorTest {
      *
      * @throws Exception
      */
-    @Test
+    // @Test
     public void testRowsNotEvenDivideSmallRC() throws Exception {
         int threadPoolSize = 50;
         int tableRowCount = 21;
@@ -64,7 +64,7 @@ public class RowCalculatorTest {
      *
      * @throws Exception
      */
-    @Test
+    // @Test
     public void testRowsEqualToPool() throws Exception {
         int threadPoolSize = 50;
         int tableRowCount = 50;
