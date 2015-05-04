@@ -24,6 +24,7 @@ import org.apache.phoenix.queryserver.client.ThinClientUtil;
 import org.apache.phoenix.queryserver.server.Main;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.Connection;
@@ -46,6 +47,7 @@ import static org.junit.Assert.*;
 /**
  * Smoke test for query server.
  */
+@Ignore("disabled until running as UT vs 'JavaTests' is decoupled for secure clusters")
 public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   private static final Log LOG = LogFactory.getLog(QueryServerBasicsIT.class);
