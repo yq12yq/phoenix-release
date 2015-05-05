@@ -105,7 +105,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
-    
+
     @Parameters
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();

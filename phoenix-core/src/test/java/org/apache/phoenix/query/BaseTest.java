@@ -111,7 +111,6 @@ import javax.annotation.Nonnull;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -478,7 +477,7 @@ public abstract class BaseTest {
     private static String url;
     protected static PhoenixTestDriver driver;
     private static boolean clusterInitialized = false;
-    private static HBaseTestingUtility utility;
+    private static IntegrationTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
     
     protected static String getUrl() {
@@ -572,7 +571,7 @@ public abstract class BaseTest {
      */
     private static String initMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
         setUpConfigForMiniCluster(conf, overrideProps);
-        utility = new HBaseTestingUtility(conf);
+        utility = new IntegrationTestingUtility(conf);
         try {
             utility.startMiniCluster(NUM_SLAVES_BASE);
             // add shutdown hook to kill the mini cluster
@@ -592,7 +591,7 @@ public abstract class BaseTest {
         }
     }
 
-    protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
+    protected static String getLocalClusterUrl(IntegrationTestingUtility util) throws Exception {
         String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration());
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
@@ -1702,7 +1701,7 @@ public abstract class BaseTest {
         assertEquals(expectedCount, count);
     }
     
-    public HBaseTestingUtility getUtility() {
+    public IntegrationTestingUtility getUtility() {
         return utility;
     }
 
