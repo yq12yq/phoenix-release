@@ -916,6 +916,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        if(isDistributedClusterModeEnabled(admin.getConfiguration())){
+            // can't run the test in distributed mode
+            return;
+        }
         createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME+"2", null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -931,7 +936,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2");
             assertTrue(rs.next());
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             HTableDescriptor tableDesc = admin.getTableDescriptor(TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME+"2"));
             tableDesc.removeCoprocessor(LocalIndexSplitter.class.getName());
             tableDesc.addCoprocessor(MockedLocalIndexSplitter.class.getName(), null,
