@@ -24,6 +24,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -63,12 +64,14 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     	if(customProps != null) {
     		props.putAll(customProps);
     	}
+    	props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+    	props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
     	setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
     @AfterClass
     public static void doTeardown() throws Exception {
-        dropNonSystemTables();
+        dropAllTables();
     }
     
     @After

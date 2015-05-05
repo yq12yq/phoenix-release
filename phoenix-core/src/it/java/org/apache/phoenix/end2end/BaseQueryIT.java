@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -75,6 +76,9 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
         if(customProps != null) {
         	props.putAll(customProps);
         }
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(5000));
+        props.put(IndexWriterUtils.HTABLE_THREAD_KEY, Integer.toString(100));
         // Make a small batch size to test multiple calls to reserve sequences
         props.put(QueryServices.SEQUENCE_CACHE_SIZE_ATTRIB, Long.toString(BATCH_SIZE));
         // Must update config before starting server

@@ -86,6 +86,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -165,6 +166,10 @@ import com.google.common.collect.Sets;
 public abstract class BaseTest {
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
+
+    // TIME_CLOCK_SKEW_THRESHOLD is used in tests to compensate tests where local time are used to
+    // compare time from another server
+    public static long TIME_CLOCK_SKEW_THRESHOLD = 3000;
 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -514,11 +519,12 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void dropNonSystemTables() throws Exception {
+    protected static void dropAllTables() throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
-            disableAndDropNonSystemTables();
-        } finally {
             destroyDriver();
+        } finally {
+            disableAndDropTables(admin);
         }
     }
 
@@ -1625,26 +1631,28 @@ public abstract class BaseTest {
         }
     }
     
+
     /**
-     * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
+     * Disable and drop all the tables
      */
-    private static void disableAndDropNonSystemTables() throws Exception {
-        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+    protected static void disableAndDropTables(HBaseAdmin admin) throws Exception {
         try {
             HTableDescriptor[] tables = admin.listTables();
             for (HTableDescriptor table : tables) {
-                String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
-                if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    try{
-                        admin.disableTable(table.getName());
-                    } catch (TableNotEnabledException ignored){}
-                    admin.deleteTable(table.getName());
+                try{
+                    admin.disableTable(table.getName());
+                } catch(IOException ex) {
+                    if(ex instanceof TableNotEnabledException) {
+                        //ignored
+                    }
                 }
+                admin.deleteTable(table.getName());
             }
         } finally {
             admin.close();
         }
     }
+
 
     public static void assertOneOfValuesEqualsResultSet(ResultSet rs, List<List<Object>>... expectedResultsArray) throws SQLException {
         List<List<Object>> results = Lists.newArrayList();
