@@ -523,6 +523,7 @@ public abstract class BaseTest {
         try {
             destroyDriver();
         } finally {
+            driver = null;
             disableAndDropTables(admin);
         }
     }
