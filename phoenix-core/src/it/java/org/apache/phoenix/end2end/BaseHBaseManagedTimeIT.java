@@ -53,7 +53,11 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
         // don't want callers to modify config.
         return new Configuration(config);
     }
-    
+
+    protected static boolean isDistributedClusterModeEnabled() {
+        return isDistributedClusterModeEnabled(config);
+    }
+
     @BeforeClass
     public static void doSetup() throws Exception {
     	setUpTestDriver(null);
@@ -72,7 +76,18 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     @AfterClass
     public static void doTeardown() throws Exception {
         dropAllTables();
-    }
+    } 
+/*    @AfterClass
+    public static void dropTables() throws Exception {
+        if(driver == null) return;
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try {
+            assertTrue(destroyDriver(driver));
+        } finally {
+            driver = null;
+            disableAndDropTables(admin);
+        }
+    } */
     
     @After
     public void cleanUpAfterTest() throws Exception {

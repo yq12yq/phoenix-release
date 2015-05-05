@@ -43,8 +43,10 @@ print "Current ClassPath=%s:%s:%s" % (phoenix_utils.hbase_conf_dir, phoenix_jar_
                                       hbase_library_path)
 
 java_cmd = "java -cp " + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_jar_path + os.pathsep + \
-    hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \
+    hbase_library_path + " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
+    " org.apache.phoenix.end2end.End2EndTestDriver " + \
     ' '.join(sys.argv[1:])
 
 exitcode = subprocess.call(java_cmd, shell=True)
+
 sys.exit(exitcode)
