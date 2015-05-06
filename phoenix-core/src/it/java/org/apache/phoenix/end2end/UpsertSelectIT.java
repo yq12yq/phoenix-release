@@ -220,8 +220,9 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
-        
-        Date now = new Date(System.currentTimeMillis());
+
+        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 5000 :
+            System.currentTimeMillis()));
         assertTrue (rs.next());
         assertEquals(null, rs.getString(1));
         assertEquals(ROW6, rs.getString(2));
@@ -397,8 +398,10 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
-        Date now = new Date(System.currentTimeMillis());
-        
+        // add 5 second to compensate time clock skew when tests run in a multi-node cluster
+        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 5000 :
+            System.currentTimeMillis()));
+
         assertTrue (rs.next());
         assertEquals(null, rs.getString(1));
         assertEquals(A_VALUE, rs.getString(2));
