@@ -548,7 +548,7 @@ public abstract class BaseTest {
         }
     }
 
-    private static boolean isDistributedClusterModeEnabled(Configuration conf) {
+    protected static boolean isDistributedClusterModeEnabled(Configuration conf) {
         boolean isDistributedCluster = false;
         //check if the distributed mode was specified as a system property.
         isDistributedCluster = Boolean.parseBoolean(System.getProperty(IntegrationTestingUtility.IS_DISTRIBUTED_CLUSTER, "false"));
