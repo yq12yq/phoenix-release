@@ -65,7 +65,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
-        ResultSet rs = conn.createStatement().executeQuery("select count(1) from " + TestUtil.PTSDB_NAME + " group by inst limit 1");
+        ResultSet rs = conn.createStatement().executeQuery("select count(1) from " + TestUtil.PTSDB_NAME + " where inst ='a' group by inst limit 1");
         assertTrue(rs.next());
         assertEquals(3,rs.getInt(1));
         assertFalse(rs.next());
