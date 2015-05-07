@@ -918,8 +918,8 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
     public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         if(isDistributedClusterModeEnabled(admin.getConfiguration())){
-            // can't run the test in distributed mode
-            return;
+          // can't run the test in distributed mode
+          return;
         }
         createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME+"2", null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
