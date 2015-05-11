@@ -439,7 +439,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement(query);
         rs = statement.executeQuery();
-        // 1000 below is to compensate time clock skew if tests are running in multi-node cluster
+        // 5000 below is to compensate time clock skew if tests are running in multi-node cluster
         now = new Date(System.currentTimeMillis() + (isDistributedClusterModeEnabled() ? 5000 : 0));
 
         assertTrue (rs.next());
