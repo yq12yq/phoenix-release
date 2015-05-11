@@ -58,26 +58,38 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
         return isDistributedClusterModeEnabled(config);
     }
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-    	setUpTestDriver(null);
+    public static Map<String,String> getDefaultProps() {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+        // Must update config before starting server
+        props.put(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, Boolean.FALSE.toString());
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
+        return props;
     }
 
-    protected static void doSetup(Map<String,String> customProps) throws Exception {
-    	Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
-    	if(customProps != null) {
-    		props.putAll(customProps);
-    	}
-    	props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
-    	props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
-    	setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        Map<String,String> props = getDefaultProps();
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+    
+    protected static void doSetup(Map<String,String> customProps) throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+        Map<String,String> defaultProps = getDefaultProps();
+        if(defaultProps != null) {
+            props.putAll(customProps);
+        }
+        if(customProps != null) {
+            props.putAll(customProps);
+        }	
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    } 
 
     @AfterClass
     public static void doTeardown() throws Exception {
         dropAllTables();
     } 
-    
+
     @After
     public void cleanUpAfterTest() throws Exception {
         deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());    
