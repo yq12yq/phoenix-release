@@ -55,6 +55,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -75,9 +76,11 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import com.google.common.collect.Maps;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     private static CountDownLatch latch1 = new CountDownLatch(1);
@@ -917,10 +920,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        if(isDistributedClusterModeEnabled(admin.getConfiguration())){
-          // can't run the test in distributed mode
-          return;
-        }
         createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME+"2", null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
