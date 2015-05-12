@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.After;
@@ -49,7 +50,7 @@ import org.junit.Test;
 /**
  * Comprehensive test that ensures we are adding custom index handlers
  */
-public class IndexHandlerIT {
+public class IndexHandlerIT extends BaseHBaseManagedTimeIT{
 
     public static class CountingIndexClientRpcFactory extends RpcControllerFactory {
 
@@ -91,7 +92,7 @@ public class IndexHandlerIT {
         @Override
         public void setPriority(int pri) {
             Integer count = priorityCounts.get(pri);
-            if (count == 0) {
+            if (count == null || count == 0) {
                 count = new Integer(0);
             }
             count = count.intValue() + 1;

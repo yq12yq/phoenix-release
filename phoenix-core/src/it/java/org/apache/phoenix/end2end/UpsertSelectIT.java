@@ -62,9 +62,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
   @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
   public static void doSetup() throws Exception {
       Map<String,String> props = getDefaultProps();
-      props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(500));
-      props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
-
+      props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
       // Must update config before starting server
       setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
@@ -222,8 +220,9 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
-        
-        Date now = new Date(System.currentTimeMillis());
+
+        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 5000 :
+            System.currentTimeMillis()));
         assertTrue (rs.next());
         assertEquals(null, rs.getString(1));
         assertEquals(ROW6, rs.getString(2));
@@ -399,8 +398,10 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
-        Date now = new Date(System.currentTimeMillis());
-        
+        // add 5 second to compensate time clock skew when tests run in a multi-node cluster
+        Date now = new Date((isDistributedClusterModeEnabled() ? System.currentTimeMillis() + 5000 :
+            System.currentTimeMillis()));
+
         assertTrue (rs.next());
         assertEquals(null, rs.getString(1));
         assertEquals(A_VALUE, rs.getString(2));
@@ -438,8 +439,9 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         statement = conn.prepareStatement(query);
         rs = statement.executeQuery();
-        now = new Date(System.currentTimeMillis());
-        
+        // 5000 below is to compensate time clock skew if tests are running in multi-node cluster
+        now = new Date(System.currentTimeMillis() + (isDistributedClusterModeEnabled() ? 5000 : 0));
+
         assertTrue (rs.next());
         assertEquals("x", rs.getString(1));
         assertEquals(C_VALUE, rs.getString(2));

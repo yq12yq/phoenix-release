@@ -92,55 +92,59 @@ public class StatisticsUtil {
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         ResultScanner scanner = statsHTable.getScanner(s);
-        Result result = null;
-        long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-        TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(
-                Bytes.BYTES_COMPARATOR);
-        while ((result = scanner.next()) != null) {
-            CellScanner cellScanner = result.cellScanner();
-            long rowCount = 0;
-            ImmutableBytesPtr valuePtr = new ImmutableBytesPtr(HConstants.EMPTY_BYTE_ARRAY);
-            byte[] cfName = null;
-            int tableNameLength;
-            int cfOffset;
-            int cfLength;
-            boolean valuesSet = false;
-            // Only the two cells with quals GUIDE_POSTS_ROW_COUNT_BYTES and GUIDE_POSTS_BYTES would be retrieved
-            while (cellScanner.advance()) {
-                Cell current = cellScanner.current();
-                if (!valuesSet) {
-                    tableNameLength = tableNameBytes.length + 1;
-                    cfOffset = current.getRowOffset() + tableNameLength;
-                    cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
-                            - tableNameLength);
-                    ptr.set(current.getRowArray(), cfOffset, cfLength);
-                    valuesSet = true;
+        try { 
+            Result result = null;
+            long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+            TreeMap<byte[], GuidePostsInfo> guidePostsPerCf = new TreeMap<byte[], GuidePostsInfo>(
+                    Bytes.BYTES_COMPARATOR);
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                long rowCount = 0;
+                ImmutableBytesPtr valuePtr = new ImmutableBytesPtr(HConstants.EMPTY_BYTE_ARRAY);
+                byte[] cfName = null;
+                int tableNameLength;
+                int cfOffset;
+                int cfLength;
+                boolean valuesSet = false;
+                // Only the two cells with quals GUIDE_POSTS_ROW_COUNT_BYTES and GUIDE_POSTS_BYTES would be retrieved
+                while (cellScanner.advance()) {
+                    Cell current = cellScanner.current();
+                    if (!valuesSet) {
+                        tableNameLength = tableNameBytes.length + 1;
+                        cfOffset = current.getRowOffset() + tableNameLength;
+                        cfLength = getVarCharLength(current.getRowArray(), cfOffset, current.getRowLength()
+                                - tableNameLength);
+                        ptr.set(current.getRowArray(), cfOffset, cfLength);
+                        valuesSet = true;
+                    }
+                    cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
+                            current.getQualifierLength(), PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, 0,
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES.length)) {
+                        rowCount = PLong.INSTANCE.getCodec().decodeLong(current.getValueArray(),
+                                current.getValueOffset(), SortOrder.getDefault());
+                    } else {
+                        valuePtr.set(current.getValueArray(), current.getValueOffset(),
+                                current.getValueLength());
+                    }
+                    if (current.getTimestamp() > timeStamp) {
+                        timeStamp = current.getTimestamp();
+                    }
                 }
-                cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
-                        current.getQualifierLength(), PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, 0,
-                        PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES.length)) {
-                    rowCount = PLong.INSTANCE.getCodec().decodeLong(current.getValueArray(),
-                            current.getValueOffset(), SortOrder.getDefault());
-                } else {
-                    valuePtr.set(current.getValueArray(), current.getValueOffset(),
-                        current.getValueLength());
-                }
-                if (current.getTimestamp() > timeStamp) {
-                    timeStamp = current.getTimestamp();
+                if (cfName != null) {
+                    GuidePostsInfo newGPInfo = GuidePostsInfo.deserializeGuidePostsInfo(
+                            valuePtr.get(), valuePtr.getOffset(), valuePtr.getLength(), rowCount);
+                    GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newGPInfo);
+                    if (oldInfo != null) {
+                        newGPInfo.combine(oldInfo);
+                    }
                 }
             }
-            if (cfName != null) {
-                GuidePostsInfo newGPInfo = GuidePostsInfo.deserializeGuidePostsInfo(
-                        valuePtr.get(), valuePtr.getOffset(), valuePtr.getLength(), rowCount);
-                GuidePostsInfo oldInfo = guidePostsPerCf.put(cfName, newGPInfo);
-                if (oldInfo != null) {
-                    newGPInfo.combine(oldInfo);
-                }
+            if (!guidePostsPerCf.isEmpty()) {
+                return new PTableStatsImpl(guidePostsPerCf, timeStamp);
             }
-        }
-        if (!guidePostsPerCf.isEmpty()) {
-            return new PTableStatsImpl(guidePostsPerCf, timeStamp);
+        } finally {
+            scanner.close();
         }
         return PTableStats.EMPTY_STATS;
     }

@@ -339,7 +339,8 @@ public class IndexUtil {
                 return indexRegion;
             }
         }
-        return null;
+        throw new IOException("Local index region isn't co-located with its data region=" + 
+                dataRegion.getRegionInfo().getEncodedName() + " table=" + dataRegion.getTableDesc().getName()); 
     }
 
     public static Region getDataRegion(Region indexRegion, RegionServerServices rss) throws IOException {
