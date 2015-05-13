@@ -237,6 +237,56 @@ function Copy-XmlTemplate( [string][parameter( Position=1, Mandatory=$true)] $So
 	write-output $expanded | out-file -encoding ascii $Destination
 }
 
+# Convenience method for processing command-line credential objects
+# Assumes $credentialsHash is a hash with one of the following being true:
+#  - keys "username" and "password"/"passwordBase64" are set to strings
+#  - key "credentialFilePath" is set to the path of a serialized PSCredential object
+function Get-HadoopUserCredentials($credentialsHash)
+{
+    if($credentialsHash["username"])
+    {
+        Write-Log "Using provided credentials for username $($credentialsHash["username"])" | Out-Null
+        $username = $credentialsHash["username"]
+        if($username -notlike "*\*")
+        {
+            $username = "$ENV:COMPUTERNAME\$username"
+        }
+        if($credentialsHash["passwordBase64"])
+        {
+            $base64Password = $credentialsHash["passwordBase64"]
+            $decoded = [System.Convert]::FromBase64String($base64Password);
+            $decodedPassword = [System.Text.Encoding]::UTF8.GetString($decoded);
+            $securePassword = $decodedPassword | ConvertTo-SecureString -AsPlainText -Force
+        }
+        else
+        {
+            $securePassword = $credentialsHash["password"] | ConvertTo-SecureString -AsPlainText -Force
+        }
+    }
+    else
+    {
+        Write-Log "Reading credentials from $($credentialsHash['credentialFilePath'])" | Out-Null
+        $import = Import-Clixml -Path $credentialsHash["credentialFilePath"]
+        $username = $import.Username
+        $securePassword = $import.Password | ConvertTo-SecureString
+    }
+
+    $creds = New-Object System.Management.Automation.PSCredential $username, $securePassword
+    return $creds
+}
+
+function Invoke-CmdChk ($command)
+{
+    Write-Log $command
+    $out = cmd.exe /C "$command" 2>&1
+    $out | ForEach-Object { Write-LogRecord "CMD" $_ }
+    if (-not ($LastExitCode  -eq 0))
+    {
+        throw "Command `"$out`" failed with exit code $LastExitCode "
+    }
+    return $out
+}
+
 Export-ModuleMember -Function Copy-XmlTemplate
 Export-ModuleMember -Function Initialize-WinpkgEnv
 Export-ModuleMember -Function Initialize-InstallationEnv
@@ -246,3 +296,5 @@ Export-ModuleMember -Function Invoke-Winpkg
 Export-ModuleMember -Function Set-ServiceAcl
 Export-ModuleMember -Function Test-JavaHome
 Export-ModuleMember -Function Write-Log
+Export-ModuleMember -Function Get-HadoopUserCredentials
+Export-ModuleMember -Function Invoke-CmdChk

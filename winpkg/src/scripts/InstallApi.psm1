@@ -109,7 +109,22 @@ function Install(
         $xcopy_cmd = "xcopy /EIYF `"$ENV:PHOENIX_HOME\phoenix-*-server.jar`" `"$ENV:HBASE_HOME\lib`""
         Invoke-Cmd $xcopy_cmd
 
-		Write-log "$env:HADOOP_NODE_INSTALL_ROOT"
+        ###
+        ### Creating Phoenix Query Server Service
+        ###
+        $service= "queryserver"
+        $phoenixInstallToBin = join-path $phoenixInstallPath "bin"
+        CreateAndConfigureHadoopService $service $HDP_RESOURCES_DIR $phoenixInstallToBin $serviceCredential
+
+        ###
+        ### Setup Phoenix Query Server service config
+        ###
+        Write-Log "Creating configuration for PQS service"
+        Write-Log "Creating service config ${phoenixInstallToBin}\$service.xml"
+        $cmd = "python.exe $phoenixInstallToBin\queryserver.py makeWinServiceDesc > `"$phoenixInstallToBin\$service.xml`""
+        Invoke-CmdChk $cmd
+
+        Write-log "$env:HADOOP_NODE_INSTALL_ROOT"
 
         Write-Log "Finished installing Apache phoenix"
     }
@@ -143,6 +158,7 @@ function Uninstall(
 
         Write-Log "Uninstalling Apache phoenix $FinalName"
         $phoenixInstallPath = Join-Path $nodeInstallRoot $FinalName
+        StopAndDeleteHadoopService "queryserver"
 
         ### If Hadoop Core root does not exist exit early
         if ( -not (Test-Path $phoenixInstallPath) )
@@ -269,6 +285,75 @@ function StopService(
     }
 }
 
+### Creates and configures the service.
+function CreateAndConfigureHadoopService(
+    [String]
+    [Parameter( Position=0, Mandatory=$true )]
+    $service,
+    [String]
+    [Parameter( Position=1, Mandatory=$true )]
+    $hdpResourcesDir,
+    [String]
+    [Parameter( Position=2, Mandatory=$true )]
+    $serviceBinDir,
+    [System.Management.Automation.PSCredential]
+    [Parameter( Position=3, Mandatory=$true )]
+    $serviceCredential
+)
+{
+    if ( -not ( Get-Service "$service" -ErrorAction SilentlyContinue ) )
+    {
+        Write-Log "Creating service `"$service`" as $serviceBinDir\$service.exe"
+        $xcopyServiceHost_cmd = "copy /Y `"$hdpResourcesDir\serviceHost.exe`" `"$serviceBinDir\$service.exe`""
+        Invoke-CmdChk $xcopyServiceHost_cmd
+
+        #HadoopServiceHost.exe will write to this log but does not create it
+        #Creating the event log needs to be done from an elevated process, so we do it here
+        if( -not ([Diagnostics.EventLog]::SourceExists( "$service" )))
+        {
+            [Diagnostics.EventLog]::CreateEventSource( "$service", "" )
+        }
+
+        Write-Log "Adding service $service"
+        $s = New-Service -Name "$service" -BinaryPathName "$serviceBinDir\$service.exe" -Credential $serviceCredential -DisplayName "Apache Hadoop $service"
+        if ( $s -eq $null )
+        {
+            throw "CreateAndConfigureHadoopService: Service `"$service`" creation failed"
+        }
+
+        $cmd="$ENV:WINDIR\system32\sc.exe failure $service reset= 30 actions= restart/5000"
+        Invoke-CmdChk $cmd
+
+        $cmd="$ENV:WINDIR\system32\sc.exe config $service start= demand"
+        Invoke-CmdChk $cmd
+
+        Set-ServiceAcl $service
+    }
+    else
+    {
+        Write-Log "Service `"$service`" already exists, Removing `"$service`""
+        StopAndDeleteHadoopService $service
+        CreateAndConfigureHadoopService $service $hdpResourcesDir $serviceBinDir $serviceCredential
+    }
+}
+
+### Stops and deletes the Hadoop service.
+function StopAndDeleteHadoopService(
+    [String]
+    [Parameter( Position=0, Mandatory=$true )]
+    $service
+)
+{
+    Write-Log "Stopping $service"
+    $s = Get-Service $service -ErrorAction SilentlyContinue
+
+    if( $s -ne $null )
+    {
+        Stop-Service $service
+        $cmd = "sc.exe delete $service"
+        Invoke-Cmd $cmd
+    }
+}
 
 ###
 ### Public API
