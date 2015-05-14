@@ -45,8 +45,8 @@ import org.apache.hadoop.hbase.master.RegionState;
 import org.apache.hadoop.hbase.master.RegionStates;
 import org.apache.hadoop.hbase.master.balancer.StochasticLoadBalancer;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.hadoop.util.ReflectionUtils;
 
 /**
  * <p>This class is an extension of the load balancer class. 
@@ -289,7 +289,7 @@ public class IndexLoadBalancer implements LoadBalancer {
                 TableName mappedTableName = getMappedTableToColocate(regionInfo.getTable());
                 startKey.set(regionInfo.getStartKey());
                 ServerName sn = this.colocationInfo.get(mappedTableName).get(startKey);
-                if (sn == null || sn.equals(server)) {
+                if (sn.equals(server)) {
                     continue;
                 } else {
                     RegionPlan rp = new RegionPlan(regionInfo, server, sn);

@@ -1877,8 +1877,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            // 10 secs to deal with possible clock skew
-            Date startDate = new Date(System.currentTimeMillis() - 10000);
+            Date startDate = new Date(System.currentTimeMillis());
             initDateTableValues(tenantId, getSplits(tenantId), ts, startDate);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
@@ -1900,8 +1899,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            // 10 secs to deal with possible clock skew
-            Date startDate = new Date(System.currentTimeMillis() - 10000);
+            Date startDate = new Date(System.currentTimeMillis());
             initDateTableValues(tenantId, getSplits(tenantId), ts, startDate);
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);

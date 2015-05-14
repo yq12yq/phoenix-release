@@ -53,10 +53,6 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
         return new Configuration(config);
     }
     
-    protected static boolean isDistributedClusterModeEnabled() {
-        return isDistributedClusterModeEnabled(config);
-    }
-
     @After
     public void cleanUpAfterTest() throws Exception {
         long ts = nextTimestamp();
@@ -67,8 +63,6 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         // Must update config before starting server
         props.put(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, Boolean.FALSE.toString());
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(2048));
         return props;
     }
     
@@ -80,6 +74,6 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
     
     @AfterClass
     public static void doTeardown() throws Exception {
-        dropAllTables();
+        dropNonSystemTables();
     }
 }

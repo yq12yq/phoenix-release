@@ -49,7 +49,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -91,7 +90,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     
     @Before
     public void initTable() throws Exception {
-        deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());
         initJoinTableValues(getUrl(), null, null);
         if (indexDDL != null && indexDDL.length > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -105,7 +103,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
-
+    
     @Parameters
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();

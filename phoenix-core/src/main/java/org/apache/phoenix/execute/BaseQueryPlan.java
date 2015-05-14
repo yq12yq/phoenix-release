@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
+
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -33,7 +36,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -53,6 +55,8 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -68,6 +72,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 
@@ -186,9 +191,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
             scan.setConsistency(connection.getConsistency());
         }
         if (context.getScanTimeRange() == null) {
-            Long scn = connection.getSCN();
-            if (scn == null) {
-                scn = context.getCurrentTime();
+           Long scn = connection.getSCN();
+           if (scn == null) {
+               scn = context.getCurrentTime();
             }
             TimeRange scanTimeRange = scan.getTimeRange();
             ScanUtil.setTimeRange(scan, scanTimeRange.getMin(), Math.min(scanTimeRange.getMax(), scn));

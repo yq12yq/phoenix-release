@@ -35,7 +35,6 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Properties;
 
-import org.apache.commons.lang.SystemUtils;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -166,10 +165,6 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
 
             ddl = "ALTER INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + " USABLE";
             conn.createStatement().execute(ddl);
-            if(SystemUtils.IS_OS_WINDOWS) {
-                // to work with low time resolution system
-                Thread.sleep(200);
-            }
             // Verify the metadata for index is correct.
             rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(INDEX_DATA_SCHEMA), "IDX", new String[] {PTableType.INDEX.toString()});
             assertTrue(rs.next());

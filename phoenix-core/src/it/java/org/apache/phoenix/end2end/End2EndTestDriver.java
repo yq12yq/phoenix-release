@@ -21,7 +21,6 @@ package org.apache.phoenix.end2end;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -80,17 +79,10 @@ public class End2EndTestDriver extends AbstractHBaseTool {
 
       @Override
       public boolean isCandidateClass(Class<?> c) {
-          Annotation[] annotations = c.getAnnotations();
-          for (Annotation curAnnotation : annotations) {
-              if (curAnnotation.toString().contains("NeedsOwnMiniClusterTest")) {
-                  // Skip tests that aren't designed to run against a live cluster
-                  return false;
-              }
-          }
-          return testFilterRe.matcher(c.getName()).find() &&
-                  // Our pattern will match the below NON-IntegrationTest. Rather than
-                  // do exotic regex, just filter it out here
-                  super.isCandidateClass(c);
+        return testFilterRe.matcher(c.getName()).find() &&
+          // Our pattern will match the below NON-IntegrationTest. Rather than
+          // do exotic regex, just filter it out here
+          super.isCandidateClass(c);
       }
     }
 

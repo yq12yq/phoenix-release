@@ -43,10 +43,9 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Integer.toString(20));
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(24));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(5000));
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -99,7 +98,6 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals(1, rs.getInt(1));
         assertEquals(121, rs.getInt(2));
         assertFalse(rs.next());
-        conn.close();
     }
 
     protected void testUpdatableViewIndex(Integer saltBuckets) throws Exception {
@@ -181,7 +179,6 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
                                     + "CLIENT MERGE SORT",
                             QueryUtil.getExplainPlan(rs));
         }
-        conn.close();
     }
 
 

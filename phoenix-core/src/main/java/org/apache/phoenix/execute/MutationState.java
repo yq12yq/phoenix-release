@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.execute;
 
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BATCH_SIZE;
-import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_COMMIT_TIME;
-
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -27,17 +24,12 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -47,6 +39,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.PhoenixMetrics;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -62,6 +55,8 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.htrace.Span;
+import org.apache.htrace.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +65,9 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.sun.istack.NotNull;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BYTES;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_BATCH_SIZE;
+import static org.apache.phoenix.monitoring.PhoenixMetrics.SizeMetric.MUTATION_COMMIT_TIME;
 
 /**
  * 
@@ -337,28 +335,15 @@ public class MutationState implements SQLCloseable {
     private static void logMutationSize(HTableInterface htable, List<Mutation> mutations, PhoenixConnection connection) {
         long byteSize = 0;
         int keyValueCount = 0;
-        long minTimeStamp = Long.MAX_VALUE;
-        long maxTimeStamp = Long.MIN_VALUE;
-        for (Mutation mutation : mutations) {
-            if (mutation.getFamilyCellMap() != null) { // Not a Delete of the row
-                for (Entry<byte[], List<Cell>> entry : mutation.getFamilyCellMap().entrySet()) {
-                    if (entry.getValue() != null) {
-                        for (Cell kv : entry.getValue()) {
-                            byteSize += CellUtil.estimatedSizeOf(kv);
-                            keyValueCount++;
-                            long cellTimeStamp = kv.getTimestamp();
-                            if(minTimeStamp > cellTimeStamp) {
-                                minTimeStamp = cellTimeStamp;
-                            }
-                            if(maxTimeStamp < cellTimeStamp) {
-                                maxTimeStamp = cellTimeStamp;
-                            }
-                        }
-                    }
-                }
+        if (PhoenixMetrics.isMetricsEnabled() || logger.isDebugEnabled()) {
+            for (Mutation mutation : mutations) {
+                byteSize += mutation.heapSize();
+            }
+            MUTATION_BYTES.update(byteSize);
+            if (logger.isDebugEnabled()) {
+                logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
             }
         }
-        logger.debug(LogUtil.addCustomAnnotations("Sending " + mutations.size() + " mutations for " + Bytes.toString(htable.getTableName()) + " with " + keyValueCount + " key values of total size " + byteSize + " bytes", connection));
     }
     
     @SuppressWarnings("deprecation")

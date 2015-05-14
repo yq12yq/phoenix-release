@@ -26,27 +26,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
-
-	@BeforeClass
-	public static void doSetup() throws Exception {
-		Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-		props.put(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Integer.toString(600000));
-		doSetup(props);
-	}
 	
     @Test
     public void testUpdatableView() throws Exception {
