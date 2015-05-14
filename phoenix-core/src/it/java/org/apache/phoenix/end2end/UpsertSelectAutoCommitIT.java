@@ -34,7 +34,6 @@ import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -137,7 +136,7 @@ public class UpsertSelectAutoCommitIT extends BaseHBaseManagedTimeIT {
         conn.commit();
     }
     
-    @Ignore
+    
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
