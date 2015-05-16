@@ -53,6 +53,10 @@
         <include>org.jruby.jcodings:jcodings</include>
         <!-- need some transitive HDFS deps now that we look for UDF jars -->
         <include>javax.servlet:servlet-api</include>
+        <!-- include all non-hbase jars listed in `hbase mapredcp` that we
+             haven't got already - for bulkloading -->
+        <include>io.netty:netty-all</include>
+        <include>com.yammer.metrics:metrics-core</include>
       </includes>
     </dependencySet>
   </dependencySets>
