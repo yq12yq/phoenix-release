@@ -51,6 +51,8 @@
         <include>joda-time:joda-time</include>
         <include>org.jruby.joni:joni</include>
         <include>org.jruby.jcodings:jcodings</include>
+        <!-- need some transitive HDFS deps now that we look for UDF jars -->
+        <include>javax.servlet:servlet-api</include>
       </includes>
     </dependencySet>
   </dependencySets>
