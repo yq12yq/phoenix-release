@@ -39,7 +39,7 @@ function Main( $scriptDir )
     Write-Log "Username: $username"
     Write-Log "CredentialFilePath: $credentialFilePath"
 
-    Install "PHOENIX" $ENV:HADOOP_NODE_INSTALL_ROOT
+    Install "PHOENIX" $ENV:HADOOP_NODE_INSTALL_ROOT $serviceCredential
     Write-Log "Finished installing Apache PHOENIX"
 }
 
