@@ -57,6 +57,8 @@
              haven't got already - for bulkloading -->
         <include>io.netty:netty-all</include>
         <include>com.yammer.metrics:metrics-core</include>
+        <include>xerces:xercesImpl:2.11.0</include>
+        <include>xml-apis:xml-apis:1.4.01</include>
       </includes>
     </dependencySet>
   </dependencySets>
