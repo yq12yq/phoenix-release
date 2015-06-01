@@ -283,7 +283,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             int columnCount = projector.getColumnCount();
             int rowCount = 0;
-            PDataType baseType = null;
+            PDataType baseType = PDataType.VARBINARY;
             for (Tuple tuple = iterator.next(); tuple != null; tuple = iterator.next()) {
                 if (expectSingleRow && rowCount >= 1)
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
