@@ -66,7 +66,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
@@ -255,7 +254,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             int columnCount = projector.getColumnCount();
             int rowCount = 0;
-            PDataType baseType = PVarbinary.INSTANCE;
+            PDataType baseType = null;
             for (Tuple tuple = iterator.next(); tuple != null; tuple = iterator.next()) {
                 if (expectSingleRow && rowCount >= 1)
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
@@ -280,8 +279,23 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 }
                 rowCount++;
             }
-
-            Object result = expectSingleRow ? (values.isEmpty() ? null : values.get(0)) : PArrayDataType.instantiatePhoenixArray(baseType, values.toArray());
+            
+            Object result = null;
+            if (expectSingleRow) {
+                result = values.isEmpty() ? null : values.get(0);
+            } else {
+                if (rowCount == 0) {
+                    List<Expression> expressions = Lists.<Expression>newArrayListWithExpectedSize(columnCount);
+                    for (int i = 0; i < columnCount; i++) {
+                        ColumnProjector columnProjector = projector.getColumnProjector(i);
+                        PDataType type = columnProjector.getExpression().getDataType();
+                        expressions.add(LiteralExpression.newConstant(null, type));
+                    }
+                    Expression expression = new RowValueConstructorExpression(expressions, true);
+                    baseType = expression.getDataType();
+                }
+                result = PArrayDataType.instantiatePhoenixArray(baseType, values.toArray());
+            }
             parent.getContext().setSubqueryResult(select, result);
             return null;
         }
