@@ -66,7 +66,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 
@@ -255,7 +254,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             int columnCount = projector.getColumnCount();
             int rowCount = 0;
-            PDataType baseType = PVarbinary.INSTANCE;
+            PDataType baseType = null;
             for (Tuple tuple = iterator.next(); tuple != null; tuple = iterator.next()) {
                 if (expectSingleRow && rowCount >= 1)
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();

@@ -3814,7 +3814,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
-    public void testSubqueryWithoutData() throws Exception {
+    public void testSubqueryWithNoData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
