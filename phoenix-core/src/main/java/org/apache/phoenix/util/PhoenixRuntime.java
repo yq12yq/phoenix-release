@@ -170,13 +170,14 @@ public class PhoenixRuntime {
      * between processing, with each file being processed by a new connection at the
      * increment timestamp value.
      */
-    public static void main(String [] args) {
+    public static void main(String [] args) throws Exception {
 
         ExecutionCommand execCmd = ExecutionCommand.parseArgs(args);
         String jdbcUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + execCmd.getConnectionString();
 
         int exitStatus = 0;
 
+        Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
         PhoenixConnection conn = null;
         try {
             Properties props = new Properties();
