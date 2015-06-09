@@ -492,7 +492,7 @@ public class SortMergeJoinPlan implements QueryPlan {
             this.expressions = expressions;
             this.keys = Lists.newArrayListWithExpectedSize(expressions.size());
             for (int i = 0; i < expressions.size(); i++) {
-                this.keys.add(new ImmutableBytesWritable(new byte[0]));
+                this.keys.add(new ImmutableBytesWritable(EMPTY_PTR));
             }
         }
         
