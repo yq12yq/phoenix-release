@@ -28,7 +28,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.util.ServerCommandLine;
 import org.apache.hadoop.hbase.util.Strings;
 import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
@@ -113,7 +112,6 @@ public final class Main extends Configured implements Tool, Runnable {
 
   @Override
   public int run(String[] args) throws Exception {
-    ServerCommandLine.logProcessInfo(getConf());
     try {
       // handle secure cluster credentials
       if ("kerberos".equalsIgnoreCase(getConf().get(HBASE_SECURITY_CONF_KEY))) {
