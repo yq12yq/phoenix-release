@@ -18,6 +18,15 @@
 
 package org.apache.phoenix.pherf;
 
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataTypeMapping;
@@ -28,22 +37,15 @@ import org.apache.phoenix.pherf.rules.DataValue;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.junit.Ignore;
 import org.junit.Test;
-
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class DataIngestIT extends BaseHBaseManagedTimeIT {
     protected static PhoenixUtil util = new PhoenixUtil(true);
     static final String matcherScenario = ".*scenario/.*test.*xml";
     static final String matcherSchema = ".*datamodel/.*test.*sql";
 
+    @Ignore
     @Test
     public void generateData() throws Exception {
         util.setZookeeper("localhost");
