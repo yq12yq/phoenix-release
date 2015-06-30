@@ -35,6 +35,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -48,6 +49,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -439,7 +441,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.commit();
 
         assertIndexExists(conn,true);
-        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY");
+        conn.createStatement().execute("ALTER TABLE " + DATA_TABLE_FULL_NAME + " ADD v3 VARCHAR, k2 DECIMAL PRIMARY KEY, k3 DECIMAL PRIMARY KEY");
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, DATA_TABLE_NAME);
         assertTrue(rs.next());
         assertEquals("K",rs.getString("COLUMN_NAME"));
@@ -447,6 +449,10 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals("K2",rs.getString("COLUMN_NAME"));
         assertEquals(2, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals("K3",rs.getString("COLUMN_NAME"));
+        assertEquals(3, rs.getShort("KEY_SEQ"));
+        assertFalse(rs.next());
 
         rs = conn.getMetaData().getPrimaryKeys("", SCHEMA_NAME, INDEX_TABLE_NAME);
         assertTrue(rs.next());
@@ -458,6 +464,10 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K2",rs.getString("COLUMN_NAME"));
         assertEquals(3, rs.getShort("KEY_SEQ"));
+        assertTrue(rs.next());
+        assertEquals(IndexUtil.INDEX_COLUMN_NAME_SEP + "K3",rs.getString("COLUMN_NAME"));
+        assertEquals(4, rs.getShort("KEY_SEQ"));
+        assertFalse(rs.next());
 
         query = "SELECT * FROM " + DATA_TABLE_FULL_NAME;
         rs = conn.createStatement().executeQuery(query);
@@ -469,19 +479,21 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertFalse(rs.next());
 
         // load some data into the table
-        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2) VALUES(?,?,?,?)");
+        stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + "(K,K2,V1,V2,K3) VALUES(?,?,?,?,?)");
         stmt.setString(1, "b");
         stmt.setBigDecimal(2, BigDecimal.valueOf(2));
         stmt.setString(3, "y");
         stmt.setString(4, "2");
+        stmt.setBigDecimal(5, BigDecimal.valueOf(3));
         stmt.execute();
         conn.commit();
 
-        query = "SELECT k,k2 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
+        query = "SELECT k,k2,k3 FROM " + DATA_TABLE_FULL_NAME + " WHERE v1='y'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
         assertEquals(BigDecimal.valueOf(2),rs.getBigDecimal(2));
+        assertEquals(BigDecimal.valueOf(3),rs.getBigDecimal(3));
         assertFalse(rs.next());
     }
 
@@ -1988,4 +2000,26 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
+ /*   
+    private int getIndexOfPkColumn(PhoenixConnection conn, String columnName, String tableName) throws SQLException {
+        String normalizedTableName = SchemaUtil.normalizeIdentifier(tableName);
+        PTable table = conn.getMetaDataCache().getTable(new PTableKey(conn.getTenantId(), normalizedTableName));
+        List<PColumn> pkCols = table.getPKColumns();
+        String normalizedColumnName = SchemaUtil.normalizeIdentifier(columnName);
+        int i = 0;
+        for (PColumn pkCol : pkCols) {
+            if (pkCol.getName().getString().equals(normalizedColumnName)) {
+                return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+    
+    private Connection getTenantConnection(String tenantId) throws Exception {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), tenantProps);
+    } */
+ 
 }

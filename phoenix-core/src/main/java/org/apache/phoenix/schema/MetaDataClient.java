@@ -2346,7 +2346,10 @@ public class MetaDataClient {
             while (true) {
                 ColumnResolver resolver = FromCompiler.getResolver(statement, connection);
                 table = resolver.getTables().get(0).getTable();
-                List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(2);
+                int nIndexes = table.getIndexes().size();
+                int nNewColumns = columnDefs.size();
+                List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize((1 + nNewColumns) * (nIndexes + 1));
+                List<Mutation> columnMetaData = Lists.newArrayListWithExpectedSize(nNewColumns * (nIndexes + 1));
                 if (logger.isDebugEnabled()) {
                     logger.debug(LogUtil.addCustomAnnotations("Resolved table to " + table.getName().getString() + " with seqNum " + table.getSequenceNumber() + " at timestamp " + table.getTimeStamp() + " with " + table.getColumns().size() + " columns: " + table.getColumns(), connection));
                 }
@@ -2459,7 +2462,7 @@ public class MetaDataClient {
                         }
                     }
 
-                    tableMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
+                    columnMetaData.addAll(connection.getMutationState().toMutations().next().getSecond());
                     connection.rollback();
                 } else {
                     // Check that HBase configured properly for mutable secondary indexing
@@ -2495,6 +2498,8 @@ public class MetaDataClient {
                 
                 // Force the table header row to be first
                 Collections.reverse(tableMetaData);
+                // Add column metadata afterwards, maintaining the order so columns have more predictable ordinal position
+                tableMetaData.addAll(columnMetaData);
 
                 byte[] family = families.size() > 0 ? families.iterator().next().getBytes() : null;
 
