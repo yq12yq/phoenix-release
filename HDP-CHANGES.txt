@@ -1,0 +1,40 @@
+e817b9d PHOENIX-2042 Windows need hadoop native libraries to run tests
+9279bb1 Disable Windows Perf tests. BUG-39016 Fix Phoenix unit tests on Windows
+e817b9d PHOENIX-2042 Windows need hadoop native libraries to run tests
+2fa0004 PHOENIX-2032 psql.py is broken after PHOENIX-2013
+2121bcd PHOENIX-2033 PQS log environment details on launch
+ed5b05b PHOENIX-2007 java.sql.SQLException: Encountered exception in sub plan [0] execution(Alicia Ying Shu)'
+03d6733 BUG-BUG-38630 Queries with Hints are raising IllegalStateException
+2bd5c4c PHOENIX-2012 RowKeyComparisonFilter logs unencoded data at DEBUG level
+62950ca BUG-38093. Addendum. Phoenix Query Execution with Slider is throwing RuntimeException - Provider for class javax.xml.parsers.DocumentBuilderFactory cannot be created (Nick Dimiduk).
+91aef11 BUG-38093. Phoenix Query Execution with Slider is throwing RuntimeException - Provider for class javax.xml.parsers.DocumentBuilderFactory cannot be created (Nick Dimiduk).
+c20adc6 PHOENIX-2010 Properly validate number of arguments passed to the functions in FunctionParseNode#validate(Rajeshbabu)
+4e2b35b BUG-38040 NPE at unit tests
+0368db0 PHOENIX-2013 Apply PHOENIX-1995 to runnable uberjar as well
+a1ca392 PHOENIX-2005 Connection utilities omit zk client port, parent znode (addendum)
+3f4af51 PHOENIX-2005 Connection utilities omit zk client port, parent znode
+8cee3e8 PHOENIX-1996 Use BytesStringer instead of ZeroCopyByteString
+3c3ecca PHOENIX-1995 client uberjar doesn't support dfs
+8dc810e PHOENIX-1990 bin/queryserver makeWinServiceDesc doesn't actually work in Windows
+75019c5 PHOENIX-1980 CsvBulkLoad cannot load hbase-site.xml from classpath
+2659cda PHOENIX-1976 Exit gracefully if addShutdownHook fails.
+46c0929 BUG-36569 include more missing transitive dependencies in client assembly
+c137783 BUG-36554 include missing transitive dependency javax.servlet:servlet-api in client assembly
+ac2d55 BUG-35534 Need MSI Support for Phoenix Query Server
+16ac43a PHOENIX-1945 Phoenix tarball from assembly does not contain phoenix-[version]-server.jar
+5bfd469 BUG-36022 add @Ignore to QueryServerBasicsIT so that it's not failing tests in secure deploys
+22c4986 Update winpkg/pom.xml version
+5ce4596 PHOENIX-914 Native HBase timestamp support to optimize date range queries in Phoenix (BUG-28921, temporary patch until a more complete fix)
+02d4ad7 PHOENIX-1911 Tests could fail if region and wal did not close on windows (Alicia Ying Shu)
+35e1514 PHOENIX-1728 - Pherf - Make tests use mini cluster. Port from master.
+b453da8 PHOENIX-538 Support UDFs(Rajeshbabu Chintaguntla)
+2a55a84 PHOENIX-1863  Create unit test for inverting the pad character (Dumindu Buddhika)
+4e3957e PHOENIX-1917 Correlated subquery fails if the inner query contains JOIN(Maryann Xue)
+884a3a0 PHOENIX-1916 Spark tests are failing(Josh Mahonin)
+30eb55a PHOENIX-1919 Clean up more ASL headers
+34aa8f5 PHOENIX-1915 QueryServerBasicsIT should bind QS instance to random port
+0ffa3b5 PHOENIX-1915 QueryServerBasicsIT should bind QS instance to random port
+3bd9f22 PHOENIX-1909 queryserver.py accept PHOENIX_QUERYSERVER_OPTS
+cce7453 PHOENIX-1904 bin scripts use incorrect variable for locating hbase conf
+386dae7 BUG-12396 Create winpkg for Phoenix, to make part of HDP MSI
+3f6ed6e adding distribution tag to pom.xml
