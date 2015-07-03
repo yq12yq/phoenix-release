@@ -1,3 +1,7 @@
+HDP-2.3 is based on Apache Phoenix 4.4.0-HBase-1.1
+
+Following are the changes on top of Apache Phoenix 4.4.0-HBase-1.1
+
 e817b9d PHOENIX-2042 Windows need hadoop native libraries to run tests
 9279bb1 Disable Windows Perf tests. BUG-39016 Fix Phoenix unit tests on Windows
 e817b9d PHOENIX-2042 Windows need hadoop native libraries to run tests
