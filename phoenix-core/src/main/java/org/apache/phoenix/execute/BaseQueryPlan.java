@@ -166,6 +166,10 @@ public abstract class BaseQueryPlan implements QueryPlan {
             return ResultIterator.EMPTY_ITERATOR;
         }
         
+        if (tableRef == TableRef.EMPTY_TABLE_REF) {
+            return newIterator(scanGrouper);
+        }
+        
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
         Scan scan = context.getScan();
