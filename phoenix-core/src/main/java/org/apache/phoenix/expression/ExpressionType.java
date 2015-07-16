@@ -28,6 +28,7 @@ import org.apache.phoenix.expression.function.ArrayFillFunction;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.ArrayLengthFunction;
 import org.apache.phoenix.expression.function.ArrayPrependFunction;
+import org.apache.phoenix.expression.function.ArrayToStringFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
@@ -235,7 +236,8 @@ public enum ExpressionType {
     UDFExpression(UDFExpression.class),
     ArrayPrependFunction(ArrayPrependFunction.class),
     ArrayConcatFunction(ArrayConcatFunction.class),
-    ArrayFillFunction(ArrayFillFunction.class)
+    ArrayFillFunction(ArrayFillFunction.class),
+    ArrayToStringFunction(ArrayToStringFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {
