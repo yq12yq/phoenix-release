@@ -26,6 +26,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.catalog.MetaEditor;
+import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -64,16 +65,24 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             byte[] splitKey, List<Mutation> metaEntries) throws IOException {
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
         HTableDescriptor tableDesc = ctx.getEnvironment().getRegion().getTableDesc();
-        if (SchemaUtil.isMetaTable(tableDesc.getName())
-                || SchemaUtil.isSequenceTable(tableDesc.getName())) {
-            return;
+        if (SchemaUtil.isSystemTable(tableDesc.getName())) {
+        	return;
         }
         RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
         if (tableDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) == null
                 || !Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(tableDesc
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
             HRegion indexRegion = IndexUtil.getIndexRegion(environment);
-            if (indexRegion == null) return;
+            org.apache.hadoop.hbase.TableName indexTable =
+            		org.apache.hadoop.hbase.TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
+            if (!MetaReader.tableExists(rss.getCatalogTracker(0), indexTable)) return;
+
+            if (indexRegion == null) {
+                LOG.warn("Index region corresponindg to data region " + environment.getRegion()
+                        + " not in the same server. So skipping the split.");
+                ctx.bypass();
+                return;
+            }
             try {
                 st = new IndexSplitTransaction(indexRegion, splitKey);
                 if (!st.prepare()) {

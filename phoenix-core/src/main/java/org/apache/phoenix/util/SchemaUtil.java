@@ -660,4 +660,11 @@ public class SchemaUtil {
         checkArgument(!isNullOrEmpty(columnName), "Column name cannot be null or empty");
         return columnFamilyName == null ? ("\"" + columnName + "\"") : ("\"" + columnFamilyName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + columnName + "\"");
     }
+
+    public static boolean isSystemTable(byte[] fullTableName) {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+        if (QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) return true;
+        return false;
+    }
+
 }

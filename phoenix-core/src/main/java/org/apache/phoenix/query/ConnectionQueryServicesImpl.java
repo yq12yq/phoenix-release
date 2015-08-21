@@ -1137,10 +1137,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (tableType == PTableType.INDEX) { // Index on view
             // Physical index table created up front for multi tenant
             // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
-            if (physicalTableName != null && !MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
+            if (physicalTableName != null) {
                 if (localIndexTable) {
                     ensureLocalIndexTableCreated(tableName, tableProps, families, splits, MetaDataUtil.getClientTimeStamp(m));
-                } else {
+				} else if (!MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
                     ensureViewIndexTableCreated(tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes), physicalTableName, MetaDataUtil.getClientTimeStamp(m));
                 }
             }
@@ -1563,6 +1563,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // Ignore, as this will happen if the SYSTEM.CATALOG already exists at this fixed timestamp.
                                 // A TableAlreadyExistsException is not thrown, since the table only exists *after* this fixed timestamp.
                             } catch (TableAlreadyExistsException ignore) {
+                                HBaseAdmin admin = null;
+                                try {
+                                    admin = getAdmin();
+                                    HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                                    for (HTableDescriptor table : localIndexTables) {
+                                        if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
+                                                && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
+                                            table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
+                                                MetaDataUtil.getUserTableName(table
+                                                    .getNameAsString()));
+                                            // Explicitly disable, modify and enable the table to ensure co-location of data
+                                            // and index regions. If we just modify the table descriptor when online schema
+                                            // change enabled may reopen the region in same region server instead of following data region.
+                                            admin.disableTable(table.getTableName());
+                                            admin.modifyTable(table.getTableName(), table);
+                                            admin.enableTable(table.getTableName());
+                                        }
+                                    }
+                                } finally {
+                                    if (admin != null) admin.close();
+                                }
                                 // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
                                 // any new columns we've added.
                                 metaConnection = addColumnsIfNotExists(metaConnection,

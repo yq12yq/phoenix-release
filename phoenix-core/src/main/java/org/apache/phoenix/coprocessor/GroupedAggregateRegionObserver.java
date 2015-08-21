@@ -424,7 +424,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     hasMore = s.nextRaw(results);
                     if (!results.isEmpty()) {
                         if (localIndexScan) {
-                            IndexUtil.wrapResultUsingOffset(results, offset, dataColumns, tupleProjector,
+                            IndexUtil.wrapResultUsingOffset(c, results, offset, dataColumns, tupleProjector,
                                 dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
                                 viewConstants, tempPtr);
                         }
@@ -511,7 +511,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         hasMore = s.nextRaw(kvs);
                         if (!kvs.isEmpty()) {
                             if (localIndexScan) {
-                                IndexUtil.wrapResultUsingOffset(kvs, offset, dataColumns, tupleProjector,
+                                IndexUtil.wrapResultUsingOffset(c, kvs, offset, dataColumns, tupleProjector,
                                     dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0),
                                     viewConstants, tempPtr);
                             }
