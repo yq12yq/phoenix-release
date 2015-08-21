@@ -256,35 +256,44 @@ public final class TypeUtil {
                     tuple.set(i, null);
                     continue;
                 }
-                
-                switch(fieldSchema.getType()) {
-                    case DataType.BYTEARRAY:
-                        byte[] bytes = PDataType.fromTypeId(PDataType.BINARY.getSqlType()).toBytes(object);
-                        tuple.set(i,new DataByteArray(bytes,0,bytes.length));
-                        break;
-                    case DataType.CHARARRAY:
-                        tuple.set(i,DataType.toString(object));
-                        break;
-                    case DataType.DOUBLE:
-                        tuple.set(i,DataType.toDouble(object));
-                        break;
-                    case DataType.FLOAT:
-                        tuple.set(i,DataType.toFloat(object));
-                        break;
-                    case DataType.INTEGER:
-                        tuple.set(i,DataType.toInteger(object));
-                        break;
-                    case DataType.LONG:
-                        tuple.set(i,DataType.toLong(object));
-                        break;
-                    case DataType.BOOLEAN:
-                        tuple.set(i,DataType.toBoolean(object));
-                        break;
-                    case DataType.DATETIME:
-                        tuple.set(i,DataType.toDateTime(object));
-                        break;
-                    default:
-                        throw new RuntimeException(String.format(" Not supported [%s] pig type" , fieldSchema));
+
+                switch (fieldSchema.getType()) {
+                case DataType.BYTEARRAY:
+                    byte[] bytes = PDataType.fromTypeId(PBinary.INSTANCE.getSqlType()).toBytes(object);
+                    tuple.set(i, new DataByteArray(bytes, 0, bytes.length));
+                    break;
+                case DataType.CHARARRAY:
+                    tuple.set(i, DataType.toString(object));
+                    break;
+                case DataType.DOUBLE:
+                    tuple.set(i, DataType.toDouble(object));
+                    break;
+                case DataType.FLOAT:
+                    tuple.set(i, DataType.toFloat(object));
+                    break;
+                case DataType.INTEGER:
+                    tuple.set(i, DataType.toInteger(object));
+                    break;
+                case DataType.LONG:
+                    tuple.set(i, DataType.toLong(object));
+                    break;
+                case DataType.BOOLEAN:
+                    tuple.set(i, DataType.toBoolean(object));
+                    break;
+                case DataType.DATETIME:
+                    if (object instanceof java.sql.Timestamp)
+                        tuple.set(i,new DateTime(((java.sql.Timestamp)object).getTime()));
+                    else
+                        tuple.set(i,new DateTime(object));
+                    break;
+                case DataType.BIGDECIMAL:
+                    tuple.set(i, DataType.toBigDecimal(object));
+                    break;
+                case DataType.BIGINTEGER:
+                    tuple.set(i, DataType.toBigInteger(object));
+                    break;
+                default:
+                    throw new RuntimeException(String.format(" Not supported [%s] pig type", fieldSchema));
                 }
             }
         } catch( Exception ex) {
