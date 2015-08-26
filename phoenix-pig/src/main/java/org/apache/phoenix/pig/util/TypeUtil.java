@@ -259,7 +259,7 @@ public final class TypeUtil {
 
                 switch (fieldSchema.getType()) {
                 case DataType.BYTEARRAY:
-                    byte[] bytes = PDataType.fromTypeId(PBinary.INSTANCE.getSqlType()).toBytes(object);
+                    byte[] bytes = PDataType.fromTypeId(PDataType.BINARY.getSqlType()).toBytes(object);
                     tuple.set(i, new DataByteArray(bytes, 0, bytes.length));
                     break;
                 case DataType.CHARARRAY:
@@ -303,7 +303,7 @@ public final class TypeUtil {
         }
           return tuple;
     }
-    
+   
     /**
      * Returns the mapping pig data type for a given phoenix data type.
      * @param phoenixDataType
