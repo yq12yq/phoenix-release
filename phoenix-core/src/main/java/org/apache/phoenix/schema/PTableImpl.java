@@ -1021,5 +1021,18 @@ public class PTableImpl implements PTable {
     public PName getParentSchemaName() {
         return parentSchemaName;
     }
+
+	public static PTable makePTable(PTable table, PTableStats stats) throws SQLException {
+		return new PTableImpl(table.getTenantId(), table.getSchemaName(),
+				table.getTableName(), table.getType(), table.getIndexState(),
+				table.getTimeStamp(), table.getSequenceNumber(),
+				table.getPKName(), table.getBucketNum(), getColumnsToClone(table),
+				table.getParentSchemaName(), table.getParentTableName(),
+				table.getIndexes(), table.isImmutableRows(),
+				table.getPhysicalNames(), table.getDefaultFamilyName(),
+				table.getViewStatement(), table.isWALDisabled(),
+				table.isMultiTenant(), table.getViewType(),
+				table.getViewIndexId(), table.getIndexType(), stats);
+	}
     
 }
