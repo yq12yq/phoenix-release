@@ -685,6 +685,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanAfterRegionSplit() throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        if(isDistributedClusterModeEnabled(admin.getConfiguration())){
+          // can't run the test in distributed mode
+          return;
+        }
         createBaseTable(DEFAULT_DATA_TABLE_NAME, null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -701,7 +706,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
             
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             
             for (int i = 1; i < 5; i++) {
                 CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
@@ -742,7 +746,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 query = "SELECT t_id,k1,k3 FROM " + DEFAULT_DATA_TABLE_NAME;
                 rs = conn1.createStatement().executeQuery("EXPLAIN "+query);
                 assertEquals(
-                    "CLIENT PARALLEL "
+                   "CLIENT PARALLEL "
                             + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
                             + "-WAY RANGE SCAN OVER "
                             + MetaDataUtil.getLocalIndexTableName(DEFAULT_DATA_TABLE_NAME) + " [-32767]\n"
@@ -847,6 +851,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanAfterRegionsMerge() throws Exception {
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        if(isDistributedClusterModeEnabled(admin.getConfiguration())){
+          // can't run the test in distributed mode
+          return;
+        }
         createBaseTable(DEFAULT_DATA_TABLE_NAME, null, "('e','j','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -862,7 +871,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + DEFAULT_DATA_TABLE_NAME);
             assertTrue(rs.next());
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
             List<HRegionInfo> regionsOfUserTable =
                     MetaReader.getTableRegions(ct,
