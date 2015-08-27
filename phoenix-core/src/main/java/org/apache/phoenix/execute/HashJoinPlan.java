@@ -193,38 +193,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
 
     private Expression createKeyRangeExpression(Expression lhsExpression,
-            Expression rhsExpression, List<ImmutableBytesWritable> rhsValues, 
-            ImmutableBytesWritable ptr, boolean hasFilters) throws SQLException {
+            Expression rhsExpression, List<Expression> rhsValues, ImmutableBytesWritable ptr) throws SQLException {
         if (rhsValues.isEmpty())
-            return LiteralExpression.newConstant(null, PDataType.BOOLEAN, Determinism.ALWAYS);
-        
-        PDataType type = rhsExpression.getDataType();
-        if (!useInClause(hasFilters)) {
-            ImmutableBytesWritable minValue = rhsValues.get(0);
-            ImmutableBytesWritable maxValue = rhsValues.get(0);
-            for (ImmutableBytesWritable value : rhsValues) {
-                if (value.compareTo(minValue) < 0) {
-                    minValue = value;
-                }
-                if (value.compareTo(maxValue) > 0) {
-                    maxValue = value;
-                }
-            }
-            
-            if (minValue.equals(maxValue))
-                return ComparisonExpression.create(CompareOp.EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(minValue), type)), ptr);
-            
-            return AndExpression.create(Lists.newArrayList(
-                    ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(minValue), type)), ptr), 
-                    ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, Lists.newArrayList(lhsExpression, LiteralExpression.newConstant(type.toObject(maxValue), type)), ptr)));
-        }
-        
-        List<Expression> children = Lists.newArrayList(lhsExpression);
-        for (ImmutableBytesWritable value : rhsValues) {
-            children.add(LiteralExpression.newConstant(type.toObject(value), type));
-        }
-        
-        return InListExpression.create(children, false, ptr);
+            return LiteralExpression.newConstant(false, PDataType.BOOLEAN,Determinism.ALWAYS);
+        rhsValues.add(0, lhsExpression);
+        return InListExpression.create(rhsValues, false, ptr);
     }
     
     private boolean useInClause(boolean hasFilters) {
@@ -341,29 +314,26 @@ public class HashJoinPlan extends DelegateQueryPlan {
         private final boolean singleValueOnly;
         private final Expression keyRangeLhsExpression;
         private final Expression keyRangeRhsExpression;
-        private final boolean hasFilters;
         
         public HashSubPlan(int index, QueryPlan subPlan, 
                 List<Expression> hashExpressions,
                 boolean singleValueOnly,
                 Expression keyRangeLhsExpression, 
-                Expression keyRangeRhsExpression, 
-                boolean hasFilters) {
+                Expression keyRangeRhsExpression) {
             this.index = index;
             this.plan = subPlan;
             this.hashExpressions = hashExpressions;
             this.singleValueOnly = singleValueOnly;
             this.keyRangeLhsExpression = keyRangeLhsExpression;
             this.keyRangeRhsExpression = keyRangeRhsExpression;
-            this.hasFilters = hasFilters;
         }
 
         @Override
         public Object execute(HashJoinPlan parent) throws SQLException {
             ScanRanges ranges = parent.delegate.getContext().getScanRanges();
-            List<ImmutableBytesWritable> keyRangeRhsValues = null;
+            List<Expression> keyRangeRhsValues = null;
             if (keyRangeRhsExpression != null) {
-                keyRangeRhsValues = Lists.<ImmutableBytesWritable>newArrayList();
+                keyRangeRhsValues = Lists.<Expression>newArrayList();
             }
             ServerCache cache = null;
             if (hashExpressions != null) {
@@ -379,15 +349,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 ResultIterator iterator = plan.iterator();
                 for (Tuple result = iterator.next(); result != null; result = iterator.next()) {
                     // Evaluate key expressions for hash join key range optimization.
-                    ImmutableBytesWritable value = new ImmutableBytesWritable();
-                    keyRangeRhsExpression.reset();
-                    if (keyRangeRhsExpression.evaluate(result, value)) {
-                        keyRangeRhsValues.add(value);
-                    }
+                    keyRangeRhsValues.add(HashCacheClient.evaluateKeyExpression(keyRangeRhsExpression, result, plan.getContext().getTempPtr()));
                 }
             }
             if (keyRangeRhsValues != null) {
-                parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr(), hasFilters));
+                parent.keyRangeExpressions.add(parent.createKeyRangeExpression(keyRangeLhsExpression, keyRangeRhsExpression, keyRangeRhsValues, plan.getContext().getTempPtr()));
             }
             return cache;
         }
@@ -426,8 +392,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 return Collections.<String> emptyList();
             
             String step = "    DYNAMIC SERVER FILTER BY " + keyRangeLhsExpression.toString() 
-                    + (parent.useInClause(hasFilters) ? " IN " : " BETWEEN MIN/MAX OF ") 
-                    + "(" + keyRangeRhsExpression.toString() + ")";
+                    + " IN (" + keyRangeRhsExpression.toString() + ")";
             return Collections.<String> singletonList(step);
         }
         
