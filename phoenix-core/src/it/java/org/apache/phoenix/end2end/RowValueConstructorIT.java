@@ -1515,5 +1515,4 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
     }
->>>>>>> fa2d79a... PHOENIX-2063 Row value constructor doesn't work when used in COUNT
 }
