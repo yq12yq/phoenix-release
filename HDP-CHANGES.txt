@@ -17,7 +17,14 @@ PHOENIX-1532 Phoenix tarball assembly does not include server jar
 PHOENIX-1537 Set reuseForks to false for integration tests
 PHOENIX-1362 Min/max aggregate query on CHAR and BINARY types always return null
 PHOENIX-1533 Last key part not taken into child/parent optimization
-
+PHOENIX-1610 Incorrect subquery results caused by unpaired contextStack push/pop
+PHOENIX-1535 Secondary local index casues Undefined column error with queries involving joins
+PHOENIX-1536 Make use of SplitTransaction to split local index region from 0.98.9 onwards
+PHOENIX-1570 Data missing when using local index
+PHOENIX-1634 LocalIndexSplitter prevents region from auto split
+PHOENIX-2030 CsvBulkLoadTool should use logical name of the table for output directory suffix
+PHOENIX-1600 Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
+PHOENIX-1650 Possible resource leak in upsert select query
 
 Default Configuration Change:
 =============================
