@@ -47,10 +47,8 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
-import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -158,15 +156,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
 //    }
     
     @Override
-    public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper);
-    }
-    
     public final ResultIterator iterator() throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance());
+        return iterator(Collections.<SQLCloseable>emptyList());
     }
 
-    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper) throws SQLException {
+    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies) throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return ResultIterator.EMPTY_ITERATOR;
         }
@@ -243,7 +237,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
-        ResultIterator iterator = newIterator(scanGrouper);
+        ResultIterator iterator = newIterator();
         iterator = dependencies.isEmpty() ?
                 iterator : new DelegateResultIterator(iterator) {
             @Override
@@ -369,7 +363,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException;
+    abstract protected ResultIterator newIterator() throws SQLException;
     
     @Override
     public long getEstimatedSize() {

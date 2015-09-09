@@ -50,16 +50,11 @@ public class ParallelIterators extends BaseResultIterators {
 	private static final String NAME = "PARALLEL";
     private final ParallelIteratorFactory iteratorFactory;
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
-            throws SQLException {
-        super(plan, perScanLimit, scanGrouper);
-        this.iteratorFactory = iteratorFactory;
-    }   
-    
     public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
             throws SQLException {
-        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance());
-    }  
+        super(plan, perScanLimit);
+        this.iteratorFactory = iteratorFactory;
+    }   
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,

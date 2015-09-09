@@ -34,7 +34,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
-import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.UnionResultIterators;
 import org.apache.phoenix.parse.FilterableStatement;
@@ -123,11 +122,6 @@ public class UnionPlan implements QueryPlan {
         return projector;
     }
 
-    @Override
-    public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList());
-    }
-    
     @Override
     public final ResultIterator iterator() throws SQLException {
         return iterator(Collections.<SQLCloseable>emptyList());
