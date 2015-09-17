@@ -94,6 +94,8 @@ public final class PhoenixConfigurationUtil {
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
     
     public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+    
+    public static final String HBASE_ZOOKEEPER_CLIENT_PORT = "hbase.zookeeper.property.clientPort";
 
     public enum SchemaType {
         TABLE,
@@ -363,6 +365,29 @@ public final class PhoenixConfigurationUtil {
         }
         return quorum;
     }
+
+    
+    /**
+     * Returns the HBase Client Port
+     * @param configuration
+     * @return
+     */
+    public static Integer getClientPort(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String clientPortString = configuration.get(HBASE_ZOOKEEPER_CLIENT_PORT);
+        return clientPortString==null ? null : Integer.parseInt(clientPortString);
+    }
+
+    /**
+     * Returns the HBase zookeeper znode parent
+     * @param configuration
+     * @return
+     */
+    public static String getZNodeParent(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
+    }
+
 
     public static void loadHBaseConfiguration(Job job) throws IOException {
         // load hbase-site.xml
