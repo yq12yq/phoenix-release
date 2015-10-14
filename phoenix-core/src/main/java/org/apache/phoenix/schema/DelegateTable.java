@@ -236,9 +236,4 @@ public class DelegateTable implements PTable {
     public PName getParentSchemaName() {
         return delegate.getParentSchemaName();
     }
-
-    @Override
-    public int getBaseColumnCount() {
-        return delegate.getBaseColumnCount();
-    }
 }
