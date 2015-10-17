@@ -22,7 +22,7 @@
       <name>Apache Software Foundation</name>
       <url>http://www.apache.org</url>
   </organization>
-
+ 
   <build>
     <resources>
       <resource>
@@ -435,5 +435,18 @@
         <artifactId>joni</artifactId>
         <version>${joni.version}</version>
     </dependency>
+    <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-azure</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>compile</scope>
+    </dependency>
+    <dependency>
+        <groupId>com.microsoft.azure</groupId>
+        <artifactId>azure-storage</artifactId>
+        <version>2.2.0</version>
+        <scope>compile</scope>
+    </dependency>
   </dependencies>
+ 
 </project>

@@ -39,6 +39,7 @@
         <include>org.apache.zookeeper:zookeeper</include>
         <include>log4j:log4j</include>
         <include>org.apache.hadoop:hadoop*</include>
+        <include>com.microsoft.azure:azure-storage</include>
         <include>commons-configuration:commons-configuration</include>
         <include>commons-io:commons-io</include>
         <include>commons-logging:commons-logging</include>

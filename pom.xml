@@ -92,6 +92,7 @@
     <!-- Hadoop Versions -->
     <hbase.version>1.1.0-SNAPSHOT</hbase.version>
     <hadoop-two.version>2.5.1</hadoop-two.version>
+    <hadoop.version>2.7.1</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
@@ -599,6 +600,18 @@
         <version>${hadoop-two.version}</version>
         <optional>true</optional>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-azure</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>compile</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.microsoft.azure</groupId>
+        <artifactId>azure-storage</artifactId>
+        <version>2.2.0</version>
+        <scope>compile</scope>
       </dependency>
 
       <!-- General Dependencies -->
