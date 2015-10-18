@@ -3114,8 +3114,11 @@ public enum PDataType {
                 byte[] bytes = (byte[])object;
                 return toObject(bytes, 0, bytes.length);
             }
+	    if (actualType == DECIMAL) {
+               return ((BigDecimal) object).equals(BigDecimal.ONE) ? Boolean.TRUE : Boolean.FALSE;
+            }
             return throwConstraintViolationException(actualType,this);
-        }
+	}
 
         @Override
         public Object getSampleValue(Integer maxLength, Integer arrayLength) {
