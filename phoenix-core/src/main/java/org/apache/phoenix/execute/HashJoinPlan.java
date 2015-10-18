@@ -44,8 +44,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.expression.AndExpression;
-import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
@@ -197,7 +195,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
         if (rhsValues.isEmpty())
             return LiteralExpression.newConstant(false, PDataType.BOOLEAN,Determinism.ALWAYS);
         rhsValues.add(0, lhsExpression);
-        return InListExpression.create(rhsValues, false, ptr);
+        return InListExpression.create(rhsValues, false, ptr, false);
     }
     
     private boolean useInClause(boolean hasFilters) {
