@@ -1739,4 +1739,38 @@ public class PDataTypeTest {
                         + "VARCHAR ARRAY=[BINARY ARRAY, CHAR ARRAY, VARBINARY ARRAY, VARCHAR ARRAY]}",
                 coercibleToMap.toString());
     }
+
+    
+        @Test
+        public void testBoolean() {
+            byte[] bytes = PDataType.BOOLEAN.toBytes(Boolean.TRUE);
+            assertEquals(1, bytes[0]);
+            bytes = PDataType.BOOLEAN.toBytes(Boolean.FALSE);
+            assertEquals(0, bytes[0]);
+            
+            bytes = PDataType.BOOLEAN.toBytes(Boolean.TRUE, SortOrder.DESC);
+            assertEquals(0, bytes[0]);
+            bytes = PDataType.BOOLEAN.toBytes(Boolean.FALSE, SortOrder.DESC);
+            assertEquals(1, bytes[0]);
+            
+            Object dec = PDataType.DECIMAL.toObject(Boolean.TRUE, PDataType.BOOLEAN);
+            bytes = PDataType.DECIMAL.toBytes(dec);
+            Object b = PDataType.BOOLEAN.toObject(bytes, 0, bytes.length, PDataType.DECIMAL, SortOrder.ASC);
+            assertEquals(true, b);
+            
+            dec = PDataType.DECIMAL.toObject(Boolean.FALSE, PDataType.BOOLEAN);
+            bytes = PDataType.DECIMAL.toBytes(dec);
+            b = PDataType.BOOLEAN.toObject(bytes, 0, bytes.length, PDataType.DECIMAL, SortOrder.ASC);
+            assertEquals(false, b);
+            
+            dec = PDataType.DECIMAL.toObject(Boolean.TRUE, PDataType.BOOLEAN);
+            bytes = PDataType.DECIMAL.toBytes(dec, SortOrder.DESC);
+            b = PDataType.BOOLEAN.toObject(bytes, 0, bytes.length, PDataType.DECIMAL, SortOrder.DESC);
+            assertEquals(true, b);
+            
+            dec = PDataType.DECIMAL.toObject(Boolean.FALSE, PDataType.BOOLEAN);
+            bytes = PDataType.DECIMAL.toBytes(dec, SortOrder.DESC);
+            b = PDataType.BOOLEAN.toObject(bytes, 0, bytes.length, PDataType.DECIMAL, SortOrder.DESC);
+            assertEquals(false, b);
+        }
 }

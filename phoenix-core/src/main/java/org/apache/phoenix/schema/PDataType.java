@@ -3046,7 +3046,7 @@ public enum PDataType {
                 // TODO: review - return null?
                 throw newIllegalDataException(this + " may not be null");
             }
-            return ((Boolean)object).booleanValue() ^ sortOrder == SortOrder.ASC ? TRUE_BYTES : FALSE_BYTES;
+            return ((Boolean)object).booleanValue() ^ sortOrder == SortOrder.ASC ? FALSE_BYTES : TRUE_BYTES;
         }
 
         @Override
@@ -3063,7 +3063,7 @@ public enum PDataType {
                     return ((bytes[offset] == FALSE_BYTE ^ sortOrder == SortOrder.DESC) ? Boolean.FALSE : Boolean.TRUE);
                 case DECIMAL:
                     // false translated to the ZERO_BYTE
-                    return ((bytes[offset] == ZERO_BYTE ^ sortOrder == SortOrder.DESC) ? Boolean.FALSE : Boolean.TRUE);
+                    return sortOrder == SortOrder.DESC ? SortOrder.invert(bytes[offset]) != ZERO_BYTE : bytes[offset] != ZERO_BYTE;
             }
             throwConstraintViolationException(actualType,this);
             return null;
@@ -3114,8 +3114,8 @@ public enum PDataType {
                 byte[] bytes = (byte[])object;
                 return toObject(bytes, 0, bytes.length);
             }
-	    if (actualType == DECIMAL) {
-               return ((BigDecimal) object).equals(BigDecimal.ONE) ? Boolean.TRUE : Boolean.FALSE;
+            if (actualType == DECIMAL) {
+                return ((BigDecimal) object).equals(BigDecimal.ZERO) ? Boolean.FALSE : Boolean.TRUE;
             }
             return throwConstraintViolationException(actualType,this);
 	}

@@ -118,12 +118,18 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
             "create " + (localIndex ? "LOCAL" : "") + " index i on t(b)");
         conn1.createStatement().execute("upsert into t values(1,true,'foo')");
         conn1.createStatement().execute("upsert into t values(2,false,'foo')");
+        conn1.createStatement().execute("upsert into t values(3)");
         conn1.commit();
-        ResultSet rs = conn1.createStatement().executeQuery("select b from t");
-        rs.next();
-        assertEquals(true, rs.getBoolean(1));
-        rs.next();
-        assertEquals(false, rs.getBoolean(1));
+        ResultSet rs = conn1.createStatement().executeQuery("select a,b from t");
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(2));
+        assertEquals(3, rs.getInt(1));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(false, rs.getBoolean(2));
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(true, rs.getBoolean(2));
     }
 
     @Test
