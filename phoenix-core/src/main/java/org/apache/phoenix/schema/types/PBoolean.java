@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import java.math.BigDecimal;
 import java.sql.Types;
 
 import org.apache.phoenix.schema.SortOrder;
@@ -58,8 +59,8 @@ public class PBoolean extends PDataType<Boolean> {
       throw newIllegalDataException(this + " may not be null");
     }
     return ((Boolean) object).booleanValue() ^ sortOrder == SortOrder.ASC ?
-        TRUE_BYTES :
-        FALSE_BYTES;
+        FALSE_BYTES :
+        TRUE_BYTES;
   }
 
   @Override
@@ -78,9 +79,7 @@ public class PBoolean extends PDataType<Boolean> {
           Boolean.TRUE);
     } else if (actualType == PDecimal.INSTANCE) {
       // false translated to the ZERO_BYTE
-      return ((bytes[offset] == ZERO_BYTE ^ sortOrder == SortOrder.DESC) ?
-          Boolean.FALSE :
-          Boolean.TRUE);
+      return sortOrder == SortOrder.DESC ? SortOrder.invert(bytes[offset]) != ZERO_BYTE : bytes[offset] != ZERO_BYTE;
     }
     throwConstraintViolationException(actualType, this);
     return null;
@@ -131,6 +130,9 @@ public class PBoolean extends PDataType<Boolean> {
       byte[] bytes = (byte[]) object;
       return toObject(bytes, 0, bytes.length);
     }
+        if (actualType == PDecimal.INSTANCE) {
+            return ((BigDecimal) object).equals(BigDecimal.ZERO) ? Boolean.FALSE : Boolean.TRUE;
+        }
     return throwConstraintViolationException(actualType, this);
   }
 

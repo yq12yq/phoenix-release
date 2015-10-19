@@ -110,6 +110,28 @@ public abstract class BaseMutableIndexIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testIndexWithBooleanCol() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        conn1.createStatement().execute(
+            "create table t( a integer primary key, b boolean, c varchar)");
+        conn1.createStatement().execute(
+            "create " + (localIndex ? "LOCAL" : "") + " index i on t(b)");
+        conn1.createStatement().execute("upsert into t values(1,true,'foo')");
+        conn1.createStatement().execute("upsert into t values(2,false,'foo')");
+        conn1.createStatement().execute("upsert into t values(3)");
+        conn1.commit();
+        ResultSet rs = conn1.createStatement().executeQuery("select b from t");
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void testIndexWithNullableFixedWithCols() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

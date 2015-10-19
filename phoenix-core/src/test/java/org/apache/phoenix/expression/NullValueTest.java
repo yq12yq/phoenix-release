@@ -13,8 +13,10 @@ import java.util.Properties;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
+@Ignore
 public class NullValueTest extends BaseConnectionlessQueryTest {
     
     @Test
