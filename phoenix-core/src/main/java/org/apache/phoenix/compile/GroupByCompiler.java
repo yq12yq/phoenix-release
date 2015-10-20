@@ -27,7 +27,6 @@ import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Entry;
 import org.apache.phoenix.compile.TrackOrderPreservingExpressionCompiler.Ordering;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -256,8 +255,6 @@ public class GroupByCompiler {
             }
         }
 
-        // Set attribute with serialized expressions for coprocessor
-        GroupedAggregateRegionObserver.serializeIntoScan(context.getScan(), groupExprAttribName, keyExpressions);
         GroupBy groupBy = new GroupBy.GroupByBuilder().setScanAttribName(groupExprAttribName).setExpressions(expressions).setKeyExpressions(keyExpressions).build();
         return groupBy;
     }
