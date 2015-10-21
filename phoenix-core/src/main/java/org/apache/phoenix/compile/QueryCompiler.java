@@ -153,9 +153,9 @@ public class QueryCompiler {
             Table table = joinTable.getTable();
             SelectStatement subquery = table.getAsSubquery();
             if (!table.isSubselect()) {
-                ProjectedPTableWrapper projectedTable = table.createProjectedTable(!asSubquery);
-                TupleProjector.serializeProjectorIntoScan(context.getScan(), projectedTable.createTupleProjector());
                 context.setCurrentTable(table.getTableRef());
+                ProjectedPTableWrapper projectedTable = table.createProjectedTable(!asSubquery, context);
+                TupleProjector.serializeProjectorIntoScan(context.getScan(), projectedTable.createTupleProjector());
                 context.setResolver(projectedTable.createColumnResolver());
                 table.projectColumns(context.getScan());
                 return compileSingleQuery(context, subquery, binds, asSubquery, true);
@@ -173,7 +173,8 @@ public class QueryCompiler {
             TableRef tableRef;
             SelectStatement query;
             if (!table.isSubselect()) {
-                initialProjectedTable = table.createProjectedTable(!asSubquery);
+                context.setCurrentTable(table.getTableRef());
+                initialProjectedTable = table.createProjectedTable(!asSubquery, context);
                 tableRef = table.getTableRef();
                 table.projectColumns(context.getScan());
                 query = joinTable.getAsSingleSubquery(table.getAsSubquery(), asSubquery);
@@ -267,7 +268,8 @@ public class QueryCompiler {
             TableRef rhsTableRef;
             SelectStatement rhs;
             if (!rhsTable.isSubselect()) {
-                rhsProjTable = rhsTable.createProjectedTable(!asSubquery);
+                context.setCurrentTable(rhsTable.getTableRef());
+                rhsProjTable = rhsTable.createProjectedTable(!asSubquery, context);
                 rhsTableRef = rhsTable.getTableRef();
                 rhsTable.projectColumns(context.getScan());
                 rhs = rhsJoinTable.getAsSingleSubquery(rhsTable.getAsSubquery(), asSubquery);

@@ -187,14 +187,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             ScanUtil.setRowKeyOffset(scan, offset);
         }
 
-        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
-        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
-        final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
-
         RegionScanner innerScanner = s;
-        if (p != null || j != null) {
-            innerScanner = new HashJoinRegionScanner(s, p, j, tenantId, c.getEnvironment());
-        }
 
         Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
         Expression[] arrayFuncRefs = deserializeArrayPostionalExpressionInfoFromScan(
@@ -214,7 +207,16 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         }
         innerScanner =
                 getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
-                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants);
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants,
+                    kvSchema, kvSchemaBitSet, ptr);
+
+        final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
+        final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
+        if (p != null || j != null) {
+            innerScanner = new HashJoinRegionScanner(innerScanner, p, j, tenantId, c.getEnvironment());
+        }
+
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
         if (iterator == null) {
             return innerScanner;
@@ -296,155 +298,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                         chunk.close();                
                     }
                 }
-            }
-
-            @Override
-            public long getMaxResultSize() {
-                return s.getMaxResultSize();
-            }
-        };
-    }
-
-    /**
-     * Return wrapped scanner that catches unexpected exceptions (i.e. Phoenix bugs) and
-     * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
-     * for 30 seconds. Unfortunately, until HBASE-7481 gets fixed, there's no way to do
-     * the same from a custom filter.
-     * @param arrayFuncRefs
-     * @param arrayKVRefs
-     * @param offset starting position in the rowkey.
-     * @param scan
-     * @param tupleProjector
-     * @param dataRegion
-     * @param indexMaintainer
-     * @param viewConstants
-     */
-    private RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
-            final RegionScanner s, final Set<KeyValueColumnExpression> arrayKVRefs,
-            final Expression[] arrayFuncRefs, final int offset, final Scan scan,
-            final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
-            final HRegion dataRegion, final IndexMaintainer indexMaintainer,
-            final byte[][] viewConstants) {
-        return new RegionScanner() {
-
-            @Override
-            public boolean next(List<Cell> results) throws IOException {
-                try {
-                    return s.next(results);
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
-                }
-            }
-
-            @Override
-            public boolean next(List<Cell> result, int limit) throws IOException {
-                try {
-                    return s.next(result, limit);
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
-                }
-            }
-
-            @Override
-            public void close() throws IOException {
-                s.close();
-            }
-
-            @Override
-            public HRegionInfo getRegionInfo() {
-                return s.getRegionInfo();
-            }
-
-            @Override
-            public boolean isFilterDone() throws IOException {
-                return s.isFilterDone();
-            }
-
-            @Override
-            public boolean reseek(byte[] row) throws IOException {
-                return s.reseek(row);
-            }
-
-            @Override
-            public long getMvccReadPoint() {
-                return s.getMvccReadPoint();
-            }
-
-            @Override
-            public boolean nextRaw(List<Cell> result) throws IOException {
-                try {
-                    boolean next = s.nextRaw(result);
-                    if (result.size() == 0) {
-                        return next;
-                    }
-                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-                    }
-                    if (ScanUtil.isLocalIndex(scan)) {
-                        IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
-                    }
-                    // There is a scanattribute set to retrieve the specific array element
-                    return next;
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
-                }
-            }
-
-            @Override
-            public boolean nextRaw(List<Cell> result, int limit) throws IOException {
-                try {
-                    boolean next = s.nextRaw(result, limit);
-                    if (result.size() == 0) {
-                        return next;
-                    }
-                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-                    }
-                    if (offset > 0 || ScanUtil.isLocalIndex(scan)) {
-                        IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns, tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
-                    }
-                    // There is a scanattribute set to retrieve the specific array element
-                    return next;
-                } catch (Throwable t) {
-                    ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionNameAsString(), t);
-                    return false; // impossible
-                }
-            }
-
-            private void replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
-                    final Expression[] arrayFuncRefs, List<Cell> result) {
-                // make a copy of the results array here, as we're modifying it below
-                MultiKeyValueTuple tuple = new MultiKeyValueTuple(ImmutableList.copyOf(result));
-                // The size of both the arrays would be same?
-                // Using KeyValueSchema to set and retrieve the value
-                // collect the first kv to get the row
-                Cell rowKv = result.get(0);
-                for (KeyValueColumnExpression kvExp : arrayKVRefs) {
-                    if (kvExp.evaluate(tuple, ptr)) {
-                        for (int idx = tuple.size() - 1; idx >= 0; idx--) {
-                        	Cell kv = tuple.getValue(idx);
-                            if (Bytes.equals(kvExp.getColumnFamily(), 0, kvExp.getColumnFamily().length,
-                            		kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength())
-                                && Bytes.equals(kvExp.getColumnName(), 0, kvExp.getColumnName().length,
-                                		kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength())) {
-                                // remove the kv that has the full array values.
-                                result.remove(idx);
-                                break;
-                            }
-                        }
-                    }
-                }
-                byte[] value = kvSchema.toBytes(tuple, arrayFuncRefs,
-                        kvSchemaBitSet, ptr);
-                // Add a dummy kv with the exact value of the array index
-                result.add(new KeyValue(rowKv.getRowArray(), rowKv.getRowOffset(), rowKv.getRowLength(),
-                        QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, 0, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY.length,
-                        QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,
-                        QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
-                        Type.codeToType(rowKv.getTypeByte()), value, 0, value.length));
             }
 
             @Override
