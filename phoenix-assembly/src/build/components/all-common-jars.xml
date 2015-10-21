@@ -58,6 +58,10 @@
       <includes>
         <include>phoenix-*.jar</include>
       </includes>
+      <excludes>
+        <exclude>phoenix-*-tests.jar</exclude>
+        <exclude>phoenix-*-sources.jar</exclude>
+      </excludes>
       <fileMode>0644</fileMode>
     </fileSet>
     <fileSet>
@@ -66,6 +70,10 @@
       <includes>
         <include>phoenix-*.jar</include>
       </includes>
+      <excludes>
+        <exclude>phoenix-*-tests.jar</exclude>
+        <exclude>phoenix-*-sources.jar</exclude>
+      </excludes>
       <fileMode>0644</fileMode>
     </fileSet>
     <fileSet>
@@ -101,6 +109,8 @@
       <excludes>
         <!-- this one goes in project root instead -->
         <exclude>phoenix-*-thin-client.jar</exclude>
+        <exclude>phoenix-*-tests.jar</exclude>
+        <exclude>phoenix-*-sources.jar</exclude>
       </excludes>
       <fileMode>0644</fileMode>
     </fileSet>
