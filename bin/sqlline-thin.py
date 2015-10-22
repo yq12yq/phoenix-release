@@ -77,8 +77,11 @@ colorSetting = "true"
 if os.name == 'nt':
     colorSetting = "false"
 
+hadoop_conf = os.getenv('HADOOP_CONF_DIR', '')
+hadoop_classpath = os.getenv('HADOOP_CLASSPATH', '')
+
 java_cmd = 'java -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_thin_client_jar + \
-    '" -Dlog4j.configuration=file:' + \
+    os.pathsep + hadoop_conf + os.pathsep + hadoop_classpath + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " sqlline.SqlLine -d org.apache.phoenix.queryserver.client.Driver " + \
     " -u jdbc:phoenix:thin:url=" + url + \
