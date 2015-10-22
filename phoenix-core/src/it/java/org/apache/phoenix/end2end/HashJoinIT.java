@@ -41,7 +41,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -57,7 +56,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -3760,14 +3758,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = conn.createStatement().executeQuery(ddl);
             assertFalse(rs.next());  
         } finally {
-            Statement statement = conn.createStatement();
-            String query = "drop table GRAMMAR_TABLE";
-            statement.executeUpdate(query);
-            query = "drop table LARGE_TABLE";
-            statement.executeUpdate(query);
-            query = "drop table SECONDARY_LARGE_TABLE";
-            statement.executeUpdate(query);
-            conn.close();
+        	conn.createStatement().executeUpdate("drop table GRAMMAR_TABLE");
+        	conn.createStatement().executeUpdate("drop table LARGE_TABLE");
+        	conn.createStatement().executeUpdate("drop table SECONDARY_LARGE_TABLE");
+        	conn.close();
         }
     }
 }
