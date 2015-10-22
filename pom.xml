@@ -97,6 +97,7 @@
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
     <hadoop.version>2.5.1</hadoop.version>
+    <azure-storage.version>2.2.0</azure-storage.version>
     <pig.version>0.12.0</pig.version>
     <jackson.version>1.8.8</jackson.version>
     <antlr.version>3.5</antlr.version>
