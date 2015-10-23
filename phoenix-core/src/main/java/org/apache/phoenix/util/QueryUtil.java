@@ -34,11 +34,13 @@ import javax.annotation.Nullable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryServices;
 
@@ -170,13 +172,43 @@ public final class QueryUtil {
         return sb.toString();
     }
 
-    public static String getUrl(String server) {
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + server;
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum) {
+        return getUrlInternal(zkQuorum, null, null);
     }
 
-    public static String getUrl(String server, long port) {
-        String serverUrl = getUrl(server);
-        return serverUrl + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + port
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, int clientPort) {
+        return getUrlInternal(zkQuorum, clientPort, null);
+    }
+
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, String znodeParent) {
+        return getUrlInternal(zkQuorum, null, znodeParent);
+    }
+
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, int port, String znodeParent) {
+        return getUrlInternal(zkQuorum, port, znodeParent);
+    }
+
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, Integer port, String znodeParent) {
+        return getUrlInternal(zkQuorum, port, znodeParent);
+    }
+
+    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent) {
+        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     }
 
@@ -221,6 +253,7 @@ public final class QueryUtil {
 
     public static String getConnectionUrl(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
+        // TODO: props is ignored!
         // make sure we load the phoenix driver
         Class.forName(PhoenixDriver.class.getName());
 
@@ -251,12 +284,13 @@ public final class QueryUtil {
         if (port == -1) {
             port = conf.getInt(QueryServices.ZOOKEEPER_PORT_ATTRIB, -1);
             if (port == -1) {
+                // TODO: fall back to the default in HConstants#DEFAULT_ZOOKEPER_CLIENT_PORT
                 throw new RuntimeException("Client zk port was not set!");
             }
         }
         server = Joiner.on(',').join(servers);
-
-        return getUrl(server, port);
+        String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+        return getUrl(server, port, znodeParent);
     }
     
     public static String getViewStatement(String schemaName, String tableName, Expression whereClause) {

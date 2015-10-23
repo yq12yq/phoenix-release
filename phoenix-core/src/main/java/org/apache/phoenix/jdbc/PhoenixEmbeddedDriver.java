@@ -199,8 +199,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             return false;
         }
         
-        protected static ConnectionInfo create(String url) throws SQLException {
-            StringTokenizer tokenizer = new StringTokenizer(url == null ? "" : url.substring(PhoenixRuntime.JDBC_PROTOCOL.length()),DELIMITERS, true);
+        public static ConnectionInfo create(String url) throws SQLException {
+            url = url == null ? "" : url;
+            url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL) ? url
+                            .substring(PhoenixRuntime.JDBC_PROTOCOL.length()) 
+                            : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
+            StringTokenizer tokenizer = new StringTokenizer(url, DELIMITERS, true);
             int nTokens = 0;
             String[] tokens = new String[5];
             String token = null;
@@ -311,8 +315,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
         private final String principal;
         private final String keytab;
         
-        // used for testing
-        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -321,8 +324,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
             this.keytab = keytab;
         }
         
-        // used for testing
-        ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
         	this(zookeeperQuorum, port, rootNode, null, null);
         }
 
@@ -412,6 +414,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, org.apache.phoeni
 					+ (principal == null ? "" : ":" + principal)
 					+ (keytab == null ? "" : ":" + keytab);
 		}
+
+        public String toUrl() {
+            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                    + toString();
+        }
     }
 
     public static boolean isTestUrl(String url) {
