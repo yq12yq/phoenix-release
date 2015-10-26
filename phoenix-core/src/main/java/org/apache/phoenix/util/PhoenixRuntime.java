@@ -77,6 +77,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
@@ -355,6 +356,9 @@ public class PhoenixRuntime {
         	int offset = (table.getBucketNum() == null ? 0 : 1);
         	for (int i = offset; i < table.getColumns().size(); i++) {
         	   PColumn pColumn = table.getColumns().get(i);
+        	   if(pColumn.equals(SaltingUtil.SALTING_COLUMN)) {
+        	       continue;
+        	   }
                int sqlType = pColumn.getDataType().getSqlType();
                columnInfoList.add(new ColumnInfo(pColumn.toString(), sqlType)); 
             }
