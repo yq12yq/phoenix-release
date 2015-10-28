@@ -142,9 +142,11 @@ public class ProjectionCompiler {
             if (resolveColumn) {
                 if (tableRef.getTableAlias() != null) {
                     ref = resolver.resolveColumn(null, tableRef.getTableAlias(), colName);
+                    colName = SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
                 } else {
                     String schemaName = table.getSchemaName().getString();
                     ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, table.getTableName().getString(), colName);
+                    colName = SchemaUtil.getColumnName(table.getName().getString(), colName);
                 }
             }
             Expression expression = ref.newColumnExpression();
@@ -189,9 +191,11 @@ public class ProjectionCompiler {
             if (resolveColumn) {
                 if (tableRef.getTableAlias() != null) {
                     ref = resolver.resolveColumn(null, tableRef.getTableAlias(), indexColName);
+                    colName = SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
                 } else {
                     String schemaName = index.getSchemaName().getString();
                     ref = resolver.resolveColumn(schemaName.length() == 0 ? null : schemaName, index.getTableName().getString(), indexColName);
+                    colName = SchemaUtil.getColumnName(table.getName().getString(), colName);
                 }
             }
             Expression expression = ref.newColumnExpression();
