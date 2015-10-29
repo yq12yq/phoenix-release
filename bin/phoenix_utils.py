@@ -21,6 +21,7 @@
 
 import os
 import fnmatch
+import subprocess
 
 def find(pattern, classPaths):
     paths = classPaths.split(os.pathsep)
@@ -52,12 +53,31 @@ def findFileInPathWithoutRecursion(pattern, path):
 
     return ""
 
+def which(file):
+    for path in os.environ["PATH"].split(os.pathsep):
+        if os.path.exists(os.path.join(path, file)):
+                return os.path.join(path, file)
+    return None
+
+def findClasspath(file):
+    aPath = which(file)
+    return subprocess.Popen(aPath + " classpath", shell=True, stdout=subprocess.PIPE).stdout.read()
+
 def setPath():
     PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
     PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
     PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-server-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
 
+    global hadoop_conf
+    hadoop_conf = os.getenv('HADOOP_CONF_DIR', '')
+
+    global hadoop_classpath 
+    if (os.name != 'nt'):
+        hadoop_classpath = findClasspath('hadoop')
+    else:
+        hadoop_classpath = os.getenv('HADOOP_CLASSPATH', '')
+ 
     # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
     global phoenix_class_path
     phoenix_class_path = os.getenv('PHOENIX_LIB_DIR','')
@@ -150,3 +170,4 @@ if __name__ == "__main__":
     print "testjar:", testjar
     print "phoenix_queryserver_jar:", phoenix_queryserver_jar
     print "phoenix_thin_client_jar:", phoenix_thin_client_jar
+    print "hadoop_classpath:", hadoop_classpath 
