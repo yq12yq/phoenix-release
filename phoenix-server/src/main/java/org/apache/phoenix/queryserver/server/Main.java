@@ -19,9 +19,10 @@ package org.apache.phoenix.queryserver.server;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.calcite.avatica.Meta;
+import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.LocalService;
 import org.apache.calcite.avatica.remote.Service;
-import org.apache.calcite.avatica.server.AvaticaHandler;
+import org.apache.calcite.avatica.server.HandlerFactory;
 import org.apache.calcite.avatica.server.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -33,6 +34,7 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.eclipse.jetty.server.Handler;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
@@ -54,6 +56,11 @@ public final class Main extends Configured implements Tool, Runnable {
   public static final String QUERY_SERVER_HTTP_PORT_KEY =
       "phoenix.queryserver.http.port";
   public static final int DEFAULT_HTTP_PORT = 8765;
+
+  public static final String QUERY_SERVER_SERIALIZATION_KEY =
+      "phoenix.queryserver.serialization";
+  public static final Driver.Serialization QUERY_SERVER_SERIALIZATION =
+      Driver.Serialization.JSON;
 
   public static final String QUERY_SERVER_ENV_LOGGING_KEY =
           "phoenix.queryserver.envvars.logging.disabled";
@@ -201,8 +208,9 @@ public final class Main extends Configured implements Tool, Runnable {
       PhoenixMetaFactory factory =
           factoryClass.getDeclaredConstructor(Configuration.class).newInstance(getConf());
       Meta meta = factory.create(Arrays.asList(args));
+      final HandlerFactory handlerFactory = new HandlerFactory();
       Service service = new LocalService(meta);
-      server = new HttpServer(port, new AvaticaHandler(service));
+      server = new HttpServer(port, getHandler(getConf(), service, handlerFactory));
       server.start();
       runningLatch.countDown();
       server.join();
@@ -212,6 +220,38 @@ public final class Main extends Configured implements Tool, Runnable {
       this.t = t;
       return -1;
     }
+  }
+
+  /**
+   * Instantiates the Handler for use by the Avatica (Jetty) server.
+   *
+   * @param conf The configuration
+   * @param service The Avatica Service implementation
+   * @param handlerFactory Factory used for creating a Handler
+   * @return The Handler to use based on the configuration.
+   */
+  Handler getHandler(Configuration conf, Service service, HandlerFactory handlerFactory) {
+    String serializationName = conf.get(QUERY_SERVER_SERIALIZATION_KEY);
+
+    Driver.Serialization serialization;
+    if (null == serializationName) {
+      // Default to JSON
+      serialization = Driver.Serialization.JSON;
+    } else {
+      // Otherwise, use what was provided in the configuration
+      try {
+        serialization = Driver.Serialization.valueOf(serializationName);
+      } catch (Exception e) {
+        LOG.error("Unknown message serialization type for " + serializationName);
+        throw e;
+      }
+    }
+
+    Handler handler = handlerFactory.getHandler(service, serialization);
+
+    LOG.info("Instantiated " + handler.getClass() + " for QueryServer");
+
+    return handler;
   }
 
   @Override public void run() {
