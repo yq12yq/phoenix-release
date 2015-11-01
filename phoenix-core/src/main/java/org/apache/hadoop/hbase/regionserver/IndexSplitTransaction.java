@@ -24,6 +24,7 @@ import static org.apache.hadoop.hbase.executor.EventType.RS_ZK_REGION_SPLITTING;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
@@ -51,6 +52,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.executor.EventType;
 import org.apache.hadoop.hbase.io.Reference;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.CancelableProgressable;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
@@ -361,11 +363,21 @@ public class IndexSplitTransaction {
     // stuff in fs that needs cleanup -- a storefile or two.  Thats why we
     // add entry to journal BEFORE rather than AFTER the change.
     this.journal.add(JournalEntry.STARTED_REGION_A_CREATION);
-    HRegion a = this.parent.createDaughterRegionFromSplits(this.hri_a);
+    HRegion a = User.runAsLoginUser(new PrivilegedExceptionAction<HRegion>() {
+      @Override
+      public HRegion run() throws Exception {
+        return parent.createDaughterRegionFromSplits(hri_a);
+      }
+    });
 
     // Ditto
     this.journal.add(JournalEntry.STARTED_REGION_B_CREATION);
-    HRegion b = this.parent.createDaughterRegionFromSplits(this.hri_b);
+    HRegion b = User.runAsLoginUser(new PrivilegedExceptionAction<HRegion>() {
+      @Override
+      public HRegion run() throws Exception {
+        return parent.createDaughterRegionFromSplits(hri_b);
+      }
+    });
     return new PairOfSameType<HRegion>(a, b);
   }
 
