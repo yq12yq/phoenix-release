@@ -46,3 +46,4 @@ d6d8d3d PHOENIX-2254 zookeeper.znode.parent value is not taking affect in MR int
 dc9b413 PHOENIX-2181 PhoenixHBaseLoader doesn't work with salted tables
 9a01bf9 PHOENIX-2063 Row value constructor doesn't work when used in COUNT
 46aa582 PHOENIX-1395 ResultSpooler spill files are left behind in /tmp folder
+964ec9d PHOENIX-2040 Mark spark/scala dependencies as 'provided'
