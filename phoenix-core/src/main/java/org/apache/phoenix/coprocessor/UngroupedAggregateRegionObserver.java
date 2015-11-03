@@ -58,6 +58,7 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.ValueTypeIncompatibleException;
 import org.apache.phoenix.expression.Expression;
@@ -516,6 +517,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
             final StatisticsCollector stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
             try {
+              if (User.isHBaseSecurityEnabled(e.getEnvironment().getConfiguration())) {
+                UserGroupInformation loginUser = UserGroupInformation.getLoginUser();
+                loginUser.checkTGTAndReloginFromKeytab();
+              }
               User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
                 @Override
                 public Void run() throws Exception {
