@@ -355,6 +355,9 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
         Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.DATE, ptr);
+        if (null == value) {
+          return null;
+        }
         cal.setTime(value);
         return new Date(cal.getTimeInMillis());
     }
