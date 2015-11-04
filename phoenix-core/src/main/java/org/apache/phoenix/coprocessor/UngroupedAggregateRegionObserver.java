@@ -501,11 +501,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     
     
     @Override
-    public void postSplit(ObserverContext<RegionCoprocessorEnvironment> e,
+    public void postSplit(final ObserverContext<RegionCoprocessorEnvironment> e,
         final HRegion l, final HRegion r)
             throws IOException {
         final HRegion region = e.getEnvironment().getRegion();
-        TableName table = region.getRegionInfo().getTable();
+        final TableName table = region.getRegionInfo().getTable();
         try {
             boolean useCurrentTime = 
                     e.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, 
@@ -513,19 +513,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             // Provides a means of clients controlling their timestamps to not use current time
             // when background tasks are updating stats. Instead we track the max timestamp of
             // the cells and use that.
-            long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-            final StatisticsCollector stats = new StatisticsCollector(e.getEnvironment(), table.getNameAsString(), clientTimeStamp);
-            try {
-              User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-                @Override
-                public Void run() throws Exception {
+            final long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() :
+              StatisticsCollector.NO_TIMESTAMP;
+            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+              @Override
+              public Void run() throws Exception {
+                final StatisticsCollector stats = new StatisticsCollector(e.getEnvironment(),
+                  table.getNameAsString(), clientTimeStamp);
+                try {
                   stats.splitStats(region, l, r);
                   return null;
+                } finally {
+                  if (stats != null) stats.close();
                 }
-              });
-            } finally {
-              if (stats != null) stats.close();
-          }
+              }
+            });
         } catch (IOException ioe) { 
             if(logger.isWarnEnabled()) {
                 logger.warn("Error while collecting stats during split for " + table,ioe);
