@@ -26,6 +26,7 @@ PHOENIX-2030 CsvBulkLoadTool should use logical name of the table for output dir
 PHOENIX-1600 Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
 PHOENIX-1650 Possible resource leak in upsert select query
 PHOENIX-2031 Unable to process timestamp/Date data loaded via Phoenix org.apache.phoenix.pig.PhoenixHBaseLoader
+PHOENIX-2372 Check for null before passing value to Calendar
 
 Default Configuration Change:
 =============================
