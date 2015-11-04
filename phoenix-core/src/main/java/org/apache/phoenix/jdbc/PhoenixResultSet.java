@@ -374,6 +374,9 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
         checkCursorState();
         Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow,
             PDate.INSTANCE, ptr);
+        if (null == value) {
+          return null;
+        }
         cal.setTime(value);
         return new Date(cal.getTimeInMillis());
     }
