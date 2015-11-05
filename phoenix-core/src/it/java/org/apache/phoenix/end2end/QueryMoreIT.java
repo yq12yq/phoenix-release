@@ -18,12 +18,17 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -313,5 +318,54 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    @SuppressWarnings("deprecation")
+    @Test
+    public void testNullBigDecimalWithScale() throws Exception {
+        final String table = "NULLBIGDECIMAL";
+        final Connection conn = DriverManager.getConnection(getUrl());
+        conn.setAutoCommit(true);
+        Statement stmt = null;
+        try {
+            stmt = conn.createStatement();
+            assertFalse(stmt.execute("CREATE TABLE IF NOT EXISTS " + table + " (\n" +
+                "PK VARCHAR(15) NOT NULL\n," +
+                "DEC DECIMAL,\n" +
+                "CONSTRAINT TABLE_PK PRIMARY KEY (PK))"));
+        } finally {
+            if (null != stmt) {
+                stmt.close();
+                stmt = null;
+            }
+        }
+
+        PreparedStatement pstmt = null;
+        try {
+            pstmt = conn.prepareStatement("UPSERT INTO " + table + " (PK, DEC) VALUES(?, ?)");
+            pstmt.setString(1, "key");
+            pstmt.setBigDecimal(2, null);
+            assertFalse(pstmt.execute());
+            assertEquals(1, pstmt.getUpdateCount());
+        } finally {
+            if (null != pstmt) {
+                pstmt.close();
+                pstmt = null;
+            }
+        }
+
+        try {
+            stmt = conn.createStatement();
+            final ResultSet rs = stmt.executeQuery("SELECT * FROM " + table);
+            assertNotNull(rs);
+            assertTrue(rs.next());
+            assertEquals("key", rs.getString(1));
+            assertNull(rs.getBigDecimal(2));
+            assertNull(rs.getBigDecimal(2, 10));
+        } finally {
+            if (null != stmt) {
+                stmt.close();
+            }
+        }
     }
 }

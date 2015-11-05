@@ -217,6 +217,9 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     @Override
     public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
         BigDecimal value = getBigDecimal(columnIndex);
+        if (wasNull) {
+            return null;
+        }
         return value.setScale(scale);
     }
 
@@ -355,6 +358,7 @@ public class PhoenixResultSet implements ResultSet, SQLCloseable, org.apache.pho
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
         checkCursorState();
         Date value = (Date)rowProjector.getColumnProjector(columnIndex-1).getValue(currentRow, PDataType.DATE, ptr);
+        wasNull = (value == null);
         if (null == value) {
           return null;
         }
