@@ -18,6 +18,7 @@
 package org.apache.hadoop.hbase.regionserver;
 
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -36,6 +37,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.IndexSplitTransaction;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AlterIndexStatement;
@@ -61,18 +63,18 @@ public class LocalIndexSplitter extends BaseRegionObserver {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
 
     @Override
-    public void preSplitBeforePONR(ObserverContext<RegionCoprocessorEnvironment> ctx,
-            byte[] splitKey, List<Mutation> metaEntries) throws IOException {
+    public void preSplitBeforePONR(final ObserverContext<RegionCoprocessorEnvironment> ctx,
+            final byte[] splitKey, final List<Mutation> metaEntries) throws IOException {
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
         HTableDescriptor tableDesc = ctx.getEnvironment().getRegion().getTableDesc();
         if (SchemaUtil.isSystemTable(tableDesc.getName())) {
         	return;
         }
-        RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
+        final RegionServerServices rss = ctx.getEnvironment().getRegionServerServices();
         if (tableDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) == null
                 || !Boolean.TRUE.equals(PDataType.BOOLEAN.toObject(tableDesc
                         .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
-            HRegion indexRegion = IndexUtil.getIndexRegion(environment);
+            final HRegion indexRegion = IndexUtil.getIndexRegion(environment);
             org.apache.hadoop.hbase.TableName indexTable =
             		org.apache.hadoop.hbase.TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(tableDesc.getName()));
             if (!MetaReader.tableExists(rss.getCatalogTracker(0), indexTable)) return;
@@ -83,98 +85,116 @@ public class LocalIndexSplitter extends BaseRegionObserver {
                 ctx.bypass();
                 return;
             }
-            try {
-                st = new IndexSplitTransaction(indexRegion, splitKey);
-                if (!st.prepare()) {
+            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+              @Override
+              public Void run() throws Exception {
+                try {
+                  st = new IndexSplitTransaction(indexRegion, splitKey);
+                  if (!st.prepare()) {
                     LOG.error("Prepare for the table " + indexRegion.getTableDesc().getNameAsString()
-                        + " failed. So returning null. ");
+                      + " failed. So returning null. ");
                     ctx.bypass();
-                    return;
-                }
-                indexRegion.forceSplit(splitKey);
-                daughterRegions = st.stepsBeforePONR(rss, rss, false);
-                HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
-                copyOfParent.setOffline(true);
-                copyOfParent.setSplit(true);
-                // Put for parent
-                Put putParent = MetaEditor.makePutFromRegionInfo(copyOfParent);
-                MetaEditor.addDaughtersToPut(putParent, daughterRegions.getFirst().getRegionInfo(),
+                    return null;
+                  }
+                  indexRegion.forceSplit(splitKey);
+                  daughterRegions = st.stepsBeforePONR(rss, rss, false);
+                  HRegionInfo copyOfParent = new HRegionInfo(indexRegion.getRegionInfo());
+                  copyOfParent.setOffline(true);
+                  copyOfParent.setSplit(true);
+                  // Put for parent
+                  Put putParent = MetaEditor.makePutFromRegionInfo(copyOfParent);
+                  MetaEditor.addDaughtersToPut(putParent, daughterRegions.getFirst().getRegionInfo(),
                     daughterRegions.getSecond().getRegionInfo());
-                metaEntries.add(putParent);
-                // Puts for daughters
-                Put putA = MetaEditor.makePutFromRegionInfo(daughterRegions.getFirst().getRegionInfo());
-                Put putB =
-                    MetaEditor.makePutFromRegionInfo(daughterRegions.getSecond().getRegionInfo());
-                st.addLocation(putA, rss.getServerName(), 1);
-                st.addLocation(putB, rss.getServerName(), 1);
-                metaEntries.add(putA);
-                metaEntries.add(putB);
-            } catch (Exception e) {
-                ctx.bypass();
-                if (st != null){
+                  metaEntries.add(putParent);
+                  // Puts for daughters
+                  Put putA = MetaEditor.makePutFromRegionInfo(daughterRegions.getFirst().getRegionInfo());
+                  Put putB =
+                      MetaEditor.makePutFromRegionInfo(daughterRegions.getSecond().getRegionInfo());
+                  st.addLocation(putA, rss.getServerName(), 1);
+                  st.addLocation(putB, rss.getServerName(), 1);
+                  metaEntries.add(putA);
+                  metaEntries.add(putB);
+                } catch (Exception e) {
+                  ctx.bypass();
+                  if (st != null){
                     st.rollback(rss, rss);
                     st = null;
                     daughterRegions = null;
+                  }
                 }
-            }
+                return null;
+              }
+            });
         }
     }
 
     @Override
-    public void preSplitAfterPONR(ObserverContext<RegionCoprocessorEnvironment> ctx)
+    public void preSplitAfterPONR(final ObserverContext<RegionCoprocessorEnvironment> ctx)
             throws IOException {
         if (st == null || daughterRegions == null) return;
-        RegionCoprocessorEnvironment environment = ctx.getEnvironment();
-        PhoenixConnection conn = null;
-        try {
-            conn = QueryUtil.getConnection(ctx.getEnvironment().getConfiguration()).unwrap(
+        final RegionCoprocessorEnvironment environment = ctx.getEnvironment();
+        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+          @Override
+          public Void run() throws Exception {
+            PhoenixConnection conn = null;
+            try {
+              conn = QueryUtil.getConnection(ctx.getEnvironment().getConfiguration()).unwrap(
                 PhoenixConnection.class);
-            MetaDataClient client = new MetaDataClient(conn);
-            String userTableName = ctx.getEnvironment().getRegion().getTableDesc().getNameAsString();
-            PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
-            List<PTable> indexes = dataTable.getIndexes();
-            for (PTable index : indexes) {
+              MetaDataClient client = new MetaDataClient(conn);
+              String userTableName = ctx.getEnvironment().getRegion().getTableDesc().getNameAsString();
+              PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
+              List<PTable> indexes = dataTable.getIndexes();
+              for (PTable index : indexes) {
                 if (index.getIndexType() == IndexType.LOCAL) {
-                    AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                        TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                        dataTable.getTableName().getString(), false, PIndexState.INACTIVE);
-                    client.alterIndex(indexStatement);
+                  AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
+                    TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
+                    dataTable.getTableName().getString(), false, PIndexState.INACTIVE);
+                  client.alterIndex(indexStatement);
                 }
-            }
-            conn.commit();
-        } catch (ClassNotFoundException ex) {
-        } catch (SQLException ex) {
-        } finally {
-            if (conn != null) {
+              }
+              conn.commit();
+            } catch (ClassNotFoundException ex) {
+            } catch (SQLException ex) {
+            } finally {
+              if (conn != null) {
                 try {
-                    conn.close();
+                  conn.close();
                 } catch (SQLException ex) {
                 }
+              }
             }
-        }
 
-        HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
-        st.stepsAfterPONR(rs, rs, daughterRegions);
+            HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
+            st.stepsAfterPONR(rs, rs, daughterRegions);
+            return null;
+          }
+        });
     }
     
     @Override
     public void preRollBackSplit(ObserverContext<RegionCoprocessorEnvironment> ctx)
             throws IOException {
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
-        HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
-        try {
-            if (st != null) {
+        final HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
+        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+          @Override
+          public Void run() throws Exception {
+            try {
+              if (st != null) {
                 st.rollback(rs, rs);
                 st = null;
                 daughterRegions = null;
-            }
-        } catch (Exception e) {
-            if (st != null) {
+              }
+            } catch (Exception e) {
+              if (st != null) {
                 LOG.error("Error while rolling back the split failure for index region "
                     + st.getParent(), e);
+              }
+              rs.abort("Abort; we got an error during rollback of index");
             }
-            rs.abort("Abort; we got an error during rollback of index");
-        }
+            return null;
+          }
+        });
     }
 
 }
