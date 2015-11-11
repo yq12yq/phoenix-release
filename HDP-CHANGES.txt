@@ -20,12 +20,17 @@ PHOENIX-1533 Last key part not taken into child/parent optimization
 PHOENIX-1610 Incorrect subquery results caused by unpaired contextStack push/pop
 PHOENIX-1535 Secondary local index casues Undefined column error with queries involving joins
 PHOENIX-1536 Make use of SplitTransaction to split local index region from 0.98.9 onwards
+PHOENIX-1560 Join between global index and data table if INDEX hint used
 PHOENIX-1570 Data missing when using local index
 PHOENIX-1634 LocalIndexSplitter prevents region from auto split
-PHOENIX-2030 CsvBulkLoadTool should use logical name of the table for output directory suffix
 PHOENIX-1600 Scanner is left unclosed in MetaDataEndpointImpl#doDropTable()
 PHOENIX-1650 Possible resource leak in upsert select query
-PHOENIX-2031 Unable to process timestamp/Date data loaded via Phoenix org.apache.phoenix.pig.PhoenixHBaseLoader
+PHOENIX-1980 CsvBulkLoad cannot load hbase-site.xml from classpath
+PHOENIX-2005 Connection utilities omit zk client port, parent znode
+PHOENIX-2007 java.sql.SQLException: Encountered exception in sub plan [0] execution
+PHOENIX-2030 CsvBulkLoadTool should use logical name of the table for output directory suffix
+PHOENIX-2031 Unable to process timestamp/Date data loaded via Phoenix org.apache.phoenix.pig.PhoenixHBaseLoader:w
+PHOENIX-2313 TypeMismatchException thrown while querying a table that has an index with a Boolean
 PHOENIX-2372 Check for null before passing value to Calendar
 
 Default Configuration Change:
