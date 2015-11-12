@@ -280,7 +280,8 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 LOG.error("Removing output directory {} failed", outputPath);
             }
         } catch (IOException e) {
-            throw new SQLException(e);
+            LOG.error("Error {} occurred submitting CSVBulkLoad ",e.getMessage());
+            retCode = -1;
         }
         return retCode;
 	}
