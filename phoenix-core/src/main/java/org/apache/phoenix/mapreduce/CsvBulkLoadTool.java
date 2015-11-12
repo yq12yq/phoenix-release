@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -41,7 +42,6 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -57,7 +57,6 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.job.JobManager;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
@@ -275,7 +274,15 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         		retCode = -1;
         	}
         }
-		return retCode;
+        try {
+            LOG.info("Removing output directory {}", outputPath);
+            if (!FileSystem.get(conf).delete(outputPath, true)) {
+                LOG.error("Removing output directory {} failed", outputPath);
+            }
+        } catch (IOException e) {
+            throw new SQLException(e);
+        }
+        return retCode;
 	}
 
     /**
