@@ -66,6 +66,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 /**
@@ -123,6 +124,7 @@ public class MutableIndexFailureIT extends BaseTest {
         }
     }
 
+    @Ignore
     @Test(timeout=300000)
     public void testWriteFailureDisablesLocalIndex() throws Exception {
         testWriteFailureDisablesIndex(true);
