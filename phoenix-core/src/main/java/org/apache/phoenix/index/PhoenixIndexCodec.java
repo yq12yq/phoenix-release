@@ -20,6 +20,7 @@ package org.apache.phoenix.index;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.IndexMetaDataCache;
@@ -45,6 +47,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
@@ -134,7 +137,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         // TODO: state.getCurrentRowKey() should take an ImmutableBytesWritable arg to prevent byte copy
         byte[] dataRowKey = state.getCurrentRowKey();
         ptr.set(dataRowKey);
-        byte[] localIndexTableName = MetaDataUtil.getLocalIndexPhysicalName(env.getRegion().getTableDesc().getName());
+        byte[] dataTableName = env.getRegion().getTableDesc().getName();
         ValueGetter valueGetter = null;
         Scanner scanner = null;
         for (IndexMaintainer maintainer : indexMaintainers) {
@@ -148,11 +151,12 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             if (maintainer.isImmutableRows()) {
                 indexUpdate = new IndexUpdate(new ColumnTracker(maintainer.getAllColumns()));
                 if(maintainer.isLocalIndex()) {
-                    indexUpdate.setTable(localIndexTableName);
+                    indexUpdate.setTable(dataTableName);
                 } else {
                     indexUpdate.setTable(maintainer.getIndexTableName());
                 }
-                valueGetter = maintainer.createGetterFromKeyValues(dataRowKey, state.getPendingUpdate());
+				valueGetter = maintainer.createGetterFromKeyValues(dataRowKey,
+						state.getPendingUpdate());
             } else {
                 // TODO: if more efficient, I could do this just once with all columns in all indexes
                 Pair<Scanner,IndexUpdate> statePair = state.getIndexedColumnsTableState(maintainer.getAllColumns());

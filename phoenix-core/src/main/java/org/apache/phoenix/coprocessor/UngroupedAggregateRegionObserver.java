@@ -37,8 +37,10 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -147,6 +149,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             throws IOException {
         s = super.preScannerOpen(e, scan, s);
         if (ScanUtil.isAnalyzeTable(scan)) {
+            if (!ScanUtil.isLocalIndex(scan)) {
+                scan.getFamilyMap().clear();
+            }
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
@@ -163,6 +168,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         Region region = c.getEnvironment().getRegion();
         long ts = scan.getTimeRange().getMax();
         StatisticsCollector stats = null;
+        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         if(ScanUtil.isAnalyzeTable(scan)) {
             byte[] gp_width_bytes = scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
             byte[] gp_per_region_bytes = scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION);
@@ -191,6 +197,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
         boolean isDelete = false;
+        List<byte[]> cfsToDelete = new ArrayList<byte[]>();
         byte[] deleteCQ = null;
         byte[] deleteCF = null;
         byte[][] values = null;
@@ -208,6 +215,22 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             if (!isDelete) {
                 deleteCF = scan.getAttribute(BaseScannerRegionObserver.DELETE_CF);
                 deleteCQ = scan.getAttribute(BaseScannerRegionObserver.DELETE_CQ);
+            } else {
+                if (localIndexScan) {
+                    for (HColumnDescriptor cf : region.getTableDesc().getFamilies()) {
+                        if (cf.getNameAsString().startsWith(
+                            QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                            cfsToDelete.add(cf.getName());
+                        }
+                    }
+                } else {
+                    for (HColumnDescriptor cf : region.getTableDesc().getFamilies()) {
+                        if (!cf.getNameAsString().startsWith(
+                            QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                            cfsToDelete.add(cf.getName());
+                        }
+                    }
+                }
             }
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
@@ -218,13 +241,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         Region dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
-        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         if ((localIndexScan && !isDelete) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+                dataRegion = c.getEnvironment().getRegion();
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
@@ -295,6 +317,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                               Cell firstKV = results.get(0);
                               Delete delete = new Delete(firstKV.getRowArray(),
                                   firstKV.getRowOffset(), firstKV.getRowLength(),ts);
+                              for(byte[] cf: cfsToDelete) {
+                                  delete.addFamily(cf);
+                              }
                               mutations.add(delete);
                             } else if (isUpsert) {
                                 Arrays.fill(values, null);
@@ -389,7 +414,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!indexMutations.isEmpty() && batchSize > 0 &&
                                     indexMutations.size() % batchSize == 0) {
-                                commitIndexMutations(c, region, indexMutations);
+                            	commitBatch(region, indexMutations, null);
                             }
                         } catch (ConstraintViolationException e) {
                             // Log and ignore in count
@@ -431,7 +456,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
 
         if (!indexMutations.isEmpty()) {
-            commitIndexMutations(c, region, indexMutations);
+        	commitBatch(region, indexMutations, null);
         }
 
         final boolean hadAny = hasAny;
@@ -479,30 +504,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             }
         };
         return scanner;
-    }
-
-    private void commitIndexMutations(final ObserverContext<RegionCoprocessorEnvironment> c,
-            Region region, List<Mutation> indexMutations) throws IOException {
-        // Get indexRegion corresponding to data region
-        Region indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
-        if (indexRegion != null) {
-            commitBatch(indexRegion, indexMutations, null);
-        } else {
-            TableName indexTable =
-                    TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(region.getTableDesc()
-                            .getName()));
-            HTableInterface table = null;
-            try {
-                table = c.getEnvironment().getTable(indexTable);
-                table.batch(indexMutations);
-            } catch (InterruptedException ie) {
-                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(),
-                    ie);
-            } finally {
-                if (table != null) table.close();
-             }
-        }
-        indexMutations.clear();
     }
 
     @Override

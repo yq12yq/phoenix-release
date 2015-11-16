@@ -234,7 +234,7 @@ public class CsvBulkLoadToolIT {
         rs =
                 stmt.executeQuery("EXPLAIN SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
         assertEquals(
-            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32768,'FirstName 2']\n"
+            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER TABLE6 [-32768,'FirstName 2']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         rs.close();
         rs = stmt.executeQuery("SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
@@ -245,7 +245,7 @@ public class CsvBulkLoadToolIT {
         rs =
                 stmt.executeQuery("EXPLAIN SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
         assertEquals(
-            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_TABLE6 [-32767,'LastName 2']\n"
+            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER TABLE6 [-32767,'LastName 2']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         stmt.close();
     }
@@ -287,11 +287,10 @@ public class CsvBulkLoadToolIT {
                 "--zookeeper", zkQuorum });
         assertEquals(0, exitCode);
 
-        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
-        assertFalse(rs.next());
-        rs = stmt.executeQuery("SELECT FIRST_NAME FROM " + tableName + " where FIRST_NAME='FirstName 1'");
+        ResultSet rs = stmt.executeQuery("SELECT id, FIRST_NAME FROM " + tableName + " where FIRST_NAME='FirstName 1'");
         assertTrue(rs.next());
-        assertEquals("FirstName 1", rs.getString(1));
+        assertEquals(1, rs.getInt(1));
+        assertEquals("FirstName 1", rs.getString(2));
 
         rs.close();
         stmt.close();

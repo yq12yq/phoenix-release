@@ -54,6 +54,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SaltingUtil;
@@ -366,19 +367,35 @@ public class SchemaUtil {
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
     }
 
-    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {
-        return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
+    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families, boolean isLocalIndex) {
+        if(isLocalIndex) {
+            return families.isEmpty() ? (defaultColumnFamily == null ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES
+                    : defaultColumnFamily.getBytes())
+                    : Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
+                            + families.get(0).getName().getString());
+        } else {
+            return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
+        }
     }
 
     public static byte[] getEmptyColumnFamily(PTable table) {
-        List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+        return getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies(),
+            table.getIndexType() == IndexType.LOCAL);
     }
 
     public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
-                .getName().getBytesPtr();
+        if(table.getIndexType()==IndexType.LOCAL) {
+			return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR
+					: table.getDefaultFamilyName().getBytesPtr()
+					: new ImmutableBytesPtr(
+							Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
+									+ Bytes.toString(families.get(0).getName()
+											.getBytes())));
+        } else {
+            return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
+                    .getName().getBytesPtr();
+        }
     }
 
     public static boolean isMetaTable(byte[] tableName) {

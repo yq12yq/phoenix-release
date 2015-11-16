@@ -110,8 +110,13 @@ public class ProjectionCompiler {
     }
     
     private static void projectColumnFamily(PTable table, Scan scan, byte[] family) {
-        // Will project all colmuns for given CF
-        scan.addFamily(family);
+        if (table.getIndexType() == IndexType.LOCAL) {
+            scan.addFamily(Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
+                    + Bytes.toString(family)));
+        } else {
+            // Will project all colmuns for given CF
+            scan.addFamily(family);
+        }
     }
     
     public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy) throws SQLException  {
@@ -431,7 +436,12 @@ public class ProjectionCompiler {
         int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
         int estimatedByteSize = 0;
         for (Map.Entry<byte[],NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
-            PColumnFamily family = table.getColumnFamily(entry.getKey());
+            byte[] famBytes = entry.getKey();
+            if(Bytes.toString(entry.getKey()).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)){
+                String actualFamily = Bytes.toString(entry.getKey()).substring(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX.length());
+                famBytes = Bytes.toBytes(actualFamily);
+            } 
+            PColumnFamily family = table.getColumnFamily(famBytes);
             if (entry.getValue() == null) {
                 for (PColumn column : family.getColumns()) {
                     Integer maxLength = column.getMaxLength();
@@ -465,7 +475,12 @@ public class ProjectionCompiler {
         // Will project all known/declared column families
         scan.getFamilyMap().clear();
         for (PColumnFamily family : table.getColumnFamilies()) {
-            scan.addFamily(family.getName().getBytes());
+            if(table.getIndexType()==IndexType.LOCAL) {
+                scan.addFamily(Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
+                        + family.getName().getString()));
+            } else {
+                scan.addFamily(family.getName().getBytes());
+            }
         }
     }
 

@@ -179,7 +179,7 @@ public class IndexTool extends Configured implements Tool {
             // check if the index type is LOCAL, if so, set the logicalIndexName that is computed from the dataTable name.
             String logicalIndexTable = qIndexTable;
             if(IndexType.LOCAL.equals(pindexTable.getIndexType())) {
-                logicalIndexTable  = MetaDataUtil.getLocalIndexTableName(qDataTable);
+                logicalIndexTable  = qDataTable;
             }
             
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);

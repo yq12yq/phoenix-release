@@ -149,7 +149,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if(localIndex) {
             assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_INDEX_TEST.INDEX_DATA_TABLE [-32768]\n" + 
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST.INDEX_DATA_TABLE [-32768]\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));

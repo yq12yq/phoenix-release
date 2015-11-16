@@ -781,7 +781,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
                 this.getEmptyKeyValueFamily(), QueryConstants.EMPTY_COLUMN_BYTES_PTR, ts,
                 ByteUtil.EMPTY_BYTE_ARRAY_PTR));
-            put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
+            put.setDurability(!indexWALDisabled? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
         int i = 0;
         for (ColumnReference ref : this.getCoverededColumns()) {
@@ -795,7 +795,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                 }
                 //this is a little bit of extra work for installations that are running <0.94.14, but that should be rare and is a short-term set of wrappers - it shouldn't kill GC
-                put.add(kvBuilder.buildPut(rowKey, ref.getFamilyWritable(), cq, ts, value));
+                if(this.isLocalIndex) {
+					ImmutableBytesWritable family = new ImmutableBytesPtr(
+							Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
+									+ Bytes.toString(ref.getFamilyWritable()
+											.get(), ref.getFamilyWritable()
+											.getOffset(), ref
+											.getFamilyWritable().getLength())));
+					put.add(kvBuilder.buildPut(rowKey, family, cq, ts, value));
+                } else {
+                    put.add(kvBuilder.buildPut(rowKey, ref.getFamilyWritable(), cq, ts, value));
+                }
             }
         }
         return put;
@@ -869,7 +879,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         delete = new Delete(indexRowKey);                    
                         delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                     }
-                    delete.deleteColumns(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                    if(this.isLocalIndex) {
+                        String family = Bytes.toString(ref.getFamily());
+                        delete.deleteColumns(
+                            family.startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) ? ref
+                                    .getFamily() : Bytes
+                                    .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
+                                            + family), IndexUtil.getIndexColumnName(
+                                ref.getFamily(), ref.getQualifier()), ts);
+                    } else {
+                        delete.deleteColumns(ref.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                    }
                 }
             }
         }
@@ -1312,15 +1332,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return allColumns.iterator();
     }
 
-    public ValueGetter createGetterFromKeyValues(final byte[] rowKey, Collection<? extends Cell> pendingUpdates) {
+	public ValueGetter createGetterFromKeyValues(final byte[] rowKey,
+			Collection<? extends Cell> pendingUpdates) {
         final Map<ColumnReference, ImmutableBytesPtr> valueMap = Maps.newHashMapWithExpectedSize(pendingUpdates
                 .size());
         for (Cell kv : pendingUpdates) {
             // create new pointers to each part of the kv
-            ImmutableBytesPtr family = new ImmutableBytesPtr(kv.getRowArray(),kv.getFamilyOffset(),kv.getFamilyLength());
-            ImmutableBytesPtr qual = new ImmutableBytesPtr(kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength());
             ImmutableBytesPtr value = new ImmutableBytesPtr(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-            valueMap.put(new ColumnReference(kv.getRowArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getRowArray(), kv.getQualifierOffset(), kv.getQualifierLength()), value);
+            valueMap.put(
+                new ColumnReference(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(),
+                        kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength()), value);
         }
         return new ValueGetter() {
             @Override

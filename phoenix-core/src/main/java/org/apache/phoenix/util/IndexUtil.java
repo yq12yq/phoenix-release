@@ -155,6 +155,11 @@ public class IndexUtil {
         return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
     }
 
+    public static String getIndexColumnName(PColumn dataColumn, boolean isLocalIndex) {
+        String dataColumnFamilyName = SchemaUtil.isPKColumn(dataColumn) ? null : dataColumn.getFamilyName().getString();
+        return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
+    }
+
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
         int pos = indexColumnName.indexOf(INDEX_COLUMN_NAME_SEP);
         if (pos < 0) {
@@ -303,55 +308,6 @@ public class IndexUtil {
             }
             
         });
-    }
-
-    public static Region getIndexRegion(RegionCoprocessorEnvironment environment)
-            throws IOException {
-        Region dataRegion = environment.getRegion();
-        return getIndexRegion(dataRegion, environment.getRegionServerServices());
-    }
-
-    public static Region
-            getIndexRegion(Region dataRegion, RegionServerCoprocessorEnvironment env)
-                    throws IOException {
-        return getIndexRegion(dataRegion, env.getRegionServerServices());
-    }
-
-    public static Region getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
-        Region indexRegion = env.getRegion();
-        return getDataRegion(indexRegion, env.getRegionServerServices());
-    }
-
-    public static Region
-            getDataRegion(Region indexRegion, RegionServerCoprocessorEnvironment env)
-                    throws IOException {
-        return getDataRegion(indexRegion, env.getRegionServerServices());
-    }
-
-    public static Region getIndexRegion(Region dataRegion, RegionServerServices rss) throws IOException {
-        TableName indexTableName =
-                TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(dataRegion.getTableDesc()
-                        .getName()));
-        List<Region> onlineRegions = rss.getOnlineRegions(indexTableName);
-        for(Region indexRegion : onlineRegions) {
-            if (Bytes.compareTo(dataRegion.getRegionInfo().getStartKey(),
-                    indexRegion.getRegionInfo().getStartKey()) == 0) {
-                return indexRegion;
-            }
-        }
-        return null;
-    }
-
-    public static Region getDataRegion(Region indexRegion, RegionServerServices rss) throws IOException {
-        TableName dataTableName = TableName.valueOf(MetaDataUtil.getUserTableName(indexRegion.getTableDesc().getNameAsString()));
-        List<Region> onlineRegions = rss.getOnlineRegions(dataTableName);
-        for(Region region : onlineRegions) {
-            if (Bytes.compareTo(indexRegion.getRegionInfo().getStartKey(),
-                    region.getRegionInfo().getStartKey()) == 0) {
-                return region;
-            }
-        }
-        return null;
     }
 
     public static ColumnReference[] deserializeDataTableColumnsToJoin(Scan scan) {

@@ -22,6 +22,7 @@ import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -109,7 +110,7 @@ public class ColumnRef {
         	return new ProjectedColumnExpression(column, table, displayName);
         }
        
-        return new KeyValueColumnExpression(column, displayName);
+        return new KeyValueColumnExpression(column, displayName, table.getIndexType()==IndexType.LOCAL);
     }
 
     public ColumnRef cloneAtTimestamp(long timestamp) {

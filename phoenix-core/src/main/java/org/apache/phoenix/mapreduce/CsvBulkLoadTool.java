@@ -269,7 +269,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	        	Configuration jobConf = new Configuration(conf);
 	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
 	        	if (qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
-                    jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getPhysicalName());
+                    jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getLogicalName());
 	        	}
 	        	TableLoader tableLoader = new TableLoader(
                         jobConf, table.getPhysicalName(), inputPath, tablePath);
@@ -421,7 +421,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 indexTables.add(
                         new TargetTableRef(getQualifiedTableName(schemaName,
                                 indexTable.getTableName().getString()),
-                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName)));
+                                indexTable.getPhysicalName().getString()));
             } else {
                 indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
                         indexTable.getTableName().getString())));
