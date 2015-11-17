@@ -34,6 +34,8 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.eclipse.jetty.server.Handler;
 
 import java.lang.management.ManagementFactory;
@@ -50,40 +52,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Main extends Configured implements Tool, Runnable {
 
-  public static final String QUERY_SERVER_META_FACTORY_KEY =
-      "phoenix.queryserver.metafactory.class";
-
-  public static final String QUERY_SERVER_HTTP_PORT_KEY =
-      "phoenix.queryserver.http.port";
-  public static final int DEFAULT_HTTP_PORT = 8765;
-
-  public static final String QUERY_SERVER_SERIALIZATION_KEY =
-      "phoenix.queryserver.serialization";
-  public static final Driver.Serialization QUERY_SERVER_SERIALIZATION =
-      Driver.Serialization.JSON;
-
-  public static final String QUERY_SERVER_ENV_LOGGING_KEY =
-          "phoenix.queryserver.envvars.logging.disabled";
-  public static final String QUERY_SERVER_ENV_LOGGING_SKIPWORDS_KEY =
-          "phoenix.queryserver.envvars.logging.skipwords";
-
-  public static final String KEYTAB_FILENAME_KEY = "phoenix.queryserver.keytab.file";
-  public static final String KERBEROS_PRINCIPAL_KEY = "phoenix.queryserver.kerberos.principal";
-  public static final String DNS_NAMESERVER_KEY = "phoenix.queryserver.dns.nameserver";
-  public static final String DNS_INTERFACE_KEY = "phoenix.queryserver.dns.interface";
-  public static final String HBASE_SECURITY_CONF_KEY = "hbase.security.authentication";
-
   protected static final Log LOG = LogFactory.getLog(Main.class);
-
-  @SuppressWarnings("serial")
-  private static final Set<String> DEFAULT_SKIP_WORDS = new HashSet<String>() {
-    {
-      add("secret");
-      add("passwd");
-      add("password");
-      add("credential");
-    }
-  };
 
   private final String[] argv;
   private final CountDownLatch runningLatch = new CountDownLatch(1);
@@ -114,10 +83,10 @@ public final class Main extends Configured implements Tool, Runnable {
    */
   public static void logProcessInfo(Configuration conf) {
     // log environment variables unless asked not to
-    if (conf == null || !conf.getBoolean(QUERY_SERVER_ENV_LOGGING_KEY, false)) {
-      Set<String> skipWords = new HashSet<String>(DEFAULT_SKIP_WORDS);
+    if (conf == null || !conf.getBoolean(QueryServices.QUERY_SERVER_ENV_LOGGING_ATTRIB, false)) {
+      Set<String> skipWords = new HashSet<String>(QueryServicesOptions.DEFAULT_QUERY_SERVER_SKIP_WORDS);
       if (conf != null) {
-        String[] confSkipWords = conf.getStrings(QUERY_SERVER_ENV_LOGGING_SKIPWORDS_KEY);
+        String[] confSkipWords = conf.getStrings(QueryServices.QUERY_SERVER_ENV_LOGGING_SKIPWORDS_ATTRIB);
         if (confSkipWords != null) {
           skipWords.addAll(Arrays.asList(confSkipWords));
         }
@@ -190,20 +159,22 @@ public final class Main extends Configured implements Tool, Runnable {
     logProcessInfo(getConf());
     try {
       // handle secure cluster credentials
-      if ("kerberos".equalsIgnoreCase(getConf().get(HBASE_SECURITY_CONF_KEY))) {
+      if ("kerberos".equalsIgnoreCase(getConf().get(QueryServices.QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB))) {
         String hostname = Strings.domainNamePointerToHostName(DNS.getDefaultHost(
-            getConf().get(DNS_INTERFACE_KEY, "default"),
-            getConf().get(DNS_NAMESERVER_KEY, "default")));
+            getConf().get(QueryServices.QUERY_SERVER_DNS_INTERFACE_ATTRIB, "default"),
+            getConf().get(QueryServices.QUERY_SERVER_DNS_NAMESERVER_ATTRIB, "default")));
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Login to " + hostname + " using " + getConf().get(KEYTAB_FILENAME_KEY)
-              + " and principal " + getConf().get(KERBEROS_PRINCIPAL_KEY) + ".");
+          LOG.debug("Login to " + hostname + " using " + getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB)
+              + " and principal " + getConf().get(QueryServices.QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB) + ".");
         }
-        SecurityUtil.login(getConf(), KEYTAB_FILENAME_KEY, KERBEROS_PRINCIPAL_KEY, hostname);
+        SecurityUtil.login(getConf(), QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB,
+            QueryServices.QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB, hostname);
         LOG.info("Login successful.");
       }
       Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
-          QUERY_SERVER_META_FACTORY_KEY, PhoenixMetaFactoryImpl.class, PhoenixMetaFactory.class);
-      int port = getConf().getInt(QUERY_SERVER_HTTP_PORT_KEY, DEFAULT_HTTP_PORT);
+          QueryServices.QUERY_SERVER_META_FACTORY_ATTRIB, PhoenixMetaFactoryImpl.class, PhoenixMetaFactory.class);
+      int port = getConf().getInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB,
+          QueryServicesOptions.DEFAULT_QUERY_SERVER_HTTP_PORT);
       LOG.debug("Listening on port " + port);
       PhoenixMetaFactory factory =
           factoryClass.getDeclaredConstructor(Configuration.class).newInstance(getConf());
@@ -231,20 +202,16 @@ public final class Main extends Configured implements Tool, Runnable {
    * @return The Handler to use based on the configuration.
    */
   Handler getHandler(Configuration conf, Service service, HandlerFactory handlerFactory) {
-    String serializationName = conf.get(QUERY_SERVER_SERIALIZATION_KEY);
+    String serializationName = conf.get(QueryServices.QUERY_SERVER_SERIALIZATION_ATTRIB,
+        QueryServicesOptions.DEFAULT_QUERY_SERVER_SERIALIZATION);
 
     Driver.Serialization serialization;
-    if (null == serializationName) {
-      // Default to JSON
-      serialization = Driver.Serialization.JSON;
-    } else {
-      // Otherwise, use what was provided in the configuration
-      try {
-        serialization = Driver.Serialization.valueOf(serializationName);
-      } catch (Exception e) {
-        LOG.error("Unknown message serialization type for " + serializationName);
-        throw e;
-      }
+    // Otherwise, use what was provided in the configuration
+    try {
+      serialization = Driver.Serialization.valueOf(serializationName);
+    } catch (Exception e) {
+      LOG.error("Unknown message serialization type for " + serializationName);
+      throw e;
     }
 
     Handler handler = handlerFactory.getHandler(service, serialization);
