@@ -226,13 +226,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         } else {
             outputPath = new Path("/tmp/" + UUID.randomUUID());
         }
-
-        try {
-            if (!FileSystem.get(conf).delete(outputPath, true)) {
-                LOG.error("Removing output directory {} before job failed", outputPath);
-            }
-        } catch (IOException e) {}
-
+        
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName));
         // using conn after it's been closed... o.O
