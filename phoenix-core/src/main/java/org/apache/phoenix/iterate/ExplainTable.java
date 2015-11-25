@@ -82,9 +82,7 @@ public abstract class ExplainTable {
             buf.append("SKIP SCAN ");
             int count = 1;
             boolean hasRanges = false;
-            int nSlots = scanRanges.getBoundSlotCount();
-            for (int i = 0; i < nSlots; i++) {
-                List<KeyRange> ranges = scanRanges.getRanges().get(i);
+            for (List<KeyRange> ranges : scanRanges.getRanges()) {
                 count *= ranges.size();
                 for (KeyRange range : ranges) {
                     hasRanges |= !range.isSingleKey();
@@ -239,8 +237,7 @@ public abstract class ExplainTable {
                 minMaxIterator = new RowKeyValueIterator(schema, minMaxRange.getRange(bound));
             }
         }
-        boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
-        int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();
+        int nRanges = scanRanges.getRanges().size();
         for (int i = 0, minPos = 0; minPos < nRanges || minMaxIterator.hasNext(); i++) {
             List<KeyRange> ranges = minPos >= nRanges ? EVERYTHING :  scanRanges.getRanges().get(minPos++);
             KeyRange range = bound == Bound.LOWER ? ranges.get(0) : ranges.get(ranges.size()-1);

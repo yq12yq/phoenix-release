@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -296,7 +297,7 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
         // Always set start and stop key to max to verify we are using the information in skipscan
         // filter over the scan's KMIN and KMAX.
         Scan scan = new Scan().setFilter(filter);
-        ScanRanges scanRanges = ScanRanges.createSingleSpan(schema, slots);
+        ScanRanges scanRanges = ScanRanges.create(schema, slots, ScanUtil.getDefaultSlotSpans(ranges.length));
         List<Object> ret = Lists.newArrayList();
         ret.add(new Object[] {scan, scanRanges, Arrays.<KeyRange>asList(expectedSplits)});
         return ret;

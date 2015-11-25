@@ -29,7 +29,13 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -38,8 +44,10 @@ public class ScanRangesIntersectTest {
 
     @Test
     public void testPointLookupIntersect() throws Exception {
+        RowKeySchema schema = schema();
+        int[] slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
         List<KeyRange> keys = points("a","j","m","z");
-        ScanRanges ranges = ScanRanges.createPointLookup(keys);
+        ScanRanges ranges = ScanRanges.create(schema, Collections.singletonList(keys), slotSpan);
         assertIntersect(ranges, "b", "l", "j");
         
     }
@@ -67,5 +75,32 @@ public class ScanRangesIntersectTest {
             keys.add(KeyRange.getKeyRange(PVarchar.INSTANCE.toBytes(point)));
         }
         return keys;
+    }
+    
+    private static RowKeySchema schema() {
+        RowKeySchemaBuilder builder = new RowKeySchemaBuilder(1);
+        builder.addField(new PDatum() {
+            @Override
+            public boolean isNullable() {
+                return false;
+            }
+            @Override
+            public PDataType getDataType() {
+                return PVarchar.INSTANCE;
+            }
+            @Override
+            public Integer getMaxLength() {
+                return null;
+            }
+            @Override
+            public Integer getScale() {
+                return null;
+            }
+            @Override
+            public SortOrder getSortOrder() {
+                return SortOrder.getDefault();
+            }
+        }, false, SortOrder.getDefault());
+        return builder.build();
     }
 }
