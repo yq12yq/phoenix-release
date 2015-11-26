@@ -20,11 +20,8 @@ package org.apache.phoenix.mapreduce;
 import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 
@@ -34,27 +31,15 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.phoenix.hbase.index.ValueGetter;
-import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.CSVCommonsLoader;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -116,10 +101,6 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
     private CsvLineParser csvLineParser;
     private ImportPreUpsertKeyValueProcessor preUpdateProcessor;
     private byte[] tableName;
-    private Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
-            new HashMap<ImmutableBytesWritable, IndexMaintainer>();
-    private HTable hTable = null;
-    private String localIndexParentTable = null;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -145,31 +126,9 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
         } else {
         	tableName = Bytes.toBytes(conf.get(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, ""));
         }
-        try {
-            PTable phoenixTable = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
-            if (phoenixTable.getIndexType()==IndexType.LOCAL) {
-                localIndexParentTable = phoenixTable.getParentName().getString();
-                PTable parent = PhoenixRuntime.getTable(conn, localIndexParentTable);
-                for (PTable index : parent.getIndexes()) {
-                    if (index.getTableName().equals(phoenixTable.getTableName())) {
-                        indexMaintainers.put(new ImmutableBytesWritable(phoenixTable.getTableName()
-                                .getBytes()), index.getIndexMaintainer(parent, conn));
-                        break;
-                    }
-                }
-            } 
-            HTableInterface table =
-                    conn.getQueryServices().getTable(
-                        localIndexParentTable == null ? Bytes.toBytes(Bytes.toString(tableName)) : Bytes
-                                .toBytes(localIndexParentTable));
-            hTable = (HTable)table;
-
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
         upsertListener = new MapperUpsertListener(
             context, conf.getBoolean(IGNORE_INVALID_ROW_CONFKEY, true));
-        csvUpsertExecutor = buildUpsertExecutor(conf, localIndexParentTable);
+        csvUpsertExecutor = buildUpsertExecutor(conf);
         csvLineParser = new CsvLineParser(
             CsvBulkImportUtil.getCharacter(conf, FIELD_DELIMITER_CONFKEY),
             CsvBulkImportUtil.getCharacter(conf, QUOTE_CHAR_CONFKEY),
@@ -201,39 +160,15 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
                     = PhoenixRuntime.getUncommittedDataIterator(conn, true);
             while (uncommittedDataIterator.hasNext()) {
                 Pair<byte[], List<KeyValue>> kvPair = uncommittedDataIterator.next();
+                if (Bytes.compareTo(tableName, kvPair.getFirst()) != 0) {
+                       // skip edits for other tables
+                       continue;
+                }
                 List<KeyValue> keyValueList = kvPair.getSecond();
                 keyValueList = preUpdateProcessor.preUpsert(kvPair.getFirst(), keyValueList);
                 for (KeyValue kv : keyValueList) {
-                    if(localIndexParentTable==null) {
-                        outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
-                        context.write(outputKey, kv);
-                    }
-                }
-                if (Bytes.toString(kvPair.getFirst()).equals(localIndexParentTable)
-                        && !indexMaintainers.isEmpty()) {
-                    for (Entry<ImmutableBytesWritable, IndexMaintainer> entry : indexMaintainers
-                            .entrySet()) {
-                        KeyValue kv = keyValueList.get(0);
-                        byte[] row = kv.getRow();
-                        ImmutableBytesWritable ptr = new ImmutableBytesWritable(row);
-                        ValueGetter valueGetter =
-                                entry.getValue().createGetterFromKeyValues(row, keyValueList);
-                        HRegionLocation regionLocation = hTable.getRegionLocation(row);
-                        HRegionInfo regionInfo = regionLocation.getRegionInfo();
-                        Put put =
-                                entry.getValue().buildUpdateMutation(
-                                    GenericKeyValueBuilder.INSTANCE, valueGetter, ptr,
-                                    kv.getTimestamp(), regionInfo.getStartKey(),
-                                    regionInfo.getEndKey());
-                        Collection<List<Cell>> values = put.getFamilyCellMap().values();
-                        for (List<Cell> familyCells : values) {
-                            for (Cell cell : familyCells) {
-                                outputKey.set(kv.getRowArray(), kv.getRowOffset(),
-                                    kv.getRowLength());
-                                context.write(outputKey, kv);
-                            }
-                        }
-                    }
+                    outputKey.set(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
+                    context.write(outputKey, kv);
                 }
             }
             conn.rollback();
@@ -252,9 +187,8 @@ public class CsvToKeyValueMapper extends Mapper<LongWritable,Text,ImmutableBytes
     }
 
     @VisibleForTesting
-    CsvUpsertExecutor buildUpsertExecutor(Configuration conf, String parentTable) {
-        String tableName =
-                parentTable == null ? conf.get(TABLE_NAME_CONFKEY) : parentTable;
+    CsvUpsertExecutor buildUpsertExecutor(Configuration conf) {
+        String tableName = conf.get(TABLE_NAME_CONFKEY);
 
         String arraySeparator = conf.get(ARRAY_DELIMITER_CONFKEY,
                                             CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);

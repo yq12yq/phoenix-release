@@ -21,8 +21,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -264,12 +266,16 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         ExecutorService executor =
                 JobManager.createThreadPoolExec(Integer.MAX_VALUE, 5, 20, useInstrumentedPool);
         try{
+            Set<String> physicalTables = new HashSet<String>();
 	        for (TargetTableRef table : tablesToBeLoaded) {
-	            Path tablePath = new Path(outputPath, table.getLogicalName());
+                if (physicalTables.contains(table.getPhysicalName())) {
+                    continue;
+                }
+                Path tablePath = new Path(outputPath, table.getPhysicalName());
 	        	Configuration jobConf = new Configuration(conf);
 	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
 	        	if (qualifiedTableName.compareToIgnoreCase(table.getLogicalName()) != 0) {
-                    jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getLogicalName());
+                    jobConf.set(CsvToKeyValueMapper.INDEX_TABLE_NAME_CONFKEY, table.getPhysicalName());
 	        	}
 	        	TableLoader tableLoader = new TableLoader(
                         jobConf, table.getPhysicalName(), inputPath, tablePath);

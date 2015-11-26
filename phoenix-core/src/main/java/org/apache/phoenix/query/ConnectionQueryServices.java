@@ -68,6 +68,8 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;
 
+    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
+
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
 
     public MetaDataMutationResult getTable(PName tenantId, byte[] schemaName, byte[] tableName, long tableTimestamp, long clientTimetamp) throws SQLException;

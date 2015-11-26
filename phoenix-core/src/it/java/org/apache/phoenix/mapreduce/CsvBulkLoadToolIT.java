@@ -203,7 +203,7 @@ public class CsvBulkLoadToolIT {
 
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE6 (ID INTEGER NOT NULL PRIMARY KEY, " +
-                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+                "FIRST_NAME VARCHAR, LAST_NAME VARCHAR) SPLIT ON(1,2)");
         String ddl = "CREATE LOCAL INDEX TABLE6_IDX ON TABLE6 "
                 + " (FIRST_NAME ASC)";
         stmt.execute(ddl);
@@ -234,7 +234,7 @@ public class CsvBulkLoadToolIT {
         rs =
                 stmt.executeQuery("EXPLAIN SELECT id, FIRST_NAME FROM TABLE6 where first_name='FirstName 2'");
         assertEquals(
-            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER TABLE6 [-32768,'FirstName 2']\n"
+            "CLIENT 3-CHUNK PARALLEL 3-WAY RANGE SCAN OVER TABLE6 [-32768,'FirstName 2']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         rs.close();
         rs = stmt.executeQuery("SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
@@ -245,7 +245,7 @@ public class CsvBulkLoadToolIT {
         rs =
                 stmt.executeQuery("EXPLAIN SELECT id, LAST_NAME FROM TABLE6 where last_name='LastName 2'");
         assertEquals(
-            "CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER TABLE6 [-32767,'LastName 2']\n"
+            "CLIENT 3-CHUNK PARALLEL 3-WAY RANGE SCAN OVER TABLE6 [-32767,'LastName 2']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
         stmt.close();
     }
@@ -265,7 +265,7 @@ public class CsvBulkLoadToolIT {
         String indexTableName = String.format("%s_IDX", tableName);
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
-                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
+                + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR) SPLIT ON(1,2)");
         String ddl =
                 "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexTableName + " ON "
                         + tableName + "(FIRST_NAME ASC)";
