@@ -271,6 +271,7 @@ public class CsvBulkLoadTool extends Configured implements Tool {
                 if (physicalTables.contains(table.getPhysicalName())) {
                     continue;
                 }
+                physicalTables.add(table.getPhysicalName());
                 Path tablePath = new Path(outputPath, table.getPhysicalName());
 	        	Configuration jobConf = new Configuration(conf);
 	        	jobConf.set(CsvToKeyValueMapper.TABLE_NAME_CONFKEY, qualifiedTableName);
