@@ -67,7 +67,6 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
@@ -504,6 +503,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return Lists.reverse(list);
     }
     
+
     /**
      * Executes the scan in parallel across all regions, blocking until all scans are complete.
      * @return the result iterators for the scan of each region
@@ -515,25 +515,33 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             logger.debug(LogUtil.addCustomAnnotations("Getting iterators for " + this,
                     ScanUtil.getCustomAnnotations(scan)));
         }
-        boolean success = false;
         boolean isReverse = ScanUtil.isReversed(scan);
         boolean isLocalIndex = getTable().getIndexType() == IndexType.LOCAL;
         final ConnectionQueryServices services = context.getConnection().getQueryServices();
-        int numScans = size();
+        int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
+        final long startTime = System.currentTimeMillis();
+        final long maxQueryEndTime = startTime + queryTimeOut;
         // Capture all iterators so that if something goes wrong, we close them all
         // The iterators list is based on the submission of work, so it may not
         // contain them all (for example if work was rejected from the queue)
         Queue<PeekingResultIterator> allIterators = new ConcurrentLinkedQueue<>();
+        int numScans = size();
         List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numScans);
-        final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(numScans);
+        return getIterators(scans,services,isLocalIndex,allIterators,iterators,isReverse,maxQueryEndTime, splits.size());
+        
+    }
+    
+    public List<PeekingResultIterator> getIterators(List<List<Scan>> scan, ConnectionQueryServices services, boolean isLocalIndex,
+            Queue<PeekingResultIterator> allIterators, List<PeekingResultIterator> iterators, boolean isReverse, long maxQueryEndTime,int splitSize)
+                    throws SQLException {
+        boolean success=false;
+        final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(scan.size());
         allFutures.add(futures);
         SQLException toThrow = null;
         // Get query time out from Statement and convert from seconds back to milliseconds
-        int queryTimeOut = context.getStatement().getQueryTimeout() * 1000;
-        final long startTime = System.currentTimeMillis();
-        final long maxQueryEndTime = startTime + queryTimeOut;
+        
         try {
-            submitWork(scans, futures, allIterators, splits.size());
+            submitWork(scan, futures, allIterators, splitSize);
             boolean clearedCache = false;
             for (List<Pair<Scan,Future<PeekingResultIterator>>> future : reverseIfNecessary(futures,isReverse)) {
                 List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(future.size());
@@ -541,7 +549,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     try {
                         long timeOutForScan = maxQueryEndTime - System.currentTimeMillis();
                         if (timeOutForScan < 0) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
+                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + context.getStatement().getQueryTimeout() * 1000 + " ms").build().buildException(); 
                         }
                         PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
                         concatIterators.add(iterator);
@@ -550,10 +558,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException e2) { 
                             // Catch only to try to recover from region boundary cache being out of date
-                            List<List<Pair<Scan,Future<PeekingResultIterator>>>> newFutures = Lists.newArrayListWithExpectedSize(2);
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
                                 services.clearTableRegionCache(physicalTableName);
-                                clearedCache = true;
                             }
                             // Resubmit just this portion of work again
                             Scan oldScan = scanPair.getFirst();
@@ -567,21 +573,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // as we need these to be in order
                             addIterator(iterators, concatIterators);
                             concatIterators = Lists.newArrayList();
-                            submitWork(newNestedScans, newFutures, allIterators, newNestedScans.size());
-                            allFutures.add(newFutures);
-                            for (List<Pair<Scan,Future<PeekingResultIterator>>> newFuture : reverseIfNecessary(newFutures, isReverse)) {
-                                for (Pair<Scan,Future<PeekingResultIterator>> newScanPair : reverseIfNecessary(newFuture, isReverse)) {
-                                    // Immediate do a get (not catching exception again) and then add the iterators we
-                                    // get back immediately. They'll be sorted as expected, since they're replacing the
-                                    // original one.
-                                    long timeOutForScan = maxQueryEndTime - System.currentTimeMillis();
-                                    if (timeOutForScan < 0) {
-                                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
-                                    }
-                                    PeekingResultIterator iterator = newScanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
-                                    iterators.add(iterator);
-                                }
-                            }
+                            getIterators(newNestedScans,services,isLocalIndex,allIterators,iterators,isReverse,maxQueryEndTime,newNestedScans.size());
                         }
                     }
                 }
@@ -593,7 +585,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             QUERY_TIMEOUT.increment();
             // thrown when a thread times out waiting for the future.get() call to return
             toThrow = new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)
-                    .setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms")
+                    .setMessage(". Query couldn't be completed in the alloted time: " + context.getStatement().getQueryTimeout() * 1000 + " ms")
                     .setRootCause(e).build().buildException();
         } catch (SQLException e) {
             toThrow = e;
