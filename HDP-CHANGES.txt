@@ -31,24 +31,38 @@ ac2d55 BUG-35534 Need MSI Support for Phoenix Query Server
 386dae7 BUG-12396 Create winpkg for Phoenix, to make part of HDP MSI
 3f6ed6e adding distribution tag to pom.xml
 1acf180 Bump the version of calcite so that local builds work
+91afff3 PHOENIX-1277 CSVCommonsLoader not allowing null CHAR values (non PK)
 d7c077b PHOENIX-1659 PhoenixDatabaseMetaData.getColumns does not return REMARKS column
 0000000 PHOENIX-1734 Local index improvements (multiple checkins)
 b955b05 PHOENIX-2074 StackOverflowError with RoundRobinResultIterator
 da3f245 PHOENIX-2096 Tweak criteria for when round robin iterator is used
 b261f48 PHOENIX-1978 UDF ArgumentTypeMismatchException
 9b77410 PHOENIX-2011 Default, min, and max values should not require quotes around it in create function
+bd9c432 PHOENIX-2014 WHERE search condition ignored when also using row value constructor in view
 047c9d3 PHOENIX-2151 Two different UDFs called on same column return values from first UDF only
 afb01dc PHOENIX-2022 BaseRegionScanner.next should be abstract
+9c80881 PHOENIX-2029 Queries are making two rpc calls for getTable
+d667abe PHOENIX-2030 CsvBulkLoadTool should use logical name of the table for output directory suffix
+2579ca9 PHOENIX-2059 MR index build does not handle table with a schema name correctly
 31b2a5b PHOENIX-2073 Two bytes character in LIKE expression is not allowed
+6c69f1f PHOENIX-2087 Ensure predictable column position during alter table
 4416451 PHOENIX-2131 CastParseNode.toSQL omits closing parenthesis
 59d8bea PHOENIX-2066 Existing client fails initialization due to upgrade atttempting to create column with no name
 b89e36d PHOENIX-2075 MR integration uses single mapper unless table is salted
 d6d8d3d PHOENIX-2254 zookeeper.znode.parent value is not taking affect in MR integration job
 03f4cc1 PHOENIX-2031 Unable to process timestamp/Date data loaded via Phoenix org.apache.phoenix.pig.PhoenixHBaseLoader
+685b7b5 PHOENIX-2125 ORDER BY on full PK on salted table does not work
+0000000 PHOENIX-2141 ComparisonExpression should return Boolean null if either operand is null
+0000000 PHOENIX-2139 LIKE '%' is not filtering out null columns
+5aee5da PHOENIX-2149 MAX Value of Sequences not honored when closing Connection between calls to NEXT VALUE FOR 
 dc9b413 PHOENIX-2181 PhoenixHBaseLoader doesn't work with salted tables
 9a01bf9 PHOENIX-2063 Row value constructor doesn't work when used in COUNT
 46aa582 PHOENIX-1395 ResultSpooler spill files are left behind in /tmp folder
 964ec9d PHOENIX-2040 Mark spark/scala dependencies as 'provided'
+699a743 PHOENIX-2205 Group by a divided value (e.g., time/10) returns NULL
+b871226 PHOENIX-2207 Load scanner caches in parallel when using stats and round robin iterator
+979564e PHOENIX-2238 Bulk dataload Hive data with \001 delimiter
+cf3aac9 PHOENIX-2274 Sort-merge join could not optimize out the sort on the right table
 cc76ff5 PHOENIX-2359 Configuration for PQS to use Protobuf serialization instead of JSON
 0c03e91 PHOENIX-2369 Some UDF tests failed due to not finding Hadoop classpath
 15fb46b PHOENIX-2372 Check for null before passing value to Calendar
