@@ -110,7 +110,6 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
@@ -156,9 +155,6 @@ public interface QueryConstants {
     public static final byte[] ARRAY_VALUE_COLUMN_QUALIFIER = ByteUtil.EMPTY_BYTE_ARRAY;
 
     public static final byte[] TRUE = new byte[] {1};
-    
-    public static final int NEW_LOCAL_INDEX_IMPLEMENTATION_MIN_VERSION = VersionUtil
-            .encodeVersion("4.5.0");
 
 
     /**
@@ -181,7 +177,7 @@ public interface QueryConstants {
     public static final ImmutableBytesPtr DEFAULT_COLUMN_FAMILY_BYTES_PTR = new ImmutableBytesPtr(
             DEFAULT_COLUMN_FAMILY_BYTES);
 
-    public static final String LOCAL_INDEX_COLUMN_FAMILY_PREFIX = "L_";
+    public static final String LOCAL_INDEX_COLUMN_FAMILY_PREFIX = "L#";
     public static final byte[] LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES = Bytes.toBytes(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
     public static final ImmutableBytesPtr LOCAL_INDEX_COLUMN_FAMILY_PREFIX_PTR = new ImmutableBytesPtr(
         LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES);

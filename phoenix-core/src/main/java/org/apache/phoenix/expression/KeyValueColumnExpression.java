@@ -25,7 +25,6 @@ import java.util.Arrays;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -58,15 +57,8 @@ public class KeyValueColumnExpression extends ColumnExpression {
     }
 
     public KeyValueColumnExpression(PColumn column, String displayName) {
-        this(column, displayName, false);
-    }
-    
-    public KeyValueColumnExpression(PColumn column, String displayName, boolean localIndexColumn) {
         super(column);
-        this.cf =
-                !localIndexColumn ? column.getFamilyName().getBytes() : Bytes
-                        .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                + column.getFamilyName().getString());
+        this.cf = column.getFamilyName().getBytes();
         this.cq = column.getName().getBytes();
         this.displayName = displayName;
     }

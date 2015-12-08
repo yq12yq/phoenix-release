@@ -110,13 +110,8 @@ public class ProjectionCompiler {
     }
     
     private static void projectColumnFamily(PTable table, Scan scan, byte[] family) {
-        if (table.getIndexType() == IndexType.LOCAL) {
-            scan.addFamily(Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                    + Bytes.toString(family)));
-        } else {
-            // Will project all colmuns for given CF
-            scan.addFamily(family);
-        }
+        // Will project all colmuns for given CF
+        scan.addFamily(family);
     }
     
     public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy) throws SQLException  {
@@ -289,14 +284,22 @@ public class ProjectionCompiler {
             String indexColName = IndexUtil.getIndexColumnName(column);
             PColumn indexColumn = null;
             ColumnRef ref = null;
+            String indexColumnFamily = null;
             try {
                 indexColumn = index.getColumn(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
+                indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     try {
                         ref = new LocalIndexDataColumnRef(context, indexColName);
                         indexColumn = ref.getColumn();
+                        indexColumnFamily =
+                                indexColumn.getFamilyName() == null ? null
+                                        : (index.getIndexType() == IndexType.LOCAL ? IndexUtil
+                                                .getLocalIndexColumnFamily(indexColumn
+                                                        .getFamilyName().getString()) : indexColumn
+                                                .getFamilyName().getString());
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
                     }
@@ -305,7 +308,7 @@ public class ProjectionCompiler {
                 }
             }
             if (resolveColumn) {
-                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString(), indexColName);
+                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumnFamily, indexColName);
             }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
@@ -436,12 +439,7 @@ public class ProjectionCompiler {
         int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
         int estimatedByteSize = 0;
         for (Map.Entry<byte[],NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
-            byte[] famBytes = entry.getKey();
-            if(Bytes.toString(entry.getKey()).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)){
-                String actualFamily = Bytes.toString(entry.getKey()).substring(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX.length());
-                famBytes = Bytes.toBytes(actualFamily);
-            } 
-            PColumnFamily family = table.getColumnFamily(famBytes);
+            PColumnFamily family = table.getColumnFamily(entry.getKey());
             if (entry.getValue() == null) {
                 for (PColumn column : family.getColumns()) {
                     Integer maxLength = column.getMaxLength();
@@ -475,12 +473,7 @@ public class ProjectionCompiler {
         // Will project all known/declared column families
         scan.getFamilyMap().clear();
         for (PColumnFamily family : table.getColumnFamilies()) {
-            if(table.getIndexType()==IndexType.LOCAL) {
-                scan.addFamily(Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                        + family.getName().getString()));
-            } else {
-                scan.addFamily(family.getName().getBytes());
-            }
+            scan.addFamily(family.getName().getBytes());
         }
     }
 

@@ -24,7 +24,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -44,7 +43,6 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -163,9 +161,6 @@ public class PostDDLCompiler {
                             if (deleteList != null) {
                                 if (deleteList.isEmpty()) {
                                     scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
-                                    if (tableRef.getTable().getIndexType() == IndexType.LOCAL) {
-                                        ScanUtil.setLocalIndex(scan);
-                                    }
                                     // In the case of a row deletion, add index metadata so mutable secondary indexing works
                                     /* TODO: we currently manually run a scan to delete the index data here
                                     ImmutableBytesWritable ptr = context.getTempPtr();
@@ -205,13 +200,7 @@ public class PostDDLCompiler {
                             if (columnFamilies != null) {
                                 scan.getFamilyMap().clear();
                                 for (byte[] family : columnFamilies) {
-                                    if(tableRef.getTable().getIndexType() == IndexType.LOCAL){
-                                        scan.addFamily(Bytes
-                                                .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                                        + Bytes.toString(family)));
-                                    } else {
-                                        scan.addFamily(family);                                        
-                                    }
+                                    scan.addFamily(family);                                        
                                 }
                                 projector = new RowProjector(projector,false);
                             }

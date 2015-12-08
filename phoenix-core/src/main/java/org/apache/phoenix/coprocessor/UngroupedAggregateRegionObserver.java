@@ -171,7 +171,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
             stats = new StatisticsCollector(c.getEnvironment(), region.getRegionInfo().getTable().getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
         }
-        if (ScanUtil.isLocalIndex(scan)) {
+        if (localIndexScan) {
             /*
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
@@ -193,11 +193,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
         boolean isDelete = false;
-        List<byte[]> cfsToDelete = new ArrayList<byte[]>();
         byte[] deleteCQ = null;
         byte[] deleteCF = null;
         byte[][] values = null;
         byte[] emptyCF = null;
+        List<byte[]> cfsToDelete = new ArrayList<byte[]>();
         ImmutableBytesWritable ptr = null;
         if (upsertSelectTable != null) {
             isUpsert = true;
@@ -234,7 +234,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
             ptr = new ImmutableBytesWritable();
         }
         TupleProjector tupleProjector = null;
-        Region dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
@@ -242,13 +241,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         if ((localIndexScan && !isDelete) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                dataRegion = c.getEnvironment().getRegion();
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,
-                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
+                        c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
         }
 
         if (j != null)  {

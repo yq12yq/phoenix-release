@@ -159,13 +159,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     && table.getColumnFamilies().size() == 1) {
                 // Project the one column family. We must project a column family since it's possible
                 // that there are other non declared column families that we need to ignore.
-                    if(table.getIndexType()==IndexType.LOCAL) {
-                        scan.addFamily(Bytes
-                                .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                        + table.getColumnFamilies().get(0).getName().getString()));
-                    } else {
-                        scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
-                    }
+                scan.addFamily(table.getColumnFamilies().get(0).getName().getBytes());
             } else {
                 byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
                 // Project empty key value unless the column family containing it has
@@ -178,13 +172,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             // Since we don't have the empty key value in MAPPED tables, we must select all CFs in HRS. But only the
             // selected column values are returned back to client
             for (PColumnFamily family : table.getColumnFamilies()) {
-                    if (table.getIndexType() == IndexType.LOCAL) {
-                        scan.addFamily(Bytes
-                                .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                        + family.getName().getString()));
-                    } else {
-                        scan.addFamily(family.getName().getBytes());
-                    }
+                scan.addFamily(family.getName().getBytes());
             }
         }
         // Add FirstKeyOnlyFilter if there are no references to key value columns
@@ -220,11 +208,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             Set<byte[]> conditionOnlyCfs = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
             int referencedCfCount = familyMap.size();
             for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
-                byte[] whereCf =
-                        table.getIndexType() != IndexType.LOCAL ? whereCol.getFirst() : Bytes
-                                .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                        + Bytes.toString(whereCol.getFirst()));
-                if (!(familyMap.containsKey(whereCf))) {
+                if (!(familyMap.containsKey(whereCol.getFirst()))) {
                     referencedCfCount++;
                 }
             }
@@ -255,30 +239,26 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
             // Making sure that where condition CFs are getting scanned at HRS.
             for (Pair<byte[], byte[]> whereCol : context.getWhereCoditionColumns()) {
-                byte[] whereCf =
-                        table.getIndexType() != IndexType.LOCAL ? whereCol.getFirst() : Bytes
-                                .toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                        + Bytes.toString(whereCol.getFirst()));
                 if (useOptimization) {
-                    if (!(familyMap.containsKey(whereCf))) {
-                        scan.addFamily(whereCf);
-                        conditionOnlyCfs.add(whereCf);
+                    if (!(familyMap.containsKey(whereCol.getFirst()))) {
+                        scan.addFamily(whereCol.getFirst());
+                        conditionOnlyCfs.add(whereCol.getFirst());
                     }
                 } else {
-                    if (familyMap.containsKey(whereCf)) {
+                    if (familyMap.containsKey(whereCol.getFirst())) {
                         // where column's CF is present. If there are some specific columns added against this CF, we
                         // need to ensure this where column also getting added in it.
                         // If the select was like select cf1.*, then that itself will select the whole CF. So no need to
                         // specifically add the where column. Adding that will remove the cf1.* stuff and only this
                         // where condition column will get returned!
-                        NavigableSet<byte[]> cols = familyMap.get(whereCf);
+                        NavigableSet<byte[]> cols = familyMap.get(whereCol.getFirst());
                         // cols is null means the whole CF will get scanned.
                         if (cols != null) {
-                            scan.addColumn(whereCf, whereCol.getSecond());
+                            scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
                         }
                     } else {
                         // where column's CF itself is not present in family map. We need to add the column
-                        scan.addColumn(whereCf, whereCol.getSecond());
+                        scan.addColumn(whereCol.getFirst(), whereCol.getSecond());
                     }
                 }
             }

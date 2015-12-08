@@ -367,35 +367,23 @@ public class SchemaUtil {
         return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
     }
 
-    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families, boolean isLocalIndex) {
-        if(isLocalIndex) {
-            return families.isEmpty() ? (defaultColumnFamily == null ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES
-                    : defaultColumnFamily.getBytes())
-                    : Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                            + families.get(0).getName().getString());
-        } else {
-            return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
-        }
+    public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {
+        return families.isEmpty() ? defaultColumnFamily == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : defaultColumnFamily.getBytes() : families.get(0).getName().getBytes();
     }
 
     public static byte[] getEmptyColumnFamily(PTable table) {
-        return getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies(),
-            table.getIndexType() == IndexType.LOCAL);
+        return getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies());
+    }
+
+    public static String getEmptyColumnFamilyAsString(PTable table) {
+        List<PColumnFamily> families = table.getColumnFamilies();
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
     }
 
     public static ImmutableBytesPtr getEmptyColumnFamilyPtr(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
-        if(table.getIndexType()==IndexType.LOCAL) {
-			return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES_PTR
-					: table.getDefaultFamilyName().getBytesPtr()
-					: new ImmutableBytesPtr(
-							Bytes.toBytes(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-									+ Bytes.toString(families.get(0).getName()
-											.getBytes())));
-        } else {
-            return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
-                    .getName().getBytesPtr();
-        }
+        return families.isEmpty() ? table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR : table.getDefaultFamilyName().getBytesPtr() : families.get(0)
+                .getName().getBytesPtr();
     }
 
     public static boolean isMetaTable(byte[] tableName) {

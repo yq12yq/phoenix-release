@@ -1233,7 +1233,7 @@ public class MetaDataClient {
                     }
                     if (!SchemaUtil.isPKColumn(col) && col.getViewConstant() == null) {
                         // Need to re-create ColumnName, since the above one won't have the column family name
-                        colName = ColumnName.caseSensitiveColumnName(col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
+                        colName = ColumnName.caseSensitiveColumnName(isLocalIndex?IndexUtil.getLocalIndexColumnFamily(col.getFamilyName().getString()):col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
                         columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), null));
                     }
                 }
@@ -1425,20 +1425,20 @@ public class MetaDataClient {
             boolean isImmutableRows = false;
             List<PName> physicalNames = Collections.emptyList();
             boolean addSaltColumn = false;
+            boolean isLocalIndex = indexType == IndexType.LOCAL;
             if (parent != null && tableType == PTableType.INDEX) {
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
                 // table instead of only a view? We don't have anywhere to put the link
                 // from the table to the index, though.
-                if (indexType == IndexType.LOCAL || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
+                if (isLocalIndex || (parent.getType() == PTableType.VIEW && parent.getViewType() != ViewType.MAPPED)) {
                     PName physicalName = parent.getPhysicalName();
                     saltBucketNum = parent.getBucketNum();
-                    addSaltColumn = (saltBucketNum != null && indexType != IndexType.LOCAL);
-                    if (indexType == IndexType.LOCAL) {
+                    addSaltColumn = (saltBucketNum != null && !isLocalIndex);
+                    if (isLocalIndex) {
                         defaultFamilyName =
                                 parent.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY
-                                        : QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                                + parent.getDefaultFamilyName().getString();
+                                        : IndexUtil.getLocalIndexColumnFamily(parent.getDefaultFamilyName().getString());
                         saltBucketNum = null;
                         // Set physical name of local index table
                         physicalNames = Collections.singletonList(PNameFactory.newName(physicalName.getBytes()));
@@ -1698,13 +1698,9 @@ public class MetaDataClient {
                         .build().buildException();
                 }
                 if (column.getFamilyName() != null) {
-                	if(indexType == IndexType.LOCAL) {
-                		String localIndexCf = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + column.getFamilyName().getString();
-						familyNames.put(localIndexCf,
-								PNameFactory.newName(localIndexCf));
-                	} else {
-                        familyNames.put(column.getFamilyName().getString(),column.getFamilyName());
-                	}
+                    familyNames.put(
+                        IndexUtil.getActualColumnFamilyName(column.getFamilyName().getString()),
+                        column.getFamilyName());
                 }
             }
             // We need a PK definition for a TABLE or mapped VIEW
@@ -1756,10 +1752,7 @@ public class MetaDataClient {
             for (PName familyName : familyNames.values()) {
                 String fam = familyName.getString();
                 Collection<Pair<String, Object>> props =
-                        statement.getProps().get(
-                            fam.startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) ? fam
-                                    .substring(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                                            .length()) : fam);
+                        statement.getProps().get(IndexUtil.getActualColumnFamilyName(fam));
                 if (props.isEmpty()) {
                     familyPropList.add(new Pair<byte[],Map<String,Object>>(familyName.getBytes(),commonFamilyProps));
                 } else {
@@ -1781,7 +1774,7 @@ public class MetaDataClient {
             	//if there are no family names, use the default column family name. This also takes care of the case when
             	//the table ddl has only PK cols present (which means familyNames is empty).
                 byte[] cf =
-                        defaultFamilyName == null ? (indexType != IndexType.LOCAL ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES
+                        defaultFamilyName == null ? (!isLocalIndex ? QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES
                                 : QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES)
                                 : Bytes.toBytes(defaultFamilyName);
                 familyPropList.add(new Pair<byte[],Map<String,Object>>(cf, commonFamilyProps));
@@ -1907,9 +1900,7 @@ public class MetaDataClient {
              */
             Collections.reverse(tableMetaData);
 
-            if (parent != null && tableType == PTableType.INDEX && indexType == IndexType.LOCAL) {
-                tableProps.put(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME, Boolean.TRUE);
-            } else {
+            if (!isLocalIndex) {
                 splits = SchemaUtil.processSplits(splits, pkColumns, saltBucketNum, connection.getQueryServices().getProps().getBoolean(
                         QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, QueryServicesOptions.DEFAULT_FORCE_ROW_KEY_ORDER));
             }
@@ -2190,9 +2181,16 @@ public class MetaDataClient {
                 buf.append("'" + ref.getTable().getName().getString() + "',");
             }
             buf.setCharAt(buf.length() - 1, ')');
-            if(tableRefs.get(0).getTable().getIndexType()==IndexType.LOCAL) {
-                buf.append(" AND COLUMN_FAMILY='" + QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX
-                        + QueryConstants.DEFAULT_COLUMN_FAMILY + "'");
+            if (tableRefs.get(0).getTable().getIndexType() == IndexType.LOCAL) {
+                buf.append(" AND COLUMN_FAMILY IN(");
+                if (tableRefs.get(0).getTable().getColumnFamilies().isEmpty()) {
+                    buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
+                } else {
+                    for (PColumnFamily cf : tableRefs.get(0).getTable().getColumnFamilies()) {
+                        buf.append("'" + cf.getName().getString() + "',");
+                    }
+                }
+                buf.setCharAt(buf.length() - 1, ')');
             }
             conn.createStatement().execute(buf.toString());
             success = true;
@@ -2665,7 +2663,7 @@ public class MetaDataClient {
      */
     private static byte[] getNewEmptyColumnFamilyOrNull (PTable table, PColumn columnToDrop) {
         if (table.getType() != PTableType.VIEW && !SchemaUtil.isPKColumn(columnToDrop) && table.getColumnFamilies().get(0).getName().equals(columnToDrop.getFamilyName()) && table.getColumnFamilies().get(0).getColumns().size() == 1) {
-            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()), table.getIndexType()==IndexType.LOCAL);
+            return SchemaUtil.getEmptyColumnFamily(table.getDefaultFamilyName(), table.getColumnFamilies().subList(1, table.getColumnFamilies().size()));
         }
         // If unchanged, return null
         return null;

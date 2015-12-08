@@ -184,26 +184,37 @@ public class PhoenixRuntime {
             conn = DriverManager.getConnection(jdbcUrl, props)
                     .unwrap(PhoenixConnection.class);
 
-            for (String inputFile : execCmd.getInputFiles()) {
-                if (inputFile.endsWith(SQL_FILE_EXT)) {
-                    PhoenixRuntime.executeStatements(conn,
-                            new FileReader(inputFile), Collections.emptyList());
-                } else if (inputFile.endsWith(CSV_FILE_EXT)) {
-
-                    String tableName = execCmd.getTableName();
-                    if (tableName == null) {
-                        tableName = SchemaUtil.normalizeIdentifier(
-                                inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
-                                        inputFile.length() - CSV_FILE_EXT.length()));
-                    }
-                    CSVCommonsLoader csvLoader =
-                            new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
-                                    execCmd.isStrict(), execCmd.getFieldDelimiter(),
-                                    execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
-                                    execCmd.getArrayElementSeparator());
-                    csvLoader.upsert(inputFile);
+            if (execCmd.isLocalIndexUpgrade()) {
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
+                    throw new SQLException("May not specify the CURRENT_SCN property when upgrading");
                 }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
+                    throw new SQLException("May not specify the TENANT_ID_ATTRIB property when upgrading");
+                }
+                UpgradeUtil.upgradeLocalIndexes(conn);
+            } else {
+                for (String inputFile : execCmd.getInputFiles()) {
+                    if (inputFile.endsWith(SQL_FILE_EXT)) {
+                        PhoenixRuntime.executeStatements(conn,
+                                new FileReader(inputFile), Collections.emptyList());
+                    } else if (inputFile.endsWith(CSV_FILE_EXT)) {
+
+                        String tableName = execCmd.getTableName();
+                        if (tableName == null) {
+                            tableName = SchemaUtil.normalizeIdentifier(
+                                    inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
+                                            inputFile.length() - CSV_FILE_EXT.length()));
+                        }
+                        CSVCommonsLoader csvLoader =
+                                new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
+                                        execCmd.isStrict(), execCmd.getFieldDelimiter(),
+                                        execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
+                                        execCmd.getArrayElementSeparator());
+                        csvLoader.upsert(inputFile);
+                    }
+                }                
             }
+
         } catch (Throwable t) {
             t.printStackTrace();
             exitStatus = 1;
@@ -457,6 +468,7 @@ public class PhoenixRuntime {
         private Character escapeCharacter;
         private String arrayElementSeparator;
         private boolean strict;
+        private boolean localIndexUpgrade;
         private List<String> inputFiles;
 
         /**
@@ -482,6 +494,9 @@ public class PhoenixRuntime {
                             "character");
             Option arrayValueSeparatorOption = new Option("a", "array-separator", true,
                     "Define the array element separator, defaults to ':'");
+            Option localIndexUpgradeOption = new Option("l", "local-index-upgrade", false,
+                    "Used to upgrade local index data by moving index data from separate table to "
+                    + "separate column families in the same table.");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -490,6 +505,7 @@ public class PhoenixRuntime {
             options.addOption(quoteCharacterOption);
             options.addOption(escapeCharacterOption);
             options.addOption(arrayValueSeparatorOption);
+            options.addOption(localIndexUpgradeOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -529,7 +545,7 @@ public class PhoenixRuntime {
             execCmd.arrayElementSeparator = cmdLine.getOptionValue(
                     arrayValueSeparatorOption.getOpt(),
                     CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
-
+            execCmd.localIndexUpgrade = cmdLine.hasOption(localIndexUpgradeOption.getOpt());
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
@@ -537,6 +553,9 @@ public class PhoenixRuntime {
             }
             execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
+            if(execCmd.localIndexUpgrade) {
+                return execCmd;
+            }
             for (String arg : argList) {
                 if (arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
@@ -618,6 +637,10 @@ public class PhoenixRuntime {
 
         public boolean isStrict() {
             return strict;
+        }
+
+        public boolean isLocalIndexUpgrade() {
+            return localIndexUpgrade;
         }
     }
     

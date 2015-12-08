@@ -110,7 +110,7 @@ public class ColumnRef {
         	return new ProjectedColumnExpression(column, table, displayName);
         }
        
-        return new KeyValueColumnExpression(column, displayName, table.getIndexType()==IndexType.LOCAL);
+        return new KeyValueColumnExpression(column, displayName);
     }
 
     public ColumnRef cloneAtTimestamp(long timestamp) {

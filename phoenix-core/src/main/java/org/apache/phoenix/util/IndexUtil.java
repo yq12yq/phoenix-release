@@ -39,10 +39,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -87,6 +85,9 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.collect.Lists;
+
+import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
+import static org.apache.phoenix.query.QueryConstants.NAME_SEPARATOR;;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
@@ -138,6 +139,13 @@ public class IndexUtil {
         return name.substring(0,name.indexOf(INDEX_COLUMN_NAME_SEP));
     }
 
+    public static String getActualColumnFamilyName(String name) {
+        if(name.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+            return name.substring(LOCAL_INDEX_COLUMN_FAMILY_PREFIX.length());
+        }
+        return name;
+    }
+
     public static String getCaseSensitiveDataColumnFullName(String name) {
         int index = name.indexOf(INDEX_COLUMN_NAME_SEP) ;
         return SchemaUtil.getCaseSensitiveColumnDisplayName(name.substring(0, index), name.substring(index+1));
@@ -161,6 +169,11 @@ public class IndexUtil {
         return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
     }
 
+    public static String getLocalIndexColumnFamily(String dataColumnFamilyName) {
+        return dataColumnFamilyName == null ? null
+                : QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + dataColumnFamilyName;
+    }
+
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
         int pos = indexColumnName.indexOf(INDEX_COLUMN_NAME_SEP);
         if (pos < 0) {
@@ -175,7 +188,7 @@ public class IndexUtil {
         }
         PColumnFamily family;
         try {
-            family = dataTable.getColumnFamily(indexColumnName.substring(0, pos));
+            family = dataTable.getColumnFamily(getDataColumnFamilyName(indexColumnName));
         } catch (ColumnFamilyNotFoundException e) {
             throw new IllegalArgumentException("Could not find column family \"" +  indexColumnName.substring(0, pos) + "\" in index column name of \"" + indexColumnName + "\"", e);
         }
