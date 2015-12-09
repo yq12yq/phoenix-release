@@ -19,7 +19,9 @@
  */
 package org.apache.phoenix.pig;
 
-import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.TestUtil.LOCALHOST;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -37,16 +39,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.apache.pig.ExecType;
 import org.apache.pig.PigServer;
-import org.apache.pig.backend.hadoop.datastorage.ConfigurationUtil;
 import org.apache.pig.builtin.mock.Storage;
 import org.apache.pig.builtin.mock.Storage.Data;
 import org.apache.pig.data.DataType;
@@ -55,7 +53,6 @@ import org.apache.pig.impl.logicalLayer.schema.Schema;
 import org.apache.pig.impl.logicalLayer.schema.Schema.FieldSchema;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -65,7 +62,7 @@ import com.google.common.base.Preconditions;
  * Test class to run all the integration tests against a virtual map reduce cluster.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixHBaseLoaderIT {
+public class PhoenixHBaseLoaderIT extends BaseHBaseManagedTimeIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixHBaseLoaderIT.class);
     private static final String SCHEMA_NAME = "T";
@@ -78,27 +75,12 @@ public class PhoenixHBaseLoaderIT {
     private static PigServer pigServer;
     private static Configuration conf;
 
-    @BeforeClass
-    public static void setUpBeforeClass() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
-        conf = hbaseTestUtil.getConfiguration();
-        setUpConfigForMiniCluster(conf);
-        conf.set(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        hbaseTestUtil.startMiniCluster();
-
-        Class.forName(PhoenixDriver.class.getName());
-        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        conn =
-                DriverManager.getConnection(PhoenixRuntime.JDBC_PROTOCOL
-                        + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum,
-                    props);
-    }
-
     @Before
     public void setUp() throws Exception {
-        pigServer = new PigServer(ExecType.LOCAL, ConfigurationUtil.toProperties(conf));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        zkQuorum = LOCALHOST + JDBC_PROTOCOL_SEPARATOR + getZKClientPort(getTestClusterConfig());
+        pigServer = new PigServer(ExecType.LOCAL, getTestClusterConfig());
     }
 
     /**
