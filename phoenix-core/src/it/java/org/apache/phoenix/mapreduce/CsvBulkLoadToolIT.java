@@ -90,7 +90,7 @@ public class CsvBulkLoadToolIT {
 
     @Test
     public void testBasicImport() throws Exception {
-
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE)");
 
@@ -127,7 +127,7 @@ public class CsvBulkLoadToolIT {
 
     @Test
     public void testFullOptionImport() throws Exception {
-
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE2 (ID INTEGER NOT NULL PRIMARY KEY, " +
                 "NAME VARCHAR, NAMES VARCHAR ARRAY)");
@@ -165,7 +165,7 @@ public class CsvBulkLoadToolIT {
 
     @Test
     public void testImportWithIndex() throws Exception {
-
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE3 (ID INTEGER NOT NULL PRIMARY KEY, " +
             "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
@@ -200,7 +200,7 @@ public class CsvBulkLoadToolIT {
 
     @Test
     public void testImportWithLocalIndex() throws Exception {
-
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE TABLE6 (ID INTEGER NOT NULL PRIMARY KEY, " +
                 "FIRST_NAME VARCHAR, LAST_NAME VARCHAR) SPLIT ON(1,2)");
@@ -252,11 +252,13 @@ public class CsvBulkLoadToolIT {
 
     @Test
     public void testImportOneIndexTable() throws Exception {
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         testImportOneIndexTable("TABLE4", false);
     }
 
     @Test
     public void testImportOneLocalIndexTable() throws Exception {
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         testImportOneIndexTable("TABLE5", true);
     }
 

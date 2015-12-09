@@ -72,21 +72,25 @@ public class IndexToolIT {
     
     @Test
     public void testImmutableGlobalIndex() throws Exception {
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         testSecondaryIndex("SCHEMA", "DATA_TABLE1", true, false);
     }
     
     @Test
     public void testImmutableLocalIndex() throws Exception {
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         testSecondaryIndex("SCHEMA", "DATA_TABLE2", true, true);
     }
     
     @Test
     public void testMutableGlobalIndex() throws Exception {
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         testSecondaryIndex("SCHEMA", "DATA_TABLE3", false, false);
     }
     
     @Test
     public void testMutableLocalIndex() throws Exception {
+        if (System.getProperty("os.name").startsWith("Windows")) return;
         testSecondaryIndex("SCHEMA", "DATA_TABLE4", false, true);
     }
     
@@ -178,7 +182,7 @@ public class IndexToolIT {
      */
     @Test
     public void testMutalbleIndexWithUpdates() throws Exception {
-        
+        if (System.getProperty("os.name").startsWith("Windows")) return; 
         final String dataTable = "DATA_TABLE5";
         final String indxTable = String.format("%s_%s",dataTable,"INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
