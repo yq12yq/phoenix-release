@@ -379,7 +379,9 @@ public class IndexHalfStoreFileReader extends StoreFile.Reader {
                         return 1;
                     }
                 }
-                return delegate.reseekTo(key, offset, length);
+                KeyValue replacedKey = getKeyPresentInHFiles(key);
+                return delegate.reseekTo(replacedKey.getBuffer(), replacedKey.getKeyOffset(),
+                    replacedKey.getKeyLength());
             }
 
             @Override
