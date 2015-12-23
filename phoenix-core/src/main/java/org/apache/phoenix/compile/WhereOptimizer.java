@@ -308,7 +308,7 @@ public class WhereOptimizer {
         // we can still use our skip scan. The ScanRanges.create() call will explode
         // out the keys.
         slotSpan = Arrays.copyOf(slotSpan, cnf.size());
-        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, forcedRangeScan, nBuckets);
+        ScanRanges scanRanges = ScanRanges.create(schema, cnf, slotSpan, minMaxRange, forcedRangeScan, nBuckets,table.getRowTimestampColPos());
         context.setScanRanges(scanRanges);
         if (whereClause == null) {
             return null;

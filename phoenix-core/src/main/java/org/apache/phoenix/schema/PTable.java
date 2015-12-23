@@ -296,6 +296,12 @@ public interface PTable extends PMetaDataEntity {
      * on or null if not an index.
      */
     PName getParentSchemaName();
+    
+    /**
+    * @return Position of the column with {@link PColumn#isRowTimestamp()} as true.
+    * -1 if there is no such column.
+    */
+    int getRowTimestampColPos();
 
     /**
      * For a view, return the name of table in Phoenix that physically stores data.

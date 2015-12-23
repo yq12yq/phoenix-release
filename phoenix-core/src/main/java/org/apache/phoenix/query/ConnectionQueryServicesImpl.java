@@ -158,7 +158,6 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -1858,9 +1857,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
 
                                 String columnsToAdd = "";
+								if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_4_0) {
+									columnsToAdd = PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP + " "
+											+ PBoolean.INSTANCE.getSqlTypeName();
+								}
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
                                     // We know that we always need to add the STORE_NULLS column for 4.3 release
-                                    columnsToAdd = PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                    columnsToAdd = ", " + PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
                                     HBaseAdmin admin = null;
                                     try {
                                         admin = getAdmin();
