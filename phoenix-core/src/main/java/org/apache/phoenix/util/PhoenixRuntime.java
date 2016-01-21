@@ -361,7 +361,7 @@ public class PhoenixRuntime {
         PTable table = PhoenixRuntime.getTable(conn, SchemaUtil.normalizeFullTableName(tableName));
         List<ColumnInfo> columnInfoList = Lists.newArrayList();
         Set<String> unresolvedColumnNames = new TreeSet<String>();
-        if (columns == null) {
+        if (columns == null || columns.isEmpty()) {
             // use all columns in the table
         	int offset = (table.getBucketNum() == null ? 0 : 1);
         	for (int i = offset; i < table.getColumns().size(); i++) {
