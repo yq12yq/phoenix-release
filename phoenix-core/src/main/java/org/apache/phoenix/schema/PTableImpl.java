@@ -125,6 +125,7 @@ public class PTableImpl implements PTable {
     private int estimatedSize;
     private IndexType indexType;
     private PTableStats tableStats = PTableStats.EMPTY_STATS;
+    private int rowTimestampColPos;
 
     public PTableImpl() {
         this.indexes = Collections.emptyList();
@@ -381,10 +382,14 @@ public class PTableImpl implements PTable {
         int maxExpectedSize = allColumns.length - numPKColumns;
         // Maintain iteration order so that column families are ordered as they are listed
         Map<PName, List<PColumn>> familyMap = Maps.newLinkedHashMap();
+        PColumn rowTimestampCol = null;
         for (PColumn column : allColumns) {
             PName familyName = column.getFamilyName();
             if (familyName == null) {
-            	 pkColumns.add(column);
+                pkColumns.add(column);
+                if (column.isRowTimestamp()) {
+                    rowTimestampCol = column;
+                }
             }
             if (familyName == null) {
                 estimatedSize += column.getEstimatedSize(); // PK columns
@@ -399,6 +404,11 @@ public class PTableImpl implements PTable {
             }
         }
         this.pkColumns = ImmutableList.copyOf(pkColumns);
+        if (rowTimestampCol != null) {
+            this.rowTimestampColPos = this.pkColumns.indexOf(rowTimestampCol);
+        } else {
+            this.rowTimestampColPos = -1;
+        }
         this.rowKeySchema = builder.build();
         estimatedSize += rowKeySchema.getEstimatedSize();
         Iterator<Map.Entry<PName,List<PColumn>>> iterator = familyMap.entrySet().iterator();
@@ -1082,4 +1092,8 @@ public class PTableImpl implements PTable {
         return parentSchemaName;
     }
 
+     @Override
+     public int getRowTimestampColPos() {
+         return rowTimestampColPos;
+     }
 }

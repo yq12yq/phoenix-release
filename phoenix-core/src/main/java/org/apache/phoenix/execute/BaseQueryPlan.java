@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.execute;
 
-import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
-import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -36,6 +33,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -57,8 +55,6 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -74,7 +70,6 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Lists;
 
@@ -183,12 +178,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             scan.setSmall(true);
         }
         
-        // Set producer on scan so HBase server does round robin processing
-        //setProducer(scan);
-        // Set the time range on the scan so we don't get back rows newer than when the statement was compiled
-        // The time stamp comes from the server at compile time when the meta data
-        // is resolved.
-        // TODO: include time range in explain plan?
+       
         PhoenixConnection connection = context.getConnection();
 
         // set read consistency
@@ -196,16 +186,25 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 && context.getCurrentTable().getTable().getType() != PTableType.SYSTEM) {
             scan.setConsistency(connection.getConsistency());
         }
-        if (context.getScanTimeRange() == null) {
-           Long scn = connection.getSCN();
-           if (scn == null) {
-               scn = context.getCurrentTime();
-            }
-            TimeRange scanTimeRange = scan.getTimeRange();
-            ScanUtil.setTimeRange(scan, scanTimeRange.getMin(), Math.min(scanTimeRange.getMax(), scn));
-        } else {
-            ScanUtil.setTimeRange(scan, context.getScanTimeRange());
+        // Get the time range of row_timestamp column
+        TimeRange rowTimestampRange = context.getScanRanges().getRowTimestampRange();
+        // Get the already existing time range on the scan.
+        TimeRange scanTimeRange = scan.getTimeRange();
+        Long scn = connection.getSCN();
+        if (scn == null) {
+            scn = context.getCurrentTime();
         }
+        try {
+            TimeRange timeRangeToUse =
+                    ScanUtil.intersectTimeRange(rowTimestampRange, scanTimeRange, scn);
+            if (timeRangeToUse == null) {
+                return ResultIterator.EMPTY_ITERATOR;
+            }
+            scan.setTimeRange(timeRangeToUse.getMin(), timeRangeToUse.getMax());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         ScanUtil.setTenantId(scan, connection.getTenantId() == null ? null : connection.getTenantId().getBytes());
         String customAnnotations = LogUtil.customAnnotationsToString(connection);
         ScanUtil.setCustomAnnotations(scan, customAnnotations == null ? null : customAnnotations.getBytes());
