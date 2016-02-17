@@ -30,6 +30,7 @@
         <include>phoenix-*-client.jar</include>
         <include>phoenix-*-server.jar</include>
         <include>phoenix-*-mapreduce.jar</include>
+	<include>phoenix-*-client-spark.jar</include>
       </includes>
     </fileSet>
     <fileSet>
@@ -40,6 +41,14 @@
       </includes>
       <fileMode>0644</fileMode>
     </fileSet>
+    <fileSet>
+	<directory>${project.basedir}/../phoenix-server/target/</directory>
+	<outputDirectory>/</outputDirectory>
+	<includes>
+		<include>phoenix-*-runnable.jar</include>
+	</includes>
+	<fileMode>0644</fileMode>
+   </fileSet>
     <!-- This is only necessary until maven fixes the intra-project dependency bug
       in maven 3.0. Until then, we have to include the jars for sub-projects explicitly.
       Otherwise, test jars are pulled in wrongly.
