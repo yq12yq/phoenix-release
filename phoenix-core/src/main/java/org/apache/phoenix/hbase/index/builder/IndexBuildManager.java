@@ -39,8 +39,7 @@ import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
 import org.apache.phoenix.hbase.index.parallel.Task;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
 import org.apache.phoenix.hbase.index.parallel.ThreadPoolBuilder;
-
-import com.google.common.util.concurrent.MoreExecutors;
+import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 
 /**
  * Manage the building of index updates from primary table updates.
@@ -78,11 +77,10 @@ public class IndexBuildManager implements Stoppable {
    * @throws IOException if an {@link IndexBuilder} cannot be correctly steup
    */
   public IndexBuildManager(RegionCoprocessorEnvironment env) throws IOException {
-    // Prevent deadlock by using single thread for all reads so that we know
-    // we can get the ReentrantRWLock. See PHOENIX-2671 for more details.
-    this(getIndexBuilder(env), new QuickFailingTaskRunner(MoreExecutors.sameThreadExecutor()));
+    this(getIndexBuilder(env), new QuickFailingTaskRunner(ThreadPoolManager.getExecutor(
+      getPoolBuilder(env), env)));
   }
-  
+
   private static IndexBuilder getIndexBuilder(RegionCoprocessorEnvironment e) throws IOException {
     Configuration conf = e.getConfiguration();
     Class<? extends IndexBuilder> builderClass =
