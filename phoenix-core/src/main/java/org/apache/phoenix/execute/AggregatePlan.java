@@ -63,6 +63,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ScanUtil;
@@ -214,7 +215,7 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         BaseResultIterators iterators = hasSerialHint && canBeExecutedSerially
                 ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, caches;
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, caches);
 
         splits = iterators.getSplits();
         scans = iterators.getScans();

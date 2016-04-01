@@ -674,6 +674,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (hasGuidePosts) {
                 this.estimatedRows = estimatedRows;
                 this.estimatedSize = estimatedSize;
+            } else if (scanRanges.isPointLookup()) {
+                this.estimatedRows = 1L;
+                this.estimatedSize = SchemaUtil.estimateRowSize(table);
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
