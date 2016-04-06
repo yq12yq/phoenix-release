@@ -6560,26 +6560,25 @@ public final class PTableProtos {
       "leStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014\022\033\n\023" +
       "guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyBytesCou",
       "nt\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n\013pGu" +
-             "idePosts\030\006 \001(\0132\014.PGuidePosts\"\357\004\n\006PTable\022" +
-             "\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNameByt" +
-             "es\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTableType" +
-             "\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumber\030\005" +
-             " \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013pkNameBytes\030\007" +
-             " \001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007columns\030\t \003(\013" +
-             "2\010.PColumn\022\030\n\007indexes\030\n \003(\0132\007.PTable\022\027\n\017" +
-             "isImmutableRows\030\013 \002(\010\022 \n\nguidePosts\030\014 \003(" +
-             "\0132\014.PTableStats\022\032\n\022dataTableNameBytes\030\r ",
-             "\001(\014\022\031\n\021defaultFamilyName\030\016 \001(\014\022\022\n\ndisabl" +
-             "eWAL\030\017 \002(\010\022\023\n\013multiTenant\030\020 \002(\010\022\020\n\010viewT" +
-             "ype\030\021 \001(\014\022\025\n\rviewStatement\030\022 \001(\014\022\025\n\rphys" +
-             "icalNames\030\023 \003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013vie" +
-             "wIndexId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016sta" +
-             "tsTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n" +
-             "\017baseColumnCount\030\031 \001(\005\022\036\n\026rowKeyOrderOpt" +
-             "imizable\030\032 \001(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000" +
-             "\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020" +
-             "\004B@\n(org.apache.phoenix.coprocessor.gene",
-             "ratedB\014PTableProtosH\001\210\001\001\240\001\001"
+      "idePosts\030\006 \001(\0132\014.PGuidePosts\"\266\004\n\006PTable\022" +
+      "\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNameByt" +
+      "es\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTableType" +
+      "\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumber\030\005" +
+      " \002(\003\022\021\n\ttimeStamp\030\006 \002(\003\022\023\n\013pkNameBytes\030\007" +
+      " \001(\014\022\021\n\tbucketNum\030\010 \002(\005\022\031\n\007columns\030\t \003(\013" +
+      "2\010.PColumn\022\030\n\007indexes\030\n \003(\0132\007.PTable\022\027\n\017" +
+      "isImmutableRows\030\013 \002(\010\022 \n\nguidePosts\030\014 \003(" +
+      "\0132\014.PTableStats\022\032\n\022dataTableNameBytes\030\r ",
+      "\001(\014\022\031\n\021defaultFamilyName\030\016 \001(\014\022\022\n\ndisabl" +
+      "eWAL\030\017 \002(\010\022\023\n\013multiTenant\030\020 \002(\010\022\020\n\010viewT" +
+      "ype\030\021 \001(\014\022\025\n\rviewStatement\030\022 \001(\014\022\025\n\rphys" +
+      "icalNames\030\023 \003(\014\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013vie" +
+      "wIndexId\030\025 \001(\005\022\021\n\tindexType\030\026 \001(\014\022\026\n\016sta" +
+      "tsTimeStamp\030\027 \001(\003\022\022\n\nstoreNulls\030\030 \001(\010*A\n" +
+      "\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIE" +
+      "W\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.p" +
+      "hoenix.coprocessor.generatedB\014PTableProt" +
+      "osH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
