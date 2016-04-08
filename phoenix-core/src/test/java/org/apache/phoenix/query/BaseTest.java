@@ -118,6 +118,9 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
+
+import org.apache.commons.lang.RandomStringUtils;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -125,6 +128,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
+import org.apache.hadoop.hbase.RandomStringGeneratorImpl;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
@@ -823,6 +827,10 @@ public abstract class BaseTest {
         String ddl = tableDDLMap.get(tableName);
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    protected static String generateRandomString() {
+      return RandomStringUtils.randomAlphabetic(20).toUpperCase();
     }
 
     protected static void createTestTable(String url, String ddl) throws SQLException {
