@@ -122,12 +122,13 @@
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <calcite.version>1.6.0</calcite.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.7.0</tephra.version>
     <spark.version>1.5.2</spark.version>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
+    <calcite.version>1.5.0</calcite.version>
+    <avatica.version>1.7.1</avatica.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
@@ -630,6 +631,18 @@
         <optional>true</optional>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-azure</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>compile</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.microsoft.azure</groupId>
+        <artifactId>azure-storage</artifactId>
+        <version>2.2.0</version>
+        <scope>compile</scope>
+      </dependency>
 
       <!-- General Dependencies -->
       <dependency>
@@ -645,14 +658,14 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
-        <version>${calcite.version}</version>
+        <groupId>org.apache.calcite.avatica</groupId>
+        <artifactId>avatica</artifactId>
+        <version>${avatica.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica-server</artifactId>
-        <version>${calcite.version}</version>
+        <groupId>org.apache.calcite.avatica</groupId>
+        <artifactId>avatica-server</artifactId>
+        <version>${avatica.version}</version>
       </dependency>
 
       <!-- Transaction dependencies -->
