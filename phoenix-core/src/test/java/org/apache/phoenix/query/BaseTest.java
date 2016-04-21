@@ -141,8 +141,6 @@ import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
-import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -747,9 +745,6 @@ public abstract class BaseTest {
         conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
         conf.setInt("hbase.regionserver.metahandler.count", 2);
         conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
-        conf.set(CoprocessorHost.MASTER_COPROCESSOR_CONF_KEY, IndexMasterObserver.class.getName());
-        conf.setClass(HConstants.HBASE_MASTER_LOADBALANCER_CLASS, IndexLoadBalancer.class,
-            LoadBalancer.class);
         conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
             RegionServerObserver.class) ;
         conf.setInt("dfs.namenode.handler.count", 2);
