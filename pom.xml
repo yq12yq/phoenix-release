@@ -128,7 +128,7 @@
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <calcite.version>1.5.0</calcite.version>
-    <avatica.version>1.7.1</avatica.version>
+    <avatica.version>1.8.0-SNAPSHOT</avatica.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
