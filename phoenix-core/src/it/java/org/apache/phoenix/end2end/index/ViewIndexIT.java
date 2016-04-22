@@ -98,7 +98,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     public ViewIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
         this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.viewIndexPhysicalTableName = MetaDataUtil.getLocalIndexTableName(physicalTableName.getNameAsString());
+        this.viewIndexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
 
     @Test
