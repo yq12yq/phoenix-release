@@ -116,10 +116,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
             // doing a complete copy over of all the index update for each table.
             final List<Mutation> mutations = kvBuilder.cloneIfNecessary((List<Mutation>)entry.getValue());
             final HTableInterfaceReference tableReference = entry.getKey();
-            if (env !=null && tableReference.getTableName().equals(
-                env.getRegion().getTableDesc().getNameAsString())) {
-                continue;
-            }
+            final RegionCoprocessorEnvironment env = this.env;
             /*
              * Write a batch of index updates to an index table. This operation stops (is cancelable) via two
              * mechanisms: (1) setting aborted or stopped on the IndexWriter or, (2) interrupting the running thread.
@@ -148,6 +145,27 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     try {
+                        // TODO: Once HBASE-11766 is fixed, reexamine whether this is necessary.
+                        // Also, checking the prefix of the table name to determine if this is a local
+                        // index is pretty hacky. If we're going to keep this, we should revisit that
+                        // as well.
+                        try {
+                            if (MetaDataUtil.isLocalIndex(tableReference.getTableName())) {
+                                Region indexRegion = IndexUtil.getIndexRegion(env);
+                                if (indexRegion != null) {
+                                    throwFailureIfDone();
+                                    indexRegion.batchMutate(mutations.toArray(new Mutation[mutations.size()]),
+                                        HConstants.NO_NONCE, HConstants.NO_NONCE);
+                                    return null;
+                                }
+                            }
+                        } catch (IOException ignord) {
+                            // when it's failed we fall back to the standard & slow way
+                            if (LOG.isDebugEnabled()) {
+                                LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
+                                        + ignord);
+                            }
+                        }
                         HTableInterface table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations);

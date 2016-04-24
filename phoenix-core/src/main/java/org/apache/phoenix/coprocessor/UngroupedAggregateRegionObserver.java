@@ -165,9 +165,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         s = super.preScannerOpen(e, scan, s);
         if (ScanUtil.isAnalyzeTable(scan)) {
-            if (!ScanUtil.isLocalIndex(scan)) {
-                scan.getFamilyMap().clear();
-            }
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
@@ -183,7 +180,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         RegionCoprocessorEnvironment env = c.getEnvironment();
         Region region = env.getRegion();
         long ts = scan.getTimeRange().getMax();
-        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         if (ScanUtil.isAnalyzeTable(scan)) {
             byte[] gp_width_bytes =
                     scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
@@ -196,7 +192,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             return collectStats(s, statsCollector, region, scan, env.getConfiguration());
         }
         int offsetToBe = 0;
-        if (localIndexScan) {
+        if (ScanUtil.isLocalIndex(scan)) {
             /*
              * For local indexes, we need to set an offset on row key expressions to skip
              * the region start key.
@@ -252,19 +248,22 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_CF);
         }
         TupleProjector tupleProjector = null;
+        Region dataRegion = null;
         byte[][] viewConstants = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
+        boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         if ((localIndexScan && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
+                dataRegion = IndexUtil.getDataRegion(env);
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
-                        region, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
         } 
         
         if (j != null)  {
@@ -514,8 +513,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!indexMutations.isEmpty() && batchSize > 0 &&
                                     indexMutations.size() % batchSize == 0) {
-                                commitBatch(region, indexMutations, null);
-                                indexMutations.clear();
+                                commitIndexMutations(c, region, indexMutations);
                             }
                         } catch (ConstraintViolationException e) {
                             // Log and ignore in count
@@ -546,8 +544,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
 
         if (!indexMutations.isEmpty()) {
-            commitBatch(region,indexMutations, null);
-            indexMutations.clear();
+            commitIndexMutations(c, region, indexMutations);
         }
 
         final boolean hadAny = hasAny;
@@ -580,6 +577,31 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         };
         return scanner;
+    }
+
+    private void commitIndexMutations(final ObserverContext<RegionCoprocessorEnvironment> c,
+            Region region, List<Mutation> indexMutations) throws IOException {
+        // Get indexRegion corresponding to data region
+        Region indexRegion = IndexUtil.getIndexRegion(c.getEnvironment());
+        if (indexRegion != null) {
+            commitBatch(indexRegion, indexMutations, null);
+        } else {
+            TableName indexTable =
+                    TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(region.getTableDesc()
+                            .getName()));
+            HTableInterface table = null;
+            try {
+                table = c.getEnvironment().getTable(indexTable);
+                table.batch(indexMutations);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(),
+                    ie);
+            } finally {
+                if (table != null) table.close();
+             }
+        }
+        indexMutations.clear();
     }
 
     @Override

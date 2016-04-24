@@ -17,19 +17,20 @@
  */
 package org.apache.phoenix.hbase.index;
 
-import org.apache.hadoop.hbase.regionserver.IncreasingToUpperBoundRegionSplitPolicy;
-import org.apache.phoenix.query.QueryConstants;
+import org.apache.hadoop.hbase.regionserver.RegionSplitPolicy;
 
 /**
  * Split policy for index regions to avoid split from external requests.
  */
-public class IndexRegionSplitPolicy extends IncreasingToUpperBoundRegionSplitPolicy {
+public class IndexRegionSplitPolicy extends RegionSplitPolicy {
 
     @Override
-    protected boolean skipStoreFileRangeCheck(String familyName) {
-        if (familyName.startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-            return true;
-        }
+    protected boolean shouldSplit() {
         return false;
     }
+
+    protected boolean skipStoreFileRangeCheck() {
+        return true;
+    }
+
 }

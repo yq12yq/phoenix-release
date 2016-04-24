@@ -517,7 +517,6 @@ public class PhoenixRuntime {
         private boolean isBypassUpgrade;
         private boolean mapNamespace;
         private String srcTable;
-        private boolean localIndexUpgrade;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -559,9 +558,6 @@ public class PhoenixRuntime {
             Option mapNamespaceOption = new Option("m", "map-namespace", true,
                     "Used to map table to a namespace matching with schema, require "+ QueryServices.IS_NAMESPACE_MAPPING_ENABLED +
                     " to be enabled");
-            Option localIndexUpgradeOption = new Option("l", "local-index-upgrade", false,
-                "Used to upgrade local index data by moving index data from separate table to "
-                + "separate column families in the same table.");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -573,7 +569,6 @@ public class PhoenixRuntime {
             options.addOption(upgradeOption);
             options.addOption(bypassUpgradeOption);
             options.addOption(mapNamespaceOption);
-            options.addOption(localIndexUpgradeOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -627,7 +622,7 @@ public class PhoenixRuntime {
                 }
                 execCmd.isBypassUpgrade = true;
             }
-            execCmd.localIndexUpgrade = cmdLine.hasOption(localIndexUpgradeOption.getOpt());
+
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
@@ -741,10 +736,6 @@ public class PhoenixRuntime {
 
         public String getSrcTable() {
             return srcTable;
-        }
-
-        public boolean isLocalIndexUpgrade() {
-            return localIndexUpgrade;
         }
     }
     

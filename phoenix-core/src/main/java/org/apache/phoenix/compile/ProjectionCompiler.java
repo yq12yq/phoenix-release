@@ -287,22 +287,14 @@ public class ProjectionCompiler {
             String indexColName = IndexUtil.getIndexColumnName(column);
             PColumn indexColumn = null;
             ColumnRef ref = null;
-            String indexColumnFamily = null;
             try {
                 indexColumn = index.getColumn(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
-                indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
                     try {
                         ref = new LocalIndexDataColumnRef(context, indexColName);
                         indexColumn = ref.getColumn();
-                        indexColumnFamily =
-                                indexColumn.getFamilyName() == null ? null
-                                        : (index.getIndexType() == IndexType.LOCAL ? IndexUtil
-                                                .getLocalIndexColumnFamily(indexColumn
-                                                        .getFamilyName().getString()) : indexColumn
-                                                .getFamilyName().getString());
                     } catch (ColumnFamilyNotFoundException c) {
                         throw e;
                     }
@@ -311,7 +303,7 @@ public class ProjectionCompiler {
                 }
             }
             if (resolveColumn) {
-                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumnFamily, indexColName);
+                ref = context.getResolver().resolveColumn(index.getTableName().getString(), indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString(), indexColName);
             }
             Expression expression = ref.newColumnExpression();
             projectedExpressions.add(expression);
