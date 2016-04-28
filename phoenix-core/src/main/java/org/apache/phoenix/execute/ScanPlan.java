@@ -99,9 +99,18 @@ public class ScanPlan extends BaseQueryPlan {
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
             TableRef tableRef, OrderBy orderBy, Integer limit, Integer offset, boolean allowPageFilter) throws SQLException {
-        if (statement.getHint().hasHint(HintNode.Hint.SERIAL)) {
+        PTable table = tableRef.getTable();
+        boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
+        boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table, orderBy, context); 
+        if (!canBeExecutedSerially) { 
+            if (hasSerialHint) {
+                logger.warn("This query cannot be executed serially. Ignoring the hint");
+            }
+            return false;
+        } else if (hasSerialHint) {
             return true;
         }
+        
         Scan scan = context.getScan();
         /*
          * If a limit is provided and we have no filter, run the scan serially when we estimate that
@@ -112,7 +121,6 @@ public class ScanPlan extends BaseQueryPlan {
         if (perScanLimit == null || scan.getFilter() != null) {
             return false;
         }
-        PTable table = tableRef.getTable();
         long scn = context.getConnection().getSCN() == null ? Long.MAX_VALUE : context.getConnection().getSCN();
         PTableStats tableStats = context.getConnection().getQueryServices().getTableStats(table.getName().getBytes(), scn);
         GuidePostsInfo gpsInfo = tableStats.getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
