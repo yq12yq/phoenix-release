@@ -976,9 +976,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HBaseAdmin admin = getAdmin()) {
             NamespaceDescriptor namespaceDescriptor = null;
             try {
+                namespaceDescriptor = admin.getNamespaceDescriptor(schemaName);
+            } catch (org.apache.hadoop.hbase.NamespaceNotFoundException e) {
+
+            }
+            if (namespaceDescriptor == null) {
                 namespaceDescriptor = NamespaceDescriptor.create(schemaName).build();
                 admin.createNamespace(namespaceDescriptor);
-            } catch (org.apache.hadoop.hbase.NamespaceExistException e) {}
+            }
             return namespaceDescriptor;
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
