@@ -28,23 +28,18 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -53,8 +48,6 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.regionserver.OperationStatus;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
@@ -69,7 +62,6 @@ import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.query.KeyRange;
@@ -83,7 +75,6 @@ import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Longs;
 
@@ -105,11 +96,10 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     private PhoenixIndexCodec codec;
     private IndexWriter writer;
     private boolean stopped;
-    private RegionCoprocessorEnvironment env = null;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
-        env = (RegionCoprocessorEnvironment)e;
+    	final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment)e;
         String serverName = env.getRegionServerServices().getServerName().getServerName();
         codec = new PhoenixIndexCodec();
         codec.initialize(env);
@@ -173,62 +163,15 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
-            
-            Multimap<HTableInterfaceReference, Mutation> resolveTableReferences = IndexWriter.resolveTableReferences(indexUpdates);
-            Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = resolveTableReferences.asMap().entrySet();
-            for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
-                if(entry.getKey().getTableName().equals(c.getEnvironment().getRegion().getTableDesc().getNameAsString())) {
-                    Iterator<Mutation> iterator = entry.getValue().iterator();
-                    List<Mutation> mutationsFromCP = new ArrayList<Mutation>(entry.getValue().size());
-                    while(iterator.hasNext()) {
-                        Mutation mutation = iterator.next();
-                        if (mutation instanceof Put) {
-                            mutationsFromCP.add(mutation);
-                        } else if (mutation instanceof Delete) {
-                            Delete delete = (Delete) mutation;
-                            if (delete.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY) != null) {
-                                mutationsFromCP.add(delete);
-                                continue;
-                              }
-
-                              // Other deletes are client-initiated and need to be translated into our own tombstones
-                              // TODO: this should delegate to the DeleteStrategy implementation.
-                              Put deleteMarkers = new Put(delete.getRow(), delete.getTimeStamp());
-                              for (byte[] family : delete.getFamilyCellMap().keySet()) {
-                                List<Cell> familyCells = delete.getFamilyCellMap().get(family);
-                                if (isFamilyDelete(familyCells)) {
-                                  deleteMarkers.add(family, TxConstants.FAMILY_DELETE_QUALIFIER, familyCells.get(0).getTimestamp(),
-                                      HConstants.EMPTY_BYTE_ARRAY);
-                                } else {
-                                  int cellSize = familyCells.size();
-                                  for (Cell cell : familyCells) {
-                                    deleteMarkers.add(family, CellUtil.cloneQualifier(cell), cell.getTimestamp(),
-                                                      HConstants.EMPTY_BYTE_ARRAY);
-                                  }
-                                }
-                              }
-                              for (Map.Entry<String, byte[]> entry2 : delete.getAttributesMap().entrySet()) {
-                                  deleteMarkers.setAttribute(entry2.getKey(), entry2.getValue());
-                              }
-                              mutationsFromCP.add(deleteMarkers);
-                        }
-                    }
-                    miniBatchOp.addOperationsFromCP(0,mutationsFromCP.toArray(new Mutation[mutationsFromCP.size()]));
-                } 
-            }
             // no index updates, so we are done
             if (!indexUpdates.isEmpty()) {
-                this.writer.write(indexUpdates, false);
+                this.writer.write(indexUpdates);
             }
         } catch (Throwable t) {
             String msg = "Failed to update index with entries:" + indexUpdates;
             LOG.error(msg, t);
             ServerUtil.throwIOException(msg, t);
         }
-    }
-
-    private boolean isFamilyDelete(List<Cell> familyCells) {
-        return familyCells.size() == 1 && CellUtil.isDeleteFamily(familyCells.get(0));
     }
 
     private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, byte[] txRollbackAttribute) throws IOException {
