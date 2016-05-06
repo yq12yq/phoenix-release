@@ -744,12 +744,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT).setMessage(". Query couldn't be completed in the alloted time: " + queryTimeOut + " ms").build().buildException(); 
                         }
                         if (isLocalIndex && previousScan != null && previousScan.getScan() != null
-                                && ((!isReverse && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_ACTUAL_START_ROW),
+                                && (((!isReverse && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_ACTUAL_START_ROW),
                                         previousScan.getScan().getStopRow()) < 0)
                                 || (isReverse && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_ACTUAL_START_ROW),
                                         previousScan.getScan().getStopRow()) > 0)
                                 || (Bytes.compareTo(scanPair.getFirst().getStopRow(),
-                                                previousScan.getScan().getStopRow()) == 0))) {
+                                                previousScan.getScan().getStopRow()) == 0)) && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_START_ROW_SUFFIX),
+                                                    previousScan.getScan().getAttribute(SCAN_START_ROW_SUFFIX))==0)) {
                             continue;
                         }
                         PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);

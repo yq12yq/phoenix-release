@@ -402,10 +402,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             }
 
             Region region = c.getEnvironment().getRegion();
-            boolean aquiredLock = false;
+            boolean acquiredLock = false;
             try {
                 region.startRegionOperation();
-                aquiredLock = true;
+                acquiredLock = true;
                 synchronized (scanner) {
                     do {
                         List<Cell> results = new ArrayList<Cell>();
@@ -426,7 +426,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                     } while (hasMore && groupByCache.size() < limit);
                 }
             }  finally {
-                if (aquiredLock) region.closeRegionOperation();
+                if (acquiredLock) region.closeRegionOperation();
             }
 
             RegionScanner regionScanner = groupByCache.getScanner(scanner);
@@ -474,10 +474,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // start of a new row. Otherwise, we have to wait until an agg
                 int countOffset = rowAggregators.length == 0 ? 1 : 0;
                 Region region = c.getEnvironment().getRegion();
-                boolean aquiredLock = false;
+                boolean acquiredLock = false;
                 try {
                     region.startRegionOperation();
-                    aquiredLock = true;
+                    acquiredLock = true;
                     synchronized (scanner) {
                         do {
                             List<Cell> kvs = new ArrayList<Cell>();
@@ -509,7 +509,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         } while (hasMore && !aggBoundary && !atLimit);
                     }
                 } finally {
-                    if (aquiredLock) region.closeRegionOperation();
+                    if (acquiredLock) region.closeRegionOperation();
                 }
 
                 if (currentKey != null) {

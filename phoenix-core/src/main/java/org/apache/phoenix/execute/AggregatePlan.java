@@ -195,7 +195,7 @@ public class AggregatePlan extends BaseQueryPlan {
                  *    order, so we can early exit, even when aggregate functions are used, as
                  *    the rows in the group are contiguous.
                  */
-                context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT,
+                scan.setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT,
                         PInteger.INSTANCE.toBytes(limit + (offset == null ? 0 : offset)));
             }
         }

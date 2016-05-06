@@ -383,7 +383,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
                         if(hasReferences && actualStartKey!=null) {
                             next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                                null);
+                                null, arrayElementCell);
                             if (result.isEmpty()) {
                                 return next;
                             }
@@ -422,7 +422,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
                     if(hasReferences && actualStartKey!=null) {
                         next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                                    scannerContext);
+                                    scannerContext, arrayElementCell);
                         if (result.isEmpty()) {
                             return next;
                         }
@@ -453,7 +453,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             private boolean scanTillScanStartRow(final RegionScanner s,
                     final Set<KeyValueColumnExpression> arrayKVRefs,
                     final Expression[] arrayFuncRefs, List<Cell> result,
-                    ScannerContext scannerContext) throws IOException {
+                    ScannerContext scannerContext, Cell arrayElementCell) throws IOException {
                 boolean next = true;
                 Cell firstCell = result.get(0);
                 while (Bytes.compareTo(firstCell.getRowArray(), firstCell.getRowOffset(),
@@ -468,7 +468,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         return next;
                     }
                     if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                        int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                        arrayElementCell = result.get(arrayElementCellPosition);
                     }
                     firstCell = result.get(0);
                 }
