@@ -74,3 +74,5 @@ cc76ff5 PHOENIX-2359 Configuration for PQS to use Protobuf serialization instead
 31e2326 PHOENIX-2448 Fix quoting for sqlline-thin.py on Windows
 3ea11f3 PHOENIX-2449 QueryServer needs Hadoop configuration on classpath with Kerberos
 be9aca6 PHOENIX-2477 ClassCastException in IndexedWALEditCodec after HBASE-14501 (possible dataloss)
+
+e3a5d1d PHOENIX-2892 Remove scan to pre-warm block cache before index update
