@@ -50,7 +50,6 @@ import java.util.regex.Pattern;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -234,11 +233,11 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 }, {
                 "SORT-MERGE-JOIN (SEMI) TABLES\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + " [1]\n" +
                 "            SERVER SORTED BY [\"I.0:supplier_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + " [1]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
@@ -254,7 +253,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 4-WAY FULL SCAN OVER " + JOIN_COITEM_TABLE_DISPLAY_NAME + "\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
@@ -264,7 +263,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "                CLIENT MERGE SORT\n" +
                 "    CLIENT SORTED BY \\[.*.CO_ITEM_ID, .*.CO_ITEM_NAME\\]\n" +
                 "AND\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[1\\]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
@@ -276,12 +275,12 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "CLIENT FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
                 
                 "SORT-MERGE-JOIN \\(SEMI\\) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME + " \\[1\\]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY \\[\"Join.idx_customer.:customer_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND \\(SKIP MERGE\\)\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[-32768\\]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + " \\[1\\]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n" +
                 "    CLIENT MERGE SORT\n" +

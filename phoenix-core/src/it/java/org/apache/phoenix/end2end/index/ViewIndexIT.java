@@ -34,7 +34,6 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -98,7 +97,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     public ViewIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
         this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.viewIndexPhysicalTableName = MetaDataUtil.getLocalIndexTableName(physicalTableName.getNameAsString());
+        this.viewIndexPhysicalTableName = physicalTableName.getNameAsString();
     }
 
     @Test

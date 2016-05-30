@@ -56,7 +56,6 @@ import com.google.common.collect.ImmutableMap;
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
-
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
