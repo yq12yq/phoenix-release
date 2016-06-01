@@ -37,6 +37,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
@@ -232,7 +233,9 @@ public class StatementContext {
 
     public long getCurrentTime() throws SQLException {
         long ts = this.getCurrentTable().getTimeStamp();
-        if (ts != QueryConstants.UNSET_TIMESTAMP) {
+        // if the table is transactional then it is only resolved once per query, so we can't use the table timestamp
+        if (this.getCurrentTable().getTable().getType() != PTableType.PROJECTED && ts != QueryConstants
+                .UNSET_TIMESTAMP) {
             return ts;
         }
         if (currentTime != QueryConstants.UNSET_TIMESTAMP) {
