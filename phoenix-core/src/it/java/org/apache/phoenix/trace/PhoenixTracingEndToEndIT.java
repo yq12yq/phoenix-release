@@ -49,6 +49,7 @@ import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.After;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
@@ -56,6 +57,7 @@ import com.google.common.collect.ImmutableMap;
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
+@Ignore
 public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);

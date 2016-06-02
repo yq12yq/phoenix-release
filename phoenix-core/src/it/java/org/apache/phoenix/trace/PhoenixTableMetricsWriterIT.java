@@ -21,6 +21,7 @@ import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.Connection;
@@ -32,6 +33,7 @@ import static org.junit.Assert.fail;
 /**
  * Test that the logging sink stores the expected metrics/stats
  */
+@Ignore
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
     /**
