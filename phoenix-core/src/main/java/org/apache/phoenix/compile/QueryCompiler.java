@@ -542,6 +542,7 @@ public class QueryCompiler {
         context.setResolver(resolver); // recover resolver
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns);
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder); 
+        context.getAggregationManager().compile(context, groupBy);
         // Final step is to build the query plan
         if (!asSubquery) {
             int maxRows = statement.getMaxRows();

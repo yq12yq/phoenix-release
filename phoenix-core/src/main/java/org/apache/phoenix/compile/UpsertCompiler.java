@@ -627,7 +627,12 @@ public class UpsertCompiler {
                     PTable projectedTable = PTableImpl.makePTable(table, projectedColumns);
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
-                    final RowProjector aggProjector = ProjectionCompiler.compile(queryPlan.getContext(), select, GroupBy.EMPTY_GROUP_BY);
+
+                    final StatementContext context = queryPlan.getContext();
+                    final RowProjector aggProjector = ProjectionCompiler.compile(context, select, GroupBy.EMPTY_GROUP_BY);
+                    context.getAggregationManager().compile(queryPlan.getContext()
+                        ,GroupBy.EMPTY_GROUP_BY);
+                    
                     /*
                      * Transfer over PTable representing subset of columns selected, but all PK columns.
                      * Move columns setting PK first in pkSlot order, adding LiteralExpression of null for any missing ones.
@@ -635,7 +640,6 @@ public class UpsertCompiler {
                      * In region scan, evaluate expressions in order, collecting first n columns for PK and collection non PK in mutation Map
                      * Create the PRow and get the mutations, adding them to the batch
                      */
-                    final StatementContext context = queryPlan.getContext();
                     final Scan scan = context.getScan();
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE, UngroupedAggregateRegionObserver.serialize(projectedTable));
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));

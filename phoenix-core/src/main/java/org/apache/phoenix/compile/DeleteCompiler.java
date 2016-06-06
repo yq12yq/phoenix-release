@@ -468,6 +468,7 @@ public class DeleteCompiler {
                 SelectStatement aggSelect = SelectStatement.create(SelectStatement.COUNT_ONE, delete.getHint());
                 final RowProjector projector = ProjectionCompiler.compile(context, aggSelect, GroupBy.EMPTY_GROUP_BY);
                 final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, projector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                context.getAggregationManager().compile(context, GroupBy.EMPTY_GROUP_BY);
                 mutationPlans.add(new MutationPlan() {
     
                     @Override

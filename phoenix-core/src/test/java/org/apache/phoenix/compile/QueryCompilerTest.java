@@ -439,6 +439,12 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         return plan.getContext().getScan();
     }
     
+    private Scan projectQuery(String query) throws SQLException {
+        QueryPlan plan = getQueryPlan(query, Collections.emptyList());
+        plan.iterator(); // Forces projection
+        return plan.getContext().getScan();
+    }
+    
     private QueryPlan getQueryPlan(String query, List<Object> binds) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1849,5 +1855,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
         
         
+    }
+    
+    @Test
+    public void testOrderByWithNoProjection() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table x (id integer primary key, A.i1 integer," +
+                    " B.i2 integer)");
+            Scan scan = projectQuery("select A.i1 from X group by i1 order by avg(B.i2) " +
+                    "desc");
+            ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute
+                    (BaseScannerRegionObserver.AGGREGATORS), null);
+            assertEquals(2,aggregators.getAggregatorCount());
+        } finally {
+            conn.close();
+        }
     }
 }
