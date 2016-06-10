@@ -1682,7 +1682,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 }
             }
 
-            if (tableType != PTableType.VIEW) { // Add to list of HTables to delete, unless it's a view
+            // Add to list of HTables to delete, unless it's a view
+            if (tableType != PTableType.VIEW && table.getViewIndexId()==null) { 
             	tableNamesToDelete.add(table.getPhysicalName().getBytes());
             }
             invalidateList.add(cacheKey);

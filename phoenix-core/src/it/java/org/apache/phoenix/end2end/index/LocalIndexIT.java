@@ -209,11 +209,14 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-        conn1.createStatement().execute("DROP TABLE "+ tableName);
+        conn1.createStatement().execute("DROP INDEX "+indexName+" ON "+ tableName);
+        conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
+        conn1.createStatement().execute("DROP TABLE "+ tableName);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
     
