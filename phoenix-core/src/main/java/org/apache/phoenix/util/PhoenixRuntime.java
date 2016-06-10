@@ -92,7 +92,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 import co.cask.tephra.util.TxUtils;
-
 /**
  *
  * Collection of non JDBC compliant utility methods
@@ -215,9 +214,10 @@ public class PhoenixRuntime {
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
+                System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
                 Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
-                System.out.println("Views found:"+viewNames);
+                System.out.println("upgrading following views:"+viewNames);
                 for (String viewName : viewNames) {
                     UpgradeUtil.upgradeTable(conn, viewName);
                 }

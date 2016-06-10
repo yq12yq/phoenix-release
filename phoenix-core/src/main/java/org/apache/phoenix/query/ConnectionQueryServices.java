@@ -46,7 +46,6 @@ import org.apache.phoenix.schema.stats.PTableStats;
 
 import co.cask.tephra.TransactionSystemClient;
 
-
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {
     public static final int INITIAL_META_DATA_TABLE_CAPACITY = 100;
 
