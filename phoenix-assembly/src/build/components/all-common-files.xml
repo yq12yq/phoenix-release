@@ -77,6 +77,12 @@
       <fileMode>0644</fileMode>
       <directoryMode>0755</directoryMode>
     </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-pherf/config</directory>
+      <outputDirectory>phoenix-pherf/config</outputDirectory>
+      <fileMode>0644</fileMode>
+      <directoryMode>0755</directoryMode>
+    </fileSet>
       <fileSet>
           <directory>${project.basedir}/../phoenix-pherf/target</directory>
           <outputDirectory>phoenix-pherf</outputDirectory>
