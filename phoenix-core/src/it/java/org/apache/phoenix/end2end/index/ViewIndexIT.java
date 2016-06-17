@@ -139,6 +139,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
         assertFalse("View index sequences should be deleted.", rs.next());
     }
+
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
