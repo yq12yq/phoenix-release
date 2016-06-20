@@ -38,6 +38,7 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.query.QueryServices;
@@ -200,18 +201,23 @@ public final class Main extends Configured implements Tool, Runnable {
 
       // Enable SPNEGO and Impersonation when using Kerberos
       if (isKerberos) {
-        UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+          UserGroupInformation ugi = UserGroupInformation.getLoginUser();
 
-        // Make sure the proxyuser configuration is up to date
-        ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
+          // Make sure the proxyuser configuration is up to date
+          ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
 
-        String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
-        File keytab = new File(keytabPath);
+          String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
+          File keytab = new File(keytabPath);
 
-        // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
-        builder.withSpnego(ugi.getUserName())
-            .withAutomaticLogin(keytab)
-            .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+          String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS);
+          String[] additionalAllowedRealms = null;
+          if (null != realmsString) {
+            additionalAllowedRealms = StringUtils.split(realmsString, ',');
+          }
+          // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
+          builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
+              .withAutomaticLogin(keytab)
+              .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
       }
 
       // Build and start the HttpServer
