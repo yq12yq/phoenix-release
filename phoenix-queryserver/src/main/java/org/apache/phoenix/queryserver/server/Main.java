@@ -22,7 +22,10 @@ import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.LocalService;
 import org.apache.calcite.avatica.remote.Service;
+import org.apache.calcite.avatica.server.AvaticaHandler;
+import org.apache.calcite.avatica.server.AvaticaServerConfiguration;
 import org.apache.calcite.avatica.server.DoAsRemoteUserCallback;
+import org.apache.calcite.avatica.server.HandlerFactory;
 import org.apache.calcite.avatica.server.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -34,13 +37,13 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.security.PrivilegedExceptionAction;
@@ -179,6 +182,7 @@ public final class Main extends Configured implements Tool, Runnable {
             QueryServices.QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB, hostname);
         LOG.info("Login successful.");
       }
+
       Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
           QueryServices.QUERY_SERVER_META_FACTORY_ATTRIB, PhoenixMetaFactoryImpl.class, PhoenixMetaFactory.class);
       int port = getConf().getInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB,
@@ -195,24 +199,18 @@ public final class Main extends Configured implements Tool, Runnable {
 
       // Enable SPNEGO and Impersonation when using Kerberos
       if (isKerberos) {
-          UserGroupInformation ugi = UserGroupInformation.getLoginUser();
+        UserGroupInformation ugi = UserGroupInformation.getLoginUser();
 
-          // Make sure the proxyuser configuration is up to date
-          ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
+        // Make sure the proxyuser configuration is up to date
+        ProxyUsers.refreshSuperUserGroupsConfiguration(getConf());
 
-          String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
-          File keytab = new File(keytabPath);
+        String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
+        File keytab = new File(keytabPath);
 
-          String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS);
-          String[] additionalAllowedRealms = null;
-          if (null != realmsString) {
-            additionalAllowedRealms = StringUtils.split(realmsString, ',');
-          }
-
-          // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
-          builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
-              .withAutomaticLogin(keytab)
-              .withImpersonation(new PhoenixDoAsCallback(ugi));
+        // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
+        builder.withSpnego(ugi.getUserName())
+            .withAutomaticLogin(keytab)
+            .withImpersonation(new PhoenixDoAsCallback(ugi));
       }
 
       // Build and start the HttpServer
@@ -262,28 +260,29 @@ public final class Main extends Configured implements Tool, Runnable {
    * Callback to run the Avatica server action as the remote (proxy) user instead of the server.
    */
   static class PhoenixDoAsCallback implements DoAsRemoteUserCallback {
-      private final UserGroupInformation serverUgi;
+    private final UserGroupInformation serverUgi;
 
-      public PhoenixDoAsCallback(UserGroupInformation serverUgi) {
-          this.serverUgi = Objects.requireNonNull(serverUgi);
-      }
+    public PhoenixDoAsCallback(UserGroupInformation serverUgi) {
+      this.serverUgi = Objects.requireNonNull(serverUgi);
+    }
 
-      @Override
-      public <T> T doAsRemoteUser(String remoteUserName, String remoteAddress, final Callable<T> action) throws Exception {
-          // Proxy this user on top of the server's user (the real user)
-          UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(remoteUserName, serverUgi);
+    @Override
+    public <T> T doAsRemoteUser(String remoteUserName, String remoteAddress, final Callable<T> action) throws Exception {
+      // Proxy this user on top of the server's user (the real user)
+      UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(remoteUserName, serverUgi);
 
-          // Check if this user is allowed to be impersonated.
-          // Will throw AuthorizationException if the impersonation as this user is not allowed
-          ProxyUsers.authorize(proxyUser, remoteAddress);
+      // Check if this user is allowed to be impersonated.
+      // Will throw AuthorizationException if the impersonation as this user is not allowed
+      ProxyUsers.authorize(proxyUser, remoteAddress);
 
-          // Execute the actual call as this proxy user
-          return proxyUser.doAs(new PrivilegedExceptionAction<T>() {
-              @Override public T run() throws Exception {
-                  return action.call();
-              }
-          });
-      }
+      // Execute the actual call as this proxy user
+      return proxyUser.doAs(new PrivilegedExceptionAction<T>() {
+        @Override
+        public T run() throws Exception {
+          return action.call();
+        }
+      });
+    }
   }
 
   public static void main(String[] argv) throws Exception {
