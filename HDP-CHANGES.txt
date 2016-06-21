@@ -5,3 +5,4 @@ Following are the changes on top of Apache Phoenix 4.7.0-HBase-1.1
 30f1b84 PHOENIX-2743 HivePhoenixHandler for big-big join with predicate push down
 0378b69 PHOENIX-2817 Phoenix-Spark plugin doesn't work in secured env
 15b9159 PHOENIX-1523 Make it easy to provide a tab literal as separator for CSV imports
+6bf0d95 PHOENIX-2940 Query the stats table and cache stats in the client
