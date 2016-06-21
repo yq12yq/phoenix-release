@@ -6,3 +6,4 @@ Following are the changes on top of Apache Phoenix 4.7.0-HBase-1.1
 0378b69 PHOENIX-2817 Phoenix-Spark plugin doesn't work in secured env
 15b9159 PHOENIX-1523 Make it easy to provide a tab literal as separator for CSV imports
 6bf0d95 PHOENIX-2940 Query the stats table and cache stats in the client
+d5014f2 PHOENIX-3004 Allow configuration in hbase-site to define realms other than the server's
