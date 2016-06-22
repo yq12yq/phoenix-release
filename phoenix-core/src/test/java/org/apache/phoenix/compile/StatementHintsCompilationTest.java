@@ -28,6 +28,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -36,6 +37,7 @@ import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -113,5 +115,23 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         // test AggregatePlan
         query = "SELECT /*+ SERIAL */ * FROM atable";
         assertTrue("Expected a SERIAL query", compileStatement(query).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
+    }
+
+    @Test
+    public void testSelectNativeTimeStampHint() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(500));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        String query = "SELECT /*+ NATIVE_TIME_RANGE(100, 200) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'";
+        conn.createStatement().executeQuery(query);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+        Scan scan = pstmt.compileQuery().getContext().getScan();
+        assertEquals(100, scan.getTimeRange().getMin());
+        assertEquals(200, scan.getTimeRange().getMax());
+        pstmt.close();
+        conn.close();
     }
 }

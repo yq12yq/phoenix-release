@@ -23,6 +23,9 @@ import java.util.Map;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.util.Pair;
 import com.google.common.collect.ImmutableMap;
 
 
@@ -31,7 +34,7 @@ import com.google.common.collect.ImmutableMap;
  */
 public class HintNode {
     public static final HintNode EMPTY_HINT_NODE = new HintNode();
-    
+    private static final Log LOG = LogFactory.getLog(HintNode.class);
     public static final char SEPARATOR = ' ';
     public static final String PREFIX = "(";
     public static final String SUFFIX = ")";
@@ -104,6 +107,15 @@ public class HintNode {
       * Enforces a serial scan.
       */
      SERIAL,
+     /**
+      * Use HBase native Scan time range so that we can take advantage of a scan optimization to skip HFiles which
+      * are not in range [lower time stamp, higher time stamp) where time stamp values are represented in Epoch time.
+      *
+      * If higher time stamp isn't specified, Long.MAX_VALUE will be used.
+      *
+      * Example: NATIVE_TIME_RANGE(1416260321) or NATIVE_TIME_RANGE(1416260321, 2416260321)
+      */
+     NATIVE_TIME_RANGE,
     };
 
     private final Map<Hint,String> hints;
@@ -176,7 +188,36 @@ public class HintNode {
         }
         this.hints = ImmutableMap.copyOf(hints);
     }
-    
+
+    /**
+     * Return HBase Scan time range
+     *
+     * @return null if NATIVE_TIME_RANGE hint doesn't exit
+     */
+    public Pair<Long, Long> getNativeTimeStampRange() {
+        if (!hasHint(Hint.NATIVE_TIME_RANGE)) { return null; }
+
+        String val = hints.get(Hint.NATIVE_TIME_RANGE).replaceAll("[()\\s]", "");
+        Pair<Long, Long> result = new Pair<Long, Long>(0L, Long.MAX_VALUE);
+        if (val != null && !val.isEmpty()) {
+            String[] vals = val.split(",");
+            try {
+                Long tmp = Long.parseLong(vals[0]);
+                result.setFirst(tmp);
+                if (vals.length > 1) {
+                    tmp = Long.parseLong(vals[1]);
+                    result.setSecond(tmp);
+                }
+            } catch (NumberFormatException ignored) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("parseNativeTimeStampRange failed due to", ignored);
+                }
+            }
+        }
+
+        return result;
+    }
+
     public boolean isEmpty() {
         return hints.isEmpty();
     }
