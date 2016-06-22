@@ -2,6 +2,7 @@ HDP-2.5 is based on Apache Phoenix 4.7.0-HBase-1.1
 
 Following are the changes on top of Apache Phoenix 4.7.0-HBase-1.1
 
+e857af8 PHOENIX-3015 Any metadata changes may cause unpredictable result when local indexes are using
 8a87fb9 PHOENIX-2845 Timestamp ignores nanos in literal expressions
 30f1b84 PHOENIX-2743 HivePhoenixHandler for big-big join with predicate push down
 0378b69 PHOENIX-2817 Phoenix-Spark plugin doesn't work in secured env
