@@ -108,13 +108,13 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testSerialHint() throws Exception {
-        // test ScanPlan
+        // test AggregatePlan
         String query = "SELECT /*+ SERIAL */ COUNT(*) FROM atable";
         assertTrue("Expected a SERIAL query", compileStatement(query).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
 
-        // test AggregatePlan
-        query = "SELECT /*+ SERIAL */ * FROM atable";
-        assertTrue("Expected a SERIAL query", compileStatement(query).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
+        // test ScanPlan
+        query = "SELECT /*+ SERIAL */ * FROM atable limit 10";
+        assertTrue("Expected a SERIAL query", compileStatement(query, Collections.emptyList(), 10).getExplainPlan().getPlanSteps().get(0).contains("SERIAL"));
     }
 
     @Test
