@@ -85,13 +85,21 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.CSVCommonsLoader;
+import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.util.UpgradeUtil;
+
+import co.cask.tephra.util.TxUtils;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
-import co.cask.tephra.util.TxUtils;
 /**
  *
  * Collection of non JDBC compliant utility methods
@@ -597,6 +605,7 @@ public class PhoenixRuntime {
             }
 
             ExecutionCommand execCmd = new ExecutionCommand();
+            execCmd.connectionString = "";
             if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
                 execCmd.mapNamespace = true;
                 execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
@@ -644,16 +653,21 @@ public class PhoenixRuntime {
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
-                usageError("Connection string to HBase must be supplied", options);
+                usageError("At least one input file must be supplied", options);
             }
-            execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
+            int i = 0;
             for (String arg : argList) {
                 if (execCmd.isUpgrade || arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
                 } else {
-                    usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    if (i == 0) {
+                        execCmd.connectionString = arg;
+                    } else {
+                        usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    }
                 }
+                i++;
             }
 
             if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace()) {
@@ -696,6 +710,7 @@ public class PhoenixRuntime {
                             "<path-to-sql-or-csv-file>...",
                     options);
             System.out.println("Examples:\n" +
+                    "  psql my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql my_table.csv\n" +
                     "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
