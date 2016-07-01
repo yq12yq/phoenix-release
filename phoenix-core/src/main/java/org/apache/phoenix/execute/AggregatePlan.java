@@ -60,9 +60,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ScanUtil;
@@ -82,6 +80,7 @@ public class AggregatePlan extends BaseQueryPlan {
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
     private static final Logger logger = LoggerFactory.getLogger(AggregatePlan.class);
+    private boolean isSerial;
     
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
@@ -99,6 +98,12 @@ public class AggregatePlan extends BaseQueryPlan {
                 orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
+        boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
+        boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table.getTable(), orderBy, context); 
+        if (hasSerialHint && !canBeExecutedSerially) {
+            logger.warn("This query cannot be executed serially. Ignoring the hint");
+        }
+        this.isSerial = hasSerialHint && canBeExecutedSerially;
     }
 
     public Expression getHaving() {
@@ -206,13 +211,7 @@ public class AggregatePlan extends BaseQueryPlan {
                         PInteger.INSTANCE.toBytes(limit + (offset == null ? 0 : offset)));
             }
         }
-        PTable table = tableRef.getTable();
-        boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
-        boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table, orderBy, context); 
-        if (hasSerialHint && !canBeExecutedSerially) {
-            logger.warn("This query cannot be executed serially. Ignoring the hint");
-        }
-        BaseResultIterators iterators = hasSerialHint && canBeExecutedSerially
+        BaseResultIterators iterators = isSerial
                 ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan)
                 : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false);
 
@@ -261,5 +260,10 @@ public class AggregatePlan extends BaseQueryPlan {
     @Override
     public boolean useRoundRobinIterator() throws SQLException {
         return false;
+    }
+
+    @Override
+    public boolean isSerial() {
+        return isSerial;
     }
 }

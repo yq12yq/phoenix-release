@@ -143,15 +143,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     private boolean useStats() {
-        boolean isPointLookup = context.getScanRanges().isPointLookup();
         /*
-         *  Don't use guide posts if:
-         *  1) We're doing a point lookup, as HBase is fast enough at those
-         *     to not need them to be further parallelized. TODO: perf test to verify
-         *  2) We're collecting stats, as in this case we need to scan entire
-         *     regions worth of data to track where to put the guide posts.
+         * Don't use guide posts:
+         * 1) If we're collecting stats, as in this case we need to scan entire
+         * regions worth of data to track where to put the guide posts.
+         * 2) If the query is going to be executed serially.
          */
-        if (isPointLookup || ScanUtil.isAnalyzeTable(scan)) {
+        if (ScanUtil.isAnalyzeTable(scan) || plan.isSerial()) {
             return false;
         }
         return true;
@@ -414,11 +412,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
 
     private GuidePostsInfo getGuidePosts(Set<byte[]> whereConditions) {
-        /*
-         * Don't use guide posts if: 1) We're doing a point lookup, as HBase is fast enough at those to not need them to
-         * be further parallelized. TODO: pref test to verify 2) We're collecting stats, as in this case we need to scan
-         * entire regions worth of data to track where to put the guide posts.
-         */
         if (!useStats()) { return GuidePostsInfo.NO_GUIDEPOST; }
 
         GuidePostsInfo gps = null;
@@ -620,7 +613,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 } catch (EOFException e) {}
             }
             byte[] currentKeyBytes = currentKey.copyBytes();
-    
             // Merge bisect with guideposts for all but the last region
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
@@ -640,11 +632,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     while (guideIndex < gpsSize && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
                         Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                                 false);
-                        if(newScan != null) {
+                        if (newScan != null) {
                             ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                                 regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
-                        }
-                        if (newScan != null) {
                             estimatedRows += gps.getRowCounts().get(guideIndex);
                             estimatedSize += gps.getByteCounts().get(guideIndex);
                         }
