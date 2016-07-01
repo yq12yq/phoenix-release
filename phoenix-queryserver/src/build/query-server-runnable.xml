@@ -23,30 +23,29 @@
 <assembly xmlns="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/plugins/maven-assembly-plugin/assembly/1.1.0 http://maven.apache.org/xsd/assembly-1.1.0.xsd">
-  <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
-  <id>server</id>
+  <id>runnable</id>
   <formats>
     <format>jar</format>
   </formats>
   <includeBaseDirectory>false</includeBaseDirectory>
+  <containerDescriptorHandlers>
+    <containerDescriptorHandler>
+      <!--
+          aggregate SPI's so that things like HDFS FileSystem works in uberjar
+          http://docs.oracle.com/javase/tutorial/sound/SPI-intro.html
+      -->
+      <handlerName>metaInf-services</handlerName>
+    </containerDescriptorHandler>
+  </containerDescriptorHandlers>
   <dependencySets>
     <dependencySet>
-      <outputDirectory>/</outputDirectory>
       <unpack>true</unpack>
+      <scope>runtime</scope>
+      <outputDirectory>/</outputDirectory>
       <includes>
-        <include>org.apache.phoenix:phoenix-core</include>
-        <include>org.iq80.snappy:snappy</include>
-        <include>co.cask.tephra:tephra*</include>
-	<include>org.antlr:antlr*</include>
-        <include>com.google.code.gson:gson</include>
-        <include>org.jruby.joni:joni</include>
-        <include>org.jruby.jcodings:jcodings</include>
-	<include>joda-time:joda-time</include>
-	<include>org.apache.twill:twill*</include>
-	<include>com.google.inject.extensions:guice-assistedinject</include>
-	<include>it.unimi.dsi:fastutil</include>
-	<include>io.dropwizard.metrics:metrics-core</include>
-	<include>org.apache.thrift:libthrift</include>
+        <include>org.apache.phoenix:phoenix-queryserver</include>
+        <include>org.apache.phoenix:phoenix-queryserver-client</include>
+        <include>org.apache.calcite.avatica:*</include>
       </includes>
     </dependencySet>
   </dependencySets>
