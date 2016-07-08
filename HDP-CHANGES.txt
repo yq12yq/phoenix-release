@@ -9,3 +9,4 @@ e857af8 PHOENIX-3015 Any metadata changes may cause unpredictable result when lo
 15b9159 PHOENIX-1523 Make it easy to provide a tab literal as separator for CSV imports
 6bf0d95 PHOENIX-2940 Query the stats table and cache stats in the client
 d5014f2 PHOENIX-3004 Allow configuration in hbase-site to define realms other than the server's
+c2f347a PHOENIX-3057 Set incremental=false for sqlline-thin
