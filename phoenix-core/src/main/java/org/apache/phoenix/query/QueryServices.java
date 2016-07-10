@@ -247,9 +247,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_AUTOMATIC_GRANT_ENABLED = "phoenix.security.automatic.grant.enabled";
     public static final String PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED = "phoenix.security.strict.mode.enabled";
 
-    public static final String NONFILTERED_AND_LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.nonfiltered.limited.query.serial.threshold";
-    public static final String FILTERED_OR_NONLIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.filtered.limited.query.serial.threshold";
-
+    public static final String LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.limited.query.serial.threshold";
     /**
      * Get executor service used for parallel scans
      */

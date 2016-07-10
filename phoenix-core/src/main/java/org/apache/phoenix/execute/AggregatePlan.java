@@ -266,9 +266,4 @@ public class AggregatePlan extends BaseQueryPlan {
     public boolean useRoundRobinIterator() throws SQLException {
         return false;
     }
-
-    @Override
-    public boolean isSerial() {
-        return isSerial;
-    }
 }
