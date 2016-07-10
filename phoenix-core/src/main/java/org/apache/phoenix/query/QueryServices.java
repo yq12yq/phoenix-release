@@ -228,9 +228,7 @@ public interface QueryServices extends SQLCloseable {
     // currently BASE64 and ASCII is supported
     public static final String UPLOAD_BINARY_DATA_TYPE_ENCODING = "phoenix.upload.binaryDataType.encoding";
 
-    public static final String NONFILTERED_AND_LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.nonfiltered.limited.query.serial.threshold";
-    public static final String FILTERED_OR_NONLIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.filtered.limited.query.serial.threshold";
-
+    public static final String LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.limited.query.serial.threshold";
     /**
      * Get executor service used for parallel scans
      */
