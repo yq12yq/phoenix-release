@@ -39,14 +39,13 @@ import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.apache.htrace.Span;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
  * Test that the {@link TraceReader} will correctly read traces written by the
  * {@link org.apache.phoenix.trace.PhoenixMetricsSink}
  */
-@Ignore
+
 public class PhoenixTraceReaderIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTraceReaderIT.class);
