@@ -26,7 +26,7 @@ public class Metrics {
 
     private static final Log LOG = LogFactory.getLog(Metrics.class);
 
-  private static volatile MetricsSystem manager = DefaultMetricsSystem.instance();
+    private static volatile MetricsSystem manager = DefaultMetricsSystem.instance();
 
     private static boolean initialized;
 
@@ -42,7 +42,15 @@ public class Metrics {
         synchronized (Metrics.class) {
             if (!initialized) {
                 LOG.info("Initializing metrics system: " + Metrics.METRICS_SYSTEM_NAME);
-                manager.init(Metrics.METRICS_SYSTEM_NAME);
+                /*
+                 * Metrics system should be initialized only once with only a single prefix.
+                 * However, there is no API in metrics system to check whether we are already
+                 * initialized. Metrics system will ignore the call to init() if it is already
+                 * started, except for mini-cluster-mode.
+                 */
+                if (!DefaultMetricsSystem.inMiniClusterMode()) {
+                  manager.init(Metrics.METRICS_SYSTEM_NAME);
+                }
                 initialized = true;
             }
         }
