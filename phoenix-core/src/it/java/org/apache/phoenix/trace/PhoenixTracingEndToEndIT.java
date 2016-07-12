@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -72,7 +73,27 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         pWriter.initForTesting(conn);
         sink = new DisableableMetricsWriter(pWriter);
 
+        stopJMXCacheBuster();
+
         TracingTestUtil.registerSink(sink);
+    }
+
+    /**
+     * This stops the JMXCacheBuster so that it won't restart the Hadoop metrics2 subsystem. We
+     * are injecting custom sinks, so restarting the metrics system resets the sinks from the
+     * hadoop-metrics2.properties file and loses the dynamically registered sinks.
+     */
+    private static void stopJMXCacheBuster() {
+        try {
+            Class<?> jmxCacheBusterClass
+                = Class.forName("org.apache.hadoop.metrics2.impl.JmxCacheBuster");
+            Method stopMethod = jmxCacheBusterClass.getMethod("stop");
+            if (stopMethod != null) {
+                stopMethod.invoke(null);
+            }
+        } catch (Throwable t) {
+            LOG.error(t);
+        }
     }
 
     @After
