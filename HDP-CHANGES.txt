@@ -10,3 +10,36 @@ e857af8 PHOENIX-3015 Any metadata changes may cause unpredictable result when lo
 6bf0d95 PHOENIX-2940 Query the stats table and cache stats in the client
 d5014f2 PHOENIX-3004 Allow configuration in hbase-site to define realms other than the server's
 c2f347a PHOENIX-3057 Set incremental=false for sqlline-thin
+fba9973 PHOENIX-3013 TO_CHAR fails to handle indexed null value (Junegunn Choi)
+787f375 PHOENIX-3014 SELECT DISTINCT pk ORDER BY pk DESC gives the wrong results with salted tables.
+5584107 PHOENIX-3011 Fix missing apache licenses
+c455110 PHOENIX-3008 Prevent upgrade of existing multi-tenant table to map to namespace until we support it correctly
+8a03757 PHOENIX-2952 Addendum to fix test case failure (Ram)
+4531353 PHOENIX-2952 array_length return negative value (Joseph Sun)
+883c06b PHOENIX-3006 Fix all ScalarFunctions to implement clone(List) or <init>(List). (James Taylor & Lars Hofhansl)
+51a42ce PHOENIX-2276 Fix test failure
+814e02b PHOENIX-2276 Addednum2 to fix test failures
+af1ec68 PHOENIX-2276 addendum for fixing test failures
+e0f3ac7 PHOENIX-2276 Creating index on a global view on a multi-tenant table fails with NPE
+f38e202 PHOENIX-2920 Incorrect Queries on Multi-tenant tables with WHERE clause containing Row Value Constructor
+ae8905a PHOENIX-2994 Coalesce function may return null
+a318852 PHOENIX-2961 select on a composite primary key fails when DESC is set in the table
+aabd269 PHOENIX-2983 ClassCastException on auto coerce of BIGINT to DECIMAL
+f76f3ff PHOENIX-2934 Checking a coerce expression at top level should not be necessary for Union All query (Alicia Ying Shu)
+001f642 PHOENIX-2886 Union ALL with Char column not present in the table in Query 1 but in Query 2 throw exception (Alicia Ying Shu)
+24f5f4a PHOENIX-2942 Order by incorrect for RVC
+0f4d213 PHOENIX-2898 HTable not closed in ConnectionQueryServicesImpl (Alex Araujo)
+d507ea8 PHOENIX-2919 PreparedStatement Returns Incorrect Number of Deleted Records
+4acca9e PHOENIX-2936 Missing antlr runtime on server side after PHOENIX-2908
+4b613cc PHOENIX-2912 Broken IT tests after PHOENIX-2905
+84526bf PHOENIX-2894 Sort-merge join works incorrectly with DESC columns
+ebfe04f PHOENIX-2908 phoenix-core depends on both antlr 3.5 and antlr 2.7.7 (William Yang)
+231af53 PHOENIX-2905 hadoop-2.5.1 artifacts are in the dependency tree
+2e6714c PHOENIX-2878 CURRENT_TIME fails to provide correct time when projected table is using
+559a783 PHOENIX-2871 Workaround sqlline issue
+14a9c9f PHOENIX-2856 HBaseManagedTimeTableReuseTest category isn't getting run
+1fd5fd2 PHOENIX-2828 Ordinality should be 1-based in UNNEST WITH ORDINALITY
+d7abfa7 PHOENIX-2820 Investigate why SortMergeJoinIT has a sort in the explain plan
+09f467e PHOENIX-2758 Ordered GROUP BY not occurring with leading PK equality expression
+b712ec4 PHOENIX-2803 Initializing ToCharFunction with the List<Expression> constructor fails
+b47f414 PHOENIX-2748 Disable auto-commit during bulk load
