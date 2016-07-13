@@ -58,7 +58,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
-import org.apache.tephra.TxConstants;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
