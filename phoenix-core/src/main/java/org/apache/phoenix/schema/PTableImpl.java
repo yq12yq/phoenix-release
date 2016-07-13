@@ -58,6 +58,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+import org.apache.tephra.TxConstants;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -136,7 +137,7 @@ public class PTableImpl implements PTable {
         this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
     }
 
-    public PTableImpl(PName tenantId, String schemaName, String tableName, long timestamp, List<PColumnFamily> families) { // For base table of mapped VIEW
+    public PTableImpl(PName tenantId, String schemaName, String tableName, long timestamp, List<PColumnFamily> families, boolean isNamespaceMapped) { // For base table of mapped VIEW
         Preconditions.checkArgument(tenantId==null || tenantId.getBytes().length > 0); // tenantId should be null or not empty
         this.tenantId = tenantId;
         this.name = PNameFactory.newName(SchemaUtil.getTableName(schemaName, tableName));
@@ -157,6 +158,7 @@ public class PTableImpl implements PTable {
         }
         this.families = families;
         this.physicalNames = Collections.emptyList();
+        this.isNamespaceMapped = isNamespaceMapped;
     }
 
     public PTableImpl(long timeStamp) { // For delete marker
