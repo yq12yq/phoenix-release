@@ -43,3 +43,4 @@ d7abfa7 PHOENIX-2820 Investigate why SortMergeJoinIT has a sort in the explain p
 09f467e PHOENIX-2758 Ordered GROUP BY not occurring with leading PK equality expression
 b712ec4 PHOENIX-2803 Initializing ToCharFunction with the List<Expression> constructor fails
 b47f414 PHOENIX-2748 Disable auto-commit during bulk load
+7778eea PHOENIX-3021 Using local index during compaction is producing NPE
