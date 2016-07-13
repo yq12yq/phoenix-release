@@ -176,26 +176,30 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSchemaMetadataScan() throws SQLException {
-	long ts = nextTimestamp();
+        long ts = nextTimestamp();
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
+        ensureTableCreated(getUrl(), PTSDB_NAME, null, ts);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SCHEMA " + CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
-        conn = DriverManager.getConnection(getUrl(), props);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
         rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
         assertTrue(rs.next());
-        assertEquals(rs.getString(1),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString(2),null);
+        assertEquals(rs.getString(1), CUSTOM_ENTITY_DATA_SCHEMA_NAME);
+        assertEquals(rs.getString(2), null);
         assertFalse(rs.next());
 
         rs = dbmd.getSchemas(null, null);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
+        assertEquals(rs.getString("TABLE_SCHEM"), null);
+        assertEquals(rs.getString("TABLE_CATALOG"), null);
+        assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"), CUSTOM_ENTITY_DATA_SCHEMA_NAME);
+        assertEquals(rs.getString("TABLE_CATALOG"), null);
+        assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"), PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+        assertEquals(rs.getString("TABLE_CATALOG"), null);
         assertFalse(rs.next());
     }
 

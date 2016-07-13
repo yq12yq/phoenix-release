@@ -922,7 +922,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (schemaPattern != null) {
             buf.append(" and " + TABLE_SCHEM + " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'");
         }
-        buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
+        if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
+            buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
+        }
         Statement stmt = connection.createStatement();
         return stmt.executeQuery(buf.toString());
     }
