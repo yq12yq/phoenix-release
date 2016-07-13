@@ -59,6 +59,7 @@
         <include>com.yammer.metrics:metrics-core</include>
         <include>xerces:xercesImpl</include>
         <include>xml-apis:xml-apis</include>
+        <include>com.microsoft.azure:azure-storage</include>
       </includes>
     </dependencySet>
   </dependencySets>
