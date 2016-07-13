@@ -224,11 +224,7 @@ public class PhoenixRuntime {
                 String srcTable = execCmd.getSrcTable();
                 System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
-                Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
-                System.out.println("upgrading following views:"+viewNames);
-                for (String viewName : viewNames) {
-                    UpgradeUtil.upgradeTable(conn, viewName);
-                }
+                UpgradeUtil.mapChildViewsToNamespace(conn, srcTable,props);
             } else if (execCmd.isUpgrade()) {
                 if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
                         "May not specify the CURRENT_SCN property when upgrading"); }
