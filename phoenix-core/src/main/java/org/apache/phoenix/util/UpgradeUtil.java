@@ -25,9 +25,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -43,6 +45,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 
@@ -55,9 +58,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeoutException;
 import java.util.Properties;
 import java.util.Set;
 
@@ -310,15 +315,24 @@ public class UpgradeUtil {
         }
     }
 
-    public static void upgradeLocalIndexes(PhoenixConnection metaConnection, boolean createAsyncIndex) throws SQLException,
-            IOException, org.apache.hadoop.hbase.TableNotFoundException {
-        HBaseAdmin admin = null;
-        try {
-            admin = metaConnection.getQueryServices().getAdmin();
-            ResultSet rs = metaConnection.createStatement().executeQuery("SELECT TABLE_SCHEM, TABLE_NAME, DATA_TABLE_NAME FROM SYSTEM.CATALOG  "
+    public static PhoenixConnection upgradeLocalIndexes(PhoenixConnection metaConnection)
+            throws SQLException, IOException, org.apache.hadoop.hbase.TableNotFoundException {
+        Properties props = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
+        Long originalScn = null;
+        String str = props.getProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB);
+        if (str != null) {
+            originalScn = Long.valueOf(str);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
+        PhoenixConnection globalConnection = null;
+        PhoenixConnection toReturn = null;
+        globalConnection = new PhoenixConnection(metaConnection, metaConnection.getQueryServices(), props);
+        SQLException sqlEx = null;
+        try (HBaseAdmin admin = globalConnection.getQueryServices().getAdmin()) {
+            ResultSet rs = globalConnection.createStatement().executeQuery("SELECT TABLE_SCHEM, TABLE_NAME, DATA_TABLE_NAME, TENANT_ID, MULTI_TENANT, SALT_BUCKETS FROM SYSTEM.CATALOG  "
                     + "      WHERE COLUMN_NAME IS NULL"
                     + "           AND COLUMN_FAMILY IS NULL"
-                    + "           AND INDEX_TYPE=2");
+                    + "           AND INDEX_TYPE=" + IndexType.LOCAL.getSerializedValue());
             boolean droppedLocalIndexes = false;
             while (rs.next()) {
                 if(!droppedLocalIndexes) {
@@ -355,39 +369,48 @@ public class UpgradeUtil {
                     admin.deleteTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                     droppedLocalIndexes = true;
                 }
+                String schemaName = rs.getString(1);
+                String indexTableName = rs.getString(2);
+                String dataTableName = rs.getString(3);
+                String tenantId = rs.getString(4);
+                boolean multiTenantTable = rs.getBoolean(5);
+                int numColumnsToSkip = 1 + (multiTenantTable ? 1 : 0);
                 String getColumns =
                         "SELECT COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG  WHERE TABLE_SCHEM "
-                                + (rs.getString(1) == null ? "IS NULL " : "='" + rs.getString(1)
-                                + "'") + " and TABLE_NAME='" + rs.getString(2)
-                                + "' AND COLUMN_NAME IS NOT NULL";
-                ResultSet getColumnsRs = metaConnection.createStatement().executeQuery(getColumns);
+                                + (schemaName == null ? "IS NULL " : "='" + schemaName+ "'")
+                                + " AND TENANT_ID "+(tenantId == null ? "IS NULL " : "='" + tenantId + "'")
+                                + " and TABLE_NAME='" + indexTableName
+                                + "' AND COLUMN_NAME IS NOT NULL AND KEY_SEQ > "+ numColumnsToSkip +" ORDER BY KEY_SEQ";
+                ResultSet getColumnsRs = globalConnection.createStatement().executeQuery(getColumns);
                 List<String> indexedColumns = new ArrayList<String>(1);
                 List<String> coveredColumns = new ArrayList<String>(1);
                 
                 while (getColumnsRs.next()) {
                     String column = getColumnsRs.getString(1);
                     String columnName = IndexUtil.getDataColumnName(column);
-                    if (columnName.equals(MetaDataUtil.getViewIndexIdColumnName())) {
-                        continue;
-                    }
                     String columnFamily = IndexUtil.getDataColumnFamilyName(column);
                     if (getColumnsRs.getString(2) == null) {
                         if (columnFamily != null && !columnFamily.isEmpty()) {
-                            if (columnFamily.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)) {
+                            if (SchemaUtil.normalizeIdentifier(columnFamily).equals(QueryConstants.DEFAULT_COLUMN_FAMILY)) {
                                 indexedColumns.add(columnName);
                             } else {
-                                indexedColumns.add(SchemaUtil.getColumnName(columnFamily,
-                                    columnName));
+                                indexedColumns.add(SchemaUtil.getCaseSensitiveColumnDisplayName(
+                                    columnFamily, columnName));
                             }
+                        } else {
+                            indexedColumns.add(columnName);
                         }
                     } else {
-                        coveredColumns.add(SchemaUtil.getColumnName(columnFamily, columnName));
+                        coveredColumns.add(SchemaUtil.normalizeIdentifier(columnFamily)
+                                .equals(QueryConstants.DEFAULT_COLUMN_FAMILY) ? columnName
+                                : SchemaUtil.getCaseSensitiveColumnDisplayName(
+                                    columnFamily, columnName));
                     }
                 }
                 StringBuilder createIndex = new StringBuilder("CREATE LOCAL INDEX ");
-                createIndex.append(rs.getString(2));
+                createIndex.append(indexTableName);
                 createIndex.append(" ON ");
-                createIndex.append(SchemaUtil.getTableName(rs.getString(1), rs.getString(3)));
+                createIndex.append(SchemaUtil.getTableName(schemaName, dataTableName));
                 createIndex.append("(");
                 for (int i = 0; i < indexedColumns.size(); i++) {
                     createIndex.append(indexedColumns.get(i));
@@ -405,24 +428,208 @@ public class UpgradeUtil {
                             createIndex.append(",");
                         }
                     }
-                    createIndex.append(") ASYNC");
+                    createIndex.append(")");
                 }
+                createIndex.append(" ASYNC");
                 logger.info("Index creation query is : " + createIndex.toString());
-                logger.info("Dropping the index " + rs.getString(2)
+                logger.info("Dropping the index " + indexTableName
                     + " to clean up the index details from SYSTEM.CATALOG.");
-                metaConnection.createStatement().execute(
-                    "DROP INDEX IF EXISTS " + rs.getString(2) + " ON "
-                            + SchemaUtil.getTableName(rs.getString(1), rs.getString(3)));
-                logger.info("Recreating the index " + rs.getString(2));
-                metaConnection.createStatement().execute(createIndex.toString());
-                logger.info("Created the index " + rs.getString(2));
+                PhoenixConnection localConnection = null;
+                if (tenantId != null) {
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    localConnection = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), props);
+                }
+                try {
+                    (localConnection == null ? globalConnection : localConnection).createStatement().execute(
+                        "DROP INDEX IF EXISTS " + indexTableName + " ON "
+                                + SchemaUtil.getTableName(schemaName, dataTableName));
+                    logger.info("Recreating the index " + indexTableName);
+                    (localConnection == null ? globalConnection : localConnection).createStatement().execute(createIndex.toString());
+                    logger.info("Created the index " + indexTableName);
+                } finally {
+                    props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+                    if (localConnection != null) {
+                        sqlEx = closeConnection(localConnection, sqlEx);
+                        if (sqlEx != null) {
+                            throw sqlEx;
+                        }
+                    }
+                }
             }
-            metaConnection.createStatement().execute("DELETE FROM SYSTEM.CATALOG WHERE SUBSTR(TABLE_NAME,0,11)='"+MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+"'");
+            globalConnection.createStatement().execute("DELETE FROM SYSTEM.CATALOG WHERE SUBSTR(TABLE_NAME,0,11)='"+MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+"'");
+            if (originalScn != null) {
+                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(originalScn));
+            }
+            toReturn = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), props);
+        } catch (SQLException e) {
+            sqlEx = e;
         } finally {
-            if (admin != null) admin.close();
+            sqlEx = closeConnection(metaConnection, sqlEx);
+            sqlEx = closeConnection(globalConnection, sqlEx);
+            if (sqlEx != null) {
+                throw sqlEx;
+            }
         }
+        return toReturn;
     }
-    
+
+    public static PhoenixConnection disableViewIndexes(PhoenixConnection connParam) throws SQLException, IOException, InterruptedException, TimeoutException {
+        Properties props = PropertiesUtil.deepCopy(connParam.getClientInfo());
+        Long originalScn = null;
+        String str = props.getProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB);
+        if (str != null) {
+            originalScn = Long.valueOf(str);
+        }
+        // don't use the passed timestamp as scn because we want to query all view indexes up to now.
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
+        Set<String> physicalTables = new HashSet<>();
+        SQLException sqlEx = null;
+        PhoenixConnection globalConnection = null;
+        PhoenixConnection toReturn = null;
+        try {
+            globalConnection = new PhoenixConnection(connParam, connParam.getQueryServices(), props);
+            String tenantId = null;
+            try (HBaseAdmin admin = globalConnection.getQueryServices().getAdmin()) {
+                String fetchViewIndexes = "SELECT " + TENANT_ID + ", " + TABLE_SCHEM + ", " + TABLE_NAME + 
+                        ", " + DATA_TABLE_NAME + " FROM " + SYSTEM_CATALOG_NAME + " WHERE " + VIEW_INDEX_ID
+                        + " IS NOT NULL";
+                String disableIndexDDL = "ALTER INDEX %s ON %s DISABLE"; 
+                try (ResultSet rs = globalConnection.createStatement().executeQuery(fetchViewIndexes)) {
+                    while (rs.next()) {
+                        tenantId = rs.getString(1);
+                        String indexSchema = rs.getString(2);
+                        String indexName = rs.getString(3);
+                        String viewName = rs.getString(4);
+                        String fullIndexName = SchemaUtil.getTableName(indexSchema, indexName);
+                        String fullViewName = SchemaUtil.getTableName(indexSchema, viewName);
+                        PTable viewPTable = null;
+                        // Disable the view index and truncate the underlying hbase table. 
+                        // Users would need to rebuild the view indexes. 
+                        if (tenantId != null && !tenantId.isEmpty()) {
+                            Properties newProps = PropertiesUtil.deepCopy(globalConnection.getClientInfo());
+                            newProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                            PTable indexPTable = null;
+                            try (PhoenixConnection tenantConnection = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), newProps)) {
+                                viewPTable = PhoenixRuntime.getTable(tenantConnection, fullViewName);
+                                tenantConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
+                                indexPTable = PhoenixRuntime.getTable(tenantConnection, fullIndexName);
+                            }
+
+                            int offset = indexPTable.getBucketNum() != null ? 1 : 0;
+                            int existingTenantIdPosition = ++offset; // positions are stored 1 based
+                            int existingViewIdxIdPosition = ++offset;
+                            int newTenantIdPosition = existingViewIdxIdPosition;
+                            int newViewIdxPosition = existingTenantIdPosition;
+                            String tenantIdColumn = indexPTable.getColumns().get(existingTenantIdPosition - 1).getName().getString();
+                            int index = 0;
+                            String updatePosition =
+                                    "UPSERT INTO "
+                                            + SYSTEM_CATALOG_NAME
+                                            + " ( "
+                                            + TENANT_ID
+                                            + ","
+                                            + TABLE_SCHEM
+                                            + ","
+                                            + TABLE_NAME
+                                            + ","
+                                            + COLUMN_NAME
+                                            + ","
+                                            + COLUMN_FAMILY
+                                            + ","
+                                            + ORDINAL_POSITION
+                                            + ") SELECT "
+                                            + TENANT_ID
+                                            + ","
+                                            + TABLE_SCHEM
+                                            + ","
+                                            + TABLE_NAME
+                                            + ","
+                                            + COLUMN_NAME
+                                            + ","
+                                            + COLUMN_FAMILY
+                                            + ","
+                                            + "?"
+                                            + " FROM "
+                                            + SYSTEM_CATALOG_NAME
+                                            + " WHERE "
+                                            + TENANT_ID
+                                            + " = ? "
+                                            + " AND "
+                                            + TABLE_NAME
+                                            + " = ? "
+                                            + " AND "
+                                            + (indexSchema == null ? TABLE_SCHEM + " IS NULL" : TABLE_SCHEM + " = ? ") 
+                                            + " AND "
+                                            + COLUMN_NAME 
+                                            + " = ? ";
+                            // update view index position
+                            try (PreparedStatement s = globalConnection.prepareStatement(updatePosition)) {
+                                index = 0;
+                                s.setInt(++index, newViewIdxPosition);
+                                s.setString(++index, tenantId);
+                                s.setString(++index, indexName);
+                                if (indexSchema != null) {
+                                    s.setString(++index, indexSchema);
+                                }
+                                s.setString(++index, MetaDataUtil.getViewIndexIdColumnName());
+                                s.executeUpdate();
+                            }
+                            // update tenant id position
+                            try (PreparedStatement s = globalConnection.prepareStatement(updatePosition)) {
+                                index = 0;
+                                s.setInt(++index, newTenantIdPosition);
+                                s.setString(++index, tenantId);
+                                s.setString(++index, indexName);
+                                if (indexSchema != null) {
+                                    s.setString(++index, indexSchema);
+                                }
+                                s.setString(++index, tenantIdColumn);
+                                s.executeUpdate();
+                            }
+                            globalConnection.commit();
+                        } else {
+                            viewPTable = PhoenixRuntime.getTable(globalConnection, fullViewName);
+                            globalConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
+                        }
+                        String indexPhysicalTableName = MetaDataUtil.getViewIndexTableName(viewPTable.getPhysicalName().getString());
+                        if (physicalTables.add(indexPhysicalTableName)) {
+                            final TableName tableName = TableName.valueOf(indexPhysicalTableName);
+                            admin.disableTable(tableName);
+                            admin.truncateTable(tableName, false);
+                        }
+                    }
+                }
+            }
+            if (originalScn != null) {
+                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(originalScn));
+            }
+            toReturn = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), props);
+        } catch (SQLException e) {
+            sqlEx = e;
+        } finally {
+            sqlEx = closeConnection(connParam, sqlEx);
+            sqlEx = closeConnection(globalConnection, sqlEx);
+            if (sqlEx != null) {
+                throw sqlEx;
+            }
+        }
+        return toReturn;
+    }
+
+    public static SQLException closeConnection(PhoenixConnection conn, SQLException sqlEx) {
+        SQLException toReturn = sqlEx;
+        try {
+            conn.close();
+        } catch (SQLException e) {
+            if (toReturn != null) {
+                toReturn.setNextException(e);
+            } else {
+                toReturn = e;
+            }
+        }
+        return toReturn;
+     }
+
     @SuppressWarnings("deprecation")
     public static boolean upgradeSequenceTable(PhoenixConnection conn, int nSaltBuckets, PTable oldTable) throws SQLException {
         logger.info("Upgrading SYSTEM.SEQUENCE table");
