@@ -18,11 +18,13 @@
 package org.apache.phoenix.hive;
 
 import com.google.common.collect.ImmutableList;
+
 import junit.framework.Assert;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -71,6 +73,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.io.StringWriter;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -589,7 +592,14 @@ public class HiveTestUtil {
 
         HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_AUTHENTICATOR_MANAGER,
                 "org.apache.hadoop.hive.ql.security.HadoopDefaultAuthenticator");
-        Utilities.clearWorkMap();
+        try {
+          Method m = Utilities.class.getMethod("clearWorkMap");
+          m.invoke(null);
+        } catch (NoSuchMethodException ex) {
+          Method m = Utilities.class.getMethod("clearWorkMap", Configuration.class);
+          m.invoke(null, conf);
+        }
+
         CliSessionState ss = new CliSessionState(conf);
         assert ss != null;
         ss.in = System.in;

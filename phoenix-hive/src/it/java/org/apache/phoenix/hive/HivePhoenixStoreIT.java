@@ -33,6 +33,7 @@ import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -53,6 +54,7 @@ import static org.junit.Assert.fail;
  * Test class to run all Hive Phoenix integration tests against a MINI Map-Reduce cluster.
  */
 @Category(NeedsOwnMiniClusterTest.class)
+@Ignore // See BUG-62308
 public class HivePhoenixStoreIT {
 
     private static final Log LOG = LogFactory.getLog(HivePhoenixStoreIT.class);
