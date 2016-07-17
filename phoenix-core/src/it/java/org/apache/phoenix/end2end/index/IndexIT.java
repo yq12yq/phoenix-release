@@ -22,10 +22,12 @@ import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
@@ -39,7 +41,10 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -50,6 +55,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.DateUtil;
@@ -68,7 +74,7 @@ import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class IndexIT extends BaseHBaseManagedTimeIT {
-	
+
 	private final boolean localIndex;
     private final boolean transactional;
     private final boolean mutable;
@@ -77,13 +83,13 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     private final String indexName;
     private final String fullTableName;
     private final String fullIndexName;
-	
+
 	public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
 		this.localIndex = localIndex;
 		this.transactional = transactional;
 		this.mutable = mutable;
 		StringBuilder optionBuilder = new StringBuilder();
-		if (!mutable) 
+		if (!mutable)
 			optionBuilder.append(" IMMUTABLE_ROWS=true ");
 		if (transactional) {
 			if (!(optionBuilder.length()==0))
@@ -96,7 +102,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
         this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	}
-	
+
 	@BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
@@ -104,11 +110,11 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-	
+
 	@Parameters(name="localIndex = {0} , mutable = {1} , transactional = {2}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true }, 
+        return Arrays.asList(new Boolean[][] {
+                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
                  { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
            });
     }
@@ -122,16 +128,16 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
 	        BaseTest.populateTestTable(fullTableName);
-	        ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName 
+	        ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
 	                    + " (char_col1 ASC, int_col1 ASC)"
 	                    + " INCLUDE (long_col1, long_col2)";
 	        stmt.execute(ddl);
-	        
+
 	        String query = "SELECT d.char_col1, int_col1 from " + fullTableName + " as d";
 	        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex) {
 	            assertEquals(
-	                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" + 
+	                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
 	                "    SERVER FILTER BY FIRST KEY ONLY\n" +
 	                "CLIENT MERGE SORT",
 	                QueryUtil.getExplainPlan(rs));
@@ -139,7 +145,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n"
 	                    + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
 	        }
-	        
+
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
 	        assertEquals("chara", rs.getString(1));
@@ -152,13 +158,13 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertEquals("chara", rs.getString(1));
 	        assertEquals(4, rs.getInt(2));
 	        assertFalse(rs.next());
-	        
+
 	        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
-	        
+
 	        query = "SELECT char_col1, int_col1 from " + fullTableName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
-	        
+
 	        query = "SELECT char_col1, int_col1 from "+indexName;
 	        try{
 	            rs = conn.createStatement().executeQuery(query);
@@ -168,7 +174,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        }
         }
     }
-    
+
     @Test
     public void testDeleteFromAllPKColumnIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -182,20 +188,20 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	                    + " (long_pk, varchar_pk)"
 	                    + " INCLUDE (long_col1, long_col2)";
 	        stmt.execute(ddl);
-	        
+
 	        ResultSet rs;
-	        
+
 	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
 	        assertTrue(rs.next());
 	        assertEquals(3,rs.getInt(1));
 	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
 	        assertTrue(rs.next());
 	        assertEquals(3,rs.getInt(1));
-	        
+
 	        String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
 	        assertEquals(1,conn.createStatement().executeUpdate(dml));
 	        conn.commit();
-	        
+
 	        String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
@@ -203,7 +209,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(3L, rs.getLong(1));
 	        assertFalse(rs.next());
-	        
+
 	        query = "SELECT long_pk FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
@@ -211,7 +217,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(3L, rs.getLong(1));
 	        assertFalse(rs.next());
-	        
+
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
@@ -219,11 +225,11 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(3L, rs.getLong(1));
 	        assertFalse(rs.next());
-	        
+
 	        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
         }
     }
-    
+
     @Test
     public void testCreateIndexAfterUpsertStarted() throws Exception {
         testCreateIndexAfterUpsertStarted(false, fullTableName + "1", fullIndexName + "1");
@@ -242,13 +248,13 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             BaseTest.populateTestTable(fullTableName);
 
             ResultSet rs;
-            
+
             rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(3,rs.getInt(1));
 
             try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-                
+
                 String upsert = "UPSERT INTO " + fullTableName
                         + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 PreparedStatement pstmt2 = conn2.prepareStatement(upsert);
@@ -272,39 +278,39 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
                 pstmt2.setBigDecimal(17, new BigDecimal(3.0));
                 pstmt2.setDate(18, date);
                 pstmt2.executeUpdate();
-                
+
                 if (readOwnWrites) {
                     String query = "SELECT long_pk FROM " + fullTableName + " WHERE long_pk=4";
                     rs = conn2.createStatement().executeQuery(query);
                     assertTrue(rs.next());
                     assertFalse(rs.next());
                 }
-                
+
                 String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
                 ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
                         + " (long_pk, varchar_pk)"
                         + " INCLUDE (long_col1, long_col2)";
                 stmt1.execute(ddl);
-                
+
                 /*
                  * Commit upsert after index created through different connection.
                  * This forces conn2 (which doesn't know about the index yet) to update the metadata
                  * at commit time, recognize the new index, and generate the correct metadata (or index
                  * rows for immutable indexes).
-                 * 
+                 *
                  * For transactional data, this is problematic because the index
                  * gets a timestamp *after* the commit timestamp of conn2 and thus won't be seen during
                  * the commit. Also, when the index is being built, the data hasn't yet been committed
                  * and thus won't be part of the initial index build (fixed by PHOENIX-2446).
                  */
                 conn2.commit();
-                
+
                 stmt1 = conn1.createStatement();
                 rs = stmt1.executeQuery("SELECT COUNT(*) FROM " + fullTableName);
                 assertTrue(rs.next());
                 assertEquals(4,rs.getInt(1));
                 assertEquals(fullIndexName, stmt1.unwrap(PhoenixStatement.class).getQueryPlan().getTableRef().getTable().getName().getString());
-                
+
                 String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
                 rs = conn1.createStatement().executeQuery(query);
                 assertTrue(rs.next());
@@ -319,7 +325,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             }
         }
     }
-    
+
     @Test
     public void testDeleteFromNonPKColumnIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -334,16 +340,16 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	                    + " INCLUDE (decimal_col1, decimal_col2)";
 	        stmt.execute(ddl);
         }
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {    
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        ResultSet rs;
-	        
+
 	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName);
 	        assertTrue(rs.next());
 	        assertEquals(3,rs.getInt(1));
 	        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexName);
 	        assertTrue(rs.next());
 	        assertEquals(3,rs.getInt(1));
-	        
+
 	        String dml = "DELETE from " + fullTableName + " WHERE long_col2 = 4";
 	        assertEquals(1,conn.createStatement().executeUpdate(dml));
 	        conn.commit();
@@ -356,7 +362,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(3L, rs.getLong(1));
 	        assertFalse(rs.next());
-	        
+
 	        // query the index table
 	        query = "SELECT long_pk FROM " + fullTableName + " ORDER BY long_col1";
 	        rs = conn.createStatement().executeQuery(query);
@@ -365,11 +371,11 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertTrue(rs.next());
 	        assertEquals(3L, rs.getLong(1));
 	        assertFalse(rs.next());
-	        
+
 	        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
         }
     }
-    
+
     @Test
     public void testGroupByCount() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -432,7 +438,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
     	}
     }
-    
+
     @Test
     public void createIndexOnTableWithSpecifiedDefaultCF() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -440,7 +446,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.setAutoCommit(false);
 	        String query;
             ResultSet rs;
-	        String ddl ="CREATE TABLE " + fullTableName 
+	        String ddl ="CREATE TABLE " + fullTableName
 	        		+ " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) DEFAULT_COLUMN_FAMILY='A'" + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "");
 	        Statement stmt = conn.createStatement();
 	        stmt.execute(ddl);
@@ -455,7 +461,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	        
+
 	        //check options set correctly on index
 	        TableName indexTableName = TableName.create(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	        NamedTableNode indexNode = NamedTableNode.create(null, indexTableName, null);
@@ -471,20 +477,20 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        }
         }
     }
-    
+
     @Test
     public void testIndexWithNullableDateCol() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
             Date date = new Date(System.currentTimeMillis());
-            
+
             createMultiCFTestTable(fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (date_col)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
             stmt.execute();
-            
+
             String query = "SELECT int_pk from " + fullTableName ;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
@@ -495,7 +501,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
-            
+
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
@@ -504,7 +510,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
             assertFalse(rs.next());
-            
+
             query = "SELECT date_col from " + fullTableName + " order by date_col" ;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
@@ -515,7 +521,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName + "\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs));
             }
-            
+
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(date, rs.getDate(1));
@@ -524,9 +530,9 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(new Date(date.getTime() + 2 * MILLIS_IN_DAY), rs.getDate(1));
             assertFalse(rs.next());
-        } 
+        }
     }
-    
+
     @Test
     public void testSelectAllAndAliasWithIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -539,7 +545,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	        
+
 	        ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (v2 DESC) INCLUDE (v1)";
 	        conn.createStatement().execute(ddl);
 	        query = "SELECT * FROM " + fullIndexName;
@@ -556,7 +562,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        stmt.setString(3, "2");
 	        stmt.execute();
 	        conn.commit();
-	        
+
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex){
@@ -581,16 +587,16 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertEquals("x",rs.getString("v1"));
 	        assertEquals("1",rs.getString("v2"));
 	        assertFalse(rs.next());
-	        
+
 	        query = "SELECT v1 as foo FROM " + fullTableName + " WHERE v2 = '1' ORDER BY foo";
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex){
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +fullTableName + " [1,~'1']\n" + 
-	                    "    SERVER SORTED BY [\"V1\"]\n" + 
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +fullTableName + " [1,~'1']\n" +
+	                    "    SERVER SORTED BY [\"V1\"]\n" +
 	                    "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 	        } else {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +fullIndexName + " [~'1']\n" + 
-	                    "    SERVER SORTED BY [\"V1\"]\n" + 
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +fullIndexName + " [~'1']\n" +
+	                    "    SERVER SORTED BY [\"V1\"]\n" +
 	                    "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 	        }
 
@@ -601,7 +607,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testSelectCF() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -619,7 +625,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	
+
 	        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?,?)");
 	        stmt.setString(1,"a");
 	        stmt.setString(2, "x");
@@ -632,11 +638,11 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        stmt.setString(4, "B");
 	        stmt.execute();
 	        conn.commit();
-	        
+
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName, QueryUtil.getExplainPlan(rs));
-	
+
 	        query = "SELECT a.* FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex) {
@@ -658,7 +664,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testUpsertAfterIndexDrop() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -673,13 +679,13 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	    
+
 	        conn.createStatement().execute(
 	          "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1, v2)");
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	    
+
 	        // load some data into the table
 	        PreparedStatement stmt =
 	            conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
@@ -688,7 +694,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        stmt.setString(3, "1");
 	        stmt.execute();
 	        conn.commit();
-	        
+
 	        // make sure the index is working as expected
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
@@ -697,19 +703,19 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertEquals("1", rs.getString(2));
 	        assertEquals("a", rs.getString(3));
 	        assertFalse(rs.next());
-	
+
 	        String ddl = "DROP INDEX " + indexName + " ON " + fullTableName;
 	        stmt = conn.prepareStatement(ddl);
 	        stmt.execute();
-	        
+
 	        stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + "(k, v1) VALUES(?,?)");
 	        stmt.setString(1, "a");
 	        stmt.setString(2, "y");
 	        stmt.execute();
 	        conn.commit();
-	    
+
 	        query = "SELECT * FROM " + fullTableName;
-	    
+
 	        // check that the data table matches as expected
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
@@ -718,7 +724,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testMultipleUpdatesAcrossRegions() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -730,18 +736,18 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        // make sure that the tables are empty, but reachable
 	        conn.createStatement().execute(
 	          "CREATE TABLE " + testTable
-	              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "  + HTableDescriptor.MAX_FILESIZE + "=1, " + HTableDescriptor.MEMSTORE_FLUSHSIZE + "=1 " 
+	              + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "  + HTableDescriptor.MAX_FILESIZE + "=1, " + HTableDescriptor.MEMSTORE_FLUSHSIZE + "=1 "
 	        		  + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "") + "SPLIT ON ('b')");
 	        query = "SELECT * FROM " + testTable;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	
+
 	        conn.createStatement().execute(
 	  	          "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + testTable + " (v1, v2)");
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
-	    
+
 	        // load some data into the table
 	        PreparedStatement stmt =
 	            conn.prepareStatement("UPSERT INTO " + testTable + " VALUES(?,?,?)");
@@ -758,7 +764,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        stmt.setString(3, "3");
 	        stmt.execute();
 	        conn.commit();
-	        
+
 	        // make sure the index is working as expected
 	        query = "SELECT * FROM " + fullIndexName;
 	        rs = conn.createStatement().executeQuery(query);
@@ -775,7 +781,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertEquals("3", rs.getString(2));
 	        assertEquals("c", rs.getString(3));
 	        assertFalse(rs.next());
-	
+
 	        query = "SELECT * FROM " + testTable;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if (localIndex) {
@@ -788,7 +794,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	                    + "    SERVER FILTER BY FIRST KEY ONLY",
 	                QueryUtil.getExplainPlan(rs));
 	        }
-	    
+
 	        // check that the data table matches as expected
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
@@ -806,7 +812,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        assertFalse(rs.next());
         }
     }
-    
+
     @Test
     public void testIndexWithCaseSensitiveCols() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -887,7 +893,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("2",rs.getString(5));
             assertEquals("2",rs.getString("v2"));
             assertFalse(rs.next());
-        } 
+        }
     }
 
     @Test
@@ -901,11 +907,11 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        conn.createStatement().execute(ddl);
 	        ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + "(COL1)";
 	        conn.createStatement().execute(ddl);
-	
-	        query = "SELECT COUNT(COL1) FROM " + fullTableName +" WHERE COL1 IN (1,25,50,75,100)"; 
+
+	        query = "SELECT COUNT(COL1) FROM " + fullTableName +" WHERE COL1 IN (1,25,50,75,100)";
 	        rs = conn.createStatement().executeQuery(query);
 	        assertTrue(rs.next());
-        } 
+        }
     }
 
     @Test
@@ -916,14 +922,14 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	        String query;
 	        ResultSet rs;
             Date date = new Date(System.currentTimeMillis());
-            
+
             createMultiCFTestTable(fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = null;
             ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
             stmt.execute();
-            
+
             query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + fullTableName ;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
@@ -931,7 +937,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
             }
-            
+
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(new BigDecimal("1.1"), rs.getBigDecimal(1));
@@ -946,7 +952,51 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("4.3"), rs.getBigDecimal(2));
             assertEquals(new BigDecimal("5.3"), rs.getBigDecimal(3));
             assertFalse(rs.next());
-        } 
+        }
     }
-    
+
+    /**
+     * Ensure that HTD contains table priorities correctly.
+     */
+    @Test
+    public void testTableDescriptorPriority() throws SQLException, IOException {
+      // Check system tables priorities.
+      try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin()) {
+        for (HTableDescriptor htd : admin.listTables()) {
+          if (htd.getTableName().getNameAsString().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME)) {
+            String val = htd.getValue("PRIORITY");
+            assertNotNull("PRIORITY is not set for table:" + htd, val);
+            assertTrue(Integer.parseInt(val)
+              >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
+          }
+        }
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+          conn.setAutoCommit(false);
+          Statement stmt = conn.createStatement();
+          stmt.execute(ddl);
+          BaseTest.populateTestTable(fullTableName);
+          ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName
+              + " ON " + fullTableName + " (long_col1, long_col2)"
+              + " INCLUDE (decimal_col1, decimal_col2)";
+          stmt.execute(ddl);
+        }
+
+        HTableDescriptor dataTable = admin.getTableDescriptor(
+          org.apache.hadoop.hbase.TableName.valueOf(fullTableName));
+        String val = dataTable.getValue("PRIORITY");
+        assertTrue(val == null || Integer.parseInt(val) < HConstants.HIGH_QOS);
+
+        if (!localIndex) {
+          HTableDescriptor indexTable = admin.getTableDescriptor(
+            org.apache.hadoop.hbase.TableName.valueOf(indexName));
+          val = indexTable.getValue("PRIORITY");
+          assertNotNull("PRIORITY is not set for table:" + indexTable, val);
+          assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
+        }
+      }
+    }
+
 }
