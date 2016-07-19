@@ -132,7 +132,7 @@ public class ScanPlan extends BaseQueryPlan {
             for (long rowCount : gpsInfo.getRowCounts()) {
                 totRowCount += rowCount;
             }
-            estRowSize = totByteSize / totRowCount;
+            estRowSize = totRowCount == 0 ? 0 : totByteSize / totRowCount;
             estimatedParallelThresholdBytes = 2
                     * services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
                             QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
