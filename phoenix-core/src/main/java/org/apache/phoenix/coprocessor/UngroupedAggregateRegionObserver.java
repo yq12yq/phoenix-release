@@ -29,6 +29,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -502,33 +503,35 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
     }
 
     @Override
-    public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c,
-        final Store store, InternalScanner scanner, final ScanType scanType)
-        throws IOException {
-        TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        InternalScanner internalScanner = scanner;
-        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            try {
-                boolean useCurrentTime =
-                        c.getEnvironment().getConfiguration().getBoolean(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                                QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
-                // Provides a means of clients controlling their timestamps to not use current time
-                // when background tasks are updating stats. Instead we track the max timestamp of
-                // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime() : StatisticsCollector.NO_TIMESTAMP;
-                StatisticsCollector stats = new StatisticsCollector(
-                        c.getEnvironment(), table.getNameAsString(),
-                        clientTimeStamp, store.getFamily().getName());
-                internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
-            } catch (IOException e) {
-                // If we can't reach the stats table, don't interrupt the normal
-                // compaction operation, just log a warning.
-                if(logger.isWarnEnabled()) {
-                    logger.warn("Unable to collect stats for " + table, e);
+    public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
+            final InternalScanner scanner, final ScanType scanType) throws IOException {
+        // Compaction and split upcalls run with the effective user context of the requesting user.
+        // This will lead to failure of cross cluster RPC if the effective user is not
+        // the login user. Switch to the login user context to ensure we have the expected
+        // security context.
+        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+            @Override
+            public InternalScanner run() throws Exception {
+                TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+                InternalScanner internalScanner = scanner;
+                if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+                    try {
+                        long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                        StatisticsCollector stats = new StatisticsCollector(
+                            c.getEnvironment(), table.getNameAsString(),
+                            clientTimeStamp, store.getFamily().getName());
+                        internalScanner = stats.createCompactionScanner(c.getEnvironment().getRegion(), store, scanner);
+                    } catch (IOException e) {
+                      // If we can't reach the stats table, don't interrupt the normal
+                      // compaction operation, just log a warning.
+                      if (logger.isWarnEnabled()) {
+                          logger.warn("Unable to collect stats for " + table, e);
+                      }
+                    }
                 }
+                return internalScanner;
             }
-        }
-        return internalScanner;
+        });
     }
 
 
