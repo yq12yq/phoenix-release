@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.PFunction;
@@ -286,5 +287,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row)
             throws SQLException {
         return getDelegate().getTableRegionLocation(tableName, row);
+    }
+    
+    @Override
+    public void invalidateStats(ImmutableBytesPtr tableName) {
+      getDelegate().invalidateStats(tableName);
     }
 }
