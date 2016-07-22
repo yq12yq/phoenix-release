@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -146,16 +147,25 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
-      if (indexUUID != null) {
-          for (Mutation m : mutations) {
-              m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-          }
-      }
-      Mutation[] mutationArray = new Mutation[mutations.size()];
-      // TODO: should we use the one that is all or none?
-      logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
-      region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
+    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
+                                    long blockingMemstoreSize) throws IOException {
+        if (indexUUID != null) {
+            for (Mutation m : mutations) {
+                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+            }
+        }
+        Mutation[] mutationArray = new Mutation[mutations.size()];
+        // We are waiting 3 seconds for the memstore flush happen
+        for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                throw new IOException(e);
+            }
+        }
+        // TODO: should we use the one that is all or none?
+        logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.toString());
+        region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
     public static void serializeIntoScan(Scan scan) {
@@ -208,7 +218,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             ScanUtil.setRowKeyOffset(scan, offsetToBe);
         }
         final int offset = offsetToBe;
-        
+        Configuration conf = c.getEnvironment().getConfiguration();
+        long flushSize = region.getTableDesc().getMemStoreFlushSize();
+
+        if (flushSize <= 0) {
+            flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
+                    HTableDescriptor.DEFAULT_MEMSTORE_FLUSH_SIZE);
+        }
+        final long blockingMemStoreSize = flushSize * (
+                conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,
+                        HConstants.DEFAULT_HREGION_MEMSTORE_BLOCK_MULTIPLIER)-1) ;
         PTable projectedTable = null;
         PTable writeToTable = null;
         byte[][] values = null;
@@ -295,6 +314,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final RegionScanner innerScanner = theScanner;
         boolean aquiredLock = false;
         try {
+            if(buildLocalIndex) {
+                synchronized (c.getEnvironment().getSharedData()) {
+                    Object object = c.getEnvironment().getSharedData().get(LOCAL_INDEX_BUILD);
+                    if (object == null) {
+                        c.getEnvironment().getSharedData().put(LOCAL_INDEX_BUILD, 1);
+                    } else {
+                        int numOfScans = ((Integer) object).intValue();
+                        c.getEnvironment().getSharedData().put(LOCAL_INDEX_BUILD, ++numOfScans);
+                    }
+                }
+            }
             region.startRegionOperation();
             aquiredLock = true;
             synchronized (innerScanner) {
@@ -323,7 +353,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         // Special case for re-writing DESC ARRAY, as the actual byte value needs to change in this case
                                         if (field.getDataType().isArrayType()) {
                                             field.getDataType().coerceBytes(ptr, null, field.getDataType(),
-                                                field.getMaxLength(), field.getScale(), field.getSortOrder(), 
+                                                field.getMaxLength(), field.getScale(), field.getSortOrder(),
                                                 field.getMaxLength(), field.getScale(), field.getSortOrder(), true); // force to use correct separator byte
                                         }
                                         // Special case for re-writing DESC CHAR or DESC BINARY, to force the re-writing of trailing space characters
@@ -346,13 +376,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         while (len > 0 && ptr.get()[ptr.getOffset() + len - 1] == StringUtil.SPACE_UTF8) {
                                             len--;
                                         }
-                                        ptr.set(ptr.get(), ptr.getOffset(), len);                                        
+                                        ptr.set(ptr.get(), ptr.getOffset(), len);
                                     }
                                     values[i] = ptr.copyBytes();
                                 }
                                 writeToTable.newKey(ptr, values);
                                 if (Bytes.compareTo(
-                                    firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(), 
+                                    firstKV.getRowArray(), firstKV.getRowOffset() + offset, firstKV.getRowLength(),
                                     ptr.get(),ptr.getOffset() + offset,ptr.getLength()) == 0) {
                                     continue;
                                 }
@@ -459,7 +489,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         }
                                         column.getDataType().coerceBytes(ptr, value,
                                             expression.getDataType(), expression.getMaxLength(),
-                                            expression.getScale(), expression.getSortOrder(), 
+                                            expression.getScale(), expression.getSortOrder(),
                                             column.getMaxLength(), column.getScale(),
                                             column.getSortOrder(), projectedTable.rowKeyOrderOptimizable());
                                         byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
@@ -511,13 +541,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!mutations.isEmpty() && batchSize > 0 &&
                                     mutations.size() % batchSize == 0) {
-                                commitBatch(region, mutations, indexUUID);
+                                commitBatch(region, mutations, indexUUID, blockingMemStoreSize);
                                 mutations.clear();
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!indexMutations.isEmpty() && batchSize > 0 &&
                                     indexMutations.size() % batchSize == 0) {
-                                commitBatch(region, indexMutations, null);
+                                commitBatch(region, indexMutations, null, blockingMemStoreSize);
                                 indexMutations.clear();
                             }
                         } catch (ConstraintViolationException e) {
@@ -532,8 +562,29 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         hasAny = true;
                     }
                 } while (hasMore);
+                if (!mutations.isEmpty()) {
+                    commitBatch(region,mutations, indexUUID, blockingMemStoreSize);
+                }
+
+                if (!indexMutations.isEmpty()) {
+                    commitBatch(region,indexMutations, null, blockingMemStoreSize);
+                    indexMutations.clear();
+                }
             }
         } finally {
+            if(buildLocalIndex) {
+                synchronized (c.getEnvironment().getSharedData()) {
+                    Object object = c.getEnvironment().getSharedData().get(LOCAL_INDEX_BUILD);
+                    if (object != null) {
+                        int numOfScans = ((Integer) object).intValue();
+                        if (--numOfScans == 0) {
+                            c.getEnvironment().getSharedData().remove(LOCAL_INDEX_BUILD, 1);
+                        } else {
+                            c.getEnvironment().getSharedData().put(LOCAL_INDEX_BUILD, numOfScans);
+                        }
+                    }
+                }
+            }
             try {
                 innerScanner.close();
             } finally {
@@ -542,15 +593,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Finished scanning " + rowCount + " rows for ungrouped coprocessor scan " + scan, ScanUtil.getCustomAnnotations(scan)));
-        }
-
-        if (!mutations.isEmpty()) {
-            commitBatch(region,mutations, indexUUID);
-        }
-
-        if (!indexMutations.isEmpty()) {
-            commitBatch(region,indexMutations, null);
-            indexMutations.clear();
         }
 
         final boolean hadAny = hasAny;
@@ -817,7 +859,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         }
     }
-
+    @Override
+        public void preSplit(ObserverContext<RegionCoprocessorEnvironment> c, byte[] splitRow)
+                throws IOException {
+                // If the local index build going on don't allow splitting the region. See PHOENIX-3111.
+                        if(c.getEnvironment().getSharedData().containsKey(BaseScannerRegionObserver.LOCAL_INDEX_BUILD)) {
+                       throw new IOException("Local index build going on so splitting not allowed.");
+                   }
+    }
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
