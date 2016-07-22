@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
@@ -171,15 +172,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
-    // Max number of cached table stats for view or shared index physical tables
-    private static final int MAX_TABLE_STATS_CACHE_ENTRIES = 512;
     protected final Configuration config;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final Cache<ImmutableBytesPtr, PTableStats> tableStatsCache;
+    private final TableStatsCache tableStatsCache;
 
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -262,13 +261,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // find the HBase version and use that to determine the KeyValueBuilder that should be used
         String hbaseVersion = VersionInfo.getVersion();
         this.kvBuilder = KeyValueBuilder.get(hbaseVersion);
-        long halfStatsUpdateFreq = config.getLong(
-                QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB,
-                QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS) / 2;
-        tableStatsCache = CacheBuilder.newBuilder()
-                .maximumSize(MAX_TABLE_STATS_CACHE_ENTRIES)
-                .expireAfterWrite(halfStatsUpdateFreq, TimeUnit.MILLISECONDS)
-                .build();
+        
+        // A little bit of a smell to leak `this` here, but should not be a problem
+        this.tableStatsCache = new TableStatsCache(this, config);
     }
 
     private void openConnection() throws SQLException {
@@ -2526,33 +2521,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public PTableStats getTableStats(final byte[] physicalName, final long clientTimeStamp) throws SQLException {
         try {
-            return tableStatsCache.get(new ImmutableBytesPtr(physicalName), new Callable<PTableStats>() {
-                @Override
-                public PTableStats call() throws Exception {
-                    /*
-                     *  The shared view index case is tricky, because we don't have
-                     *  table metadata for it, only an HBase table. We do have stats,
-                     *  though, so we'll query them directly here and cache them so
-                     *  we don't keep querying for them.
-                     */
-                    HTableInterface statsHTable = ConnectionQueryServicesImpl.this.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-                    try {
-                        return StatisticsUtil.readStatistics(statsHTable, physicalName, clientTimeStamp);
-                    } catch (IOException e) {
-                        logger.warn("Unable to read from stats table", e);
-                        // Just cache empty stats. We'll try again after some time anyway.
-                        return PTableStats.EMPTY_STATS;
-                    } finally {
-                        try {
-                            statsHTable.close();
-                        } catch (IOException e) {
-                            // Log, but continue. We have our stats anyway now.
-                            logger.warn("Unable to close stats table", e);
-                        }
-                    }
-                }
-
-            });
+            return tableStatsCache.get(new ImmutableBytesPtr(physicalName));
         } catch (ExecutionException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -2679,4 +2648,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                }
        }
     }
+    
+  /**
+   * Manually adds {@link PTableStats} for a table to the client-side cache. Not a
+   * {@link ConnectionQueryServices} method. Exposed for testing purposes.
+   *
+   * @param tableName Table name
+   * @param stats Stats instance
+   */
+  public void addTableStats(ImmutableBytesPtr tableName, PTableStats stats) {
+    this.tableStatsCache.put(Objects.requireNonNull(tableName), stats);
+  }
+
+  @Override
+  public void invalidateStats(ImmutableBytesPtr tableName) {
+    this.tableStatsCache.invalidate(Objects.requireNonNull(tableName));
+  }
 }

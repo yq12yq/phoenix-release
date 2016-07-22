@@ -171,8 +171,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.schema.stats.StatisticsUtil;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -818,25 +817,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
-        PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
-                schemaName.getString(), tableName.getString())) : physicalTables.get(0);
-        PTableStats stats = PTableStats.EMPTY_STATS;
-        if (tenantId == null) {
-            HTableInterface statsHTable = null;
-            try {
-                statsHTable = ServerUtil.getHTableForCoprocessorScan(env, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES);
-                stats = StatisticsUtil.readStatistics(statsHTable, physicalTableName.getBytes(), clientTimeStamp);
-                timeStamp = Math.max(timeStamp, stats.getTimestamp());
-            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                logger.warn(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " not online yet?");
-            } finally {
-                if (statsHTable != null) statsHTable.close();
-            }
-        }
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp,
             tableSeqNum, pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
             tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName, viewStatement,
-            disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType, stats);
+            disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType);
     }
 
     private PFunction getFunction(RegionScanner scanner)

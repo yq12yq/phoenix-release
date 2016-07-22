@@ -40,6 +40,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -143,8 +144,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         FilterableStatement statement = plan.getStatement();
         RowProjector projector = plan.getProjector();
         physicalTableName = table.getPhysicalName().getBytes();
-        tableStats = useStats() ? new MetaDataClient(context.getConnection()).getTableStats(table) : PTableStats.EMPTY_STATS;
-        Scan scan = context.getScan();
+        Long currentSCN = context.getConnection().getSCN();
+        if (null == currentSCN) {
+          currentSCN = HConstants.LATEST_TIMESTAMP;
+        }
+        tableStats = useStats() ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN) : PTableStats.EMPTY_STATS;        Scan scan = context.getScan();
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
         Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
