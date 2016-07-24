@@ -84,6 +84,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -295,6 +296,10 @@ public class HiveTestUtil {
         qSortNHashQuerySet = new HashSet<String>();
         qJavaVersionSpecificOutput = new HashSet<String>();
         this.clusterType = clusterType;
+
+        // Using randomUUID for dfs cluster
+        System.setProperty("test.build.data", "target/test-data/hive-" + UUID.randomUUID().toString
+                ());
 
         HadoopShims shims = ShimLoader.getHadoopShims();
         int numberOfDataNodes = 1;
