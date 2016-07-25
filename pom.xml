@@ -845,13 +845,13 @@
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-jaxrs</artifactId>
         <version>${jackson.version}</version>
-        <scope>test</scope>
+        <scope>compile</scope>
       </dependency>
       <dependency>
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-xc</artifactId>
         <version>${jackson.version}</version>
-        <scope>test</scope>
+        <scope>compile</scope>
       </dependency>
       <dependency>
         <groupId>junit</groupId>
