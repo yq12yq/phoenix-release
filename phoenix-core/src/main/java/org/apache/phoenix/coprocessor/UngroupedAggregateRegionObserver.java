@@ -38,10 +38,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -136,6 +138,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public static final String DELETE_CQ = "DeleteCQ";
     public static final String DELETE_CF = "DeleteCF";
     public static final String EMPTY_CF = "EmptyCF";
+    /**
+     * Key of shared map used in this coprocessor for maintaining the number of scans used for
+     * create index, delete and upsert select operations which reads and writes to same region in
+     * coprocessors.
+     */
+    public static final String SCANS_REFERENCE_COUNT = "ScansReferenceCount";
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
 
@@ -295,8 +303,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
+        boolean needToWrite = false;
+        ConcurrentMap<String, Object> sharedData = c.getEnvironment().getSharedData();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if (isDescRowKeyOrderUpgrade || isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
+            needToWrite = true;
             // TODO: size better
             mutations = Lists.newArrayListWithExpectedSize(1024);
             batchSize = env.getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
@@ -314,14 +325,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         final RegionScanner innerScanner = theScanner;
         boolean aquiredLock = false;
         try {
-            if(buildLocalIndex) {
-                synchronized (c.getEnvironment().getSharedData()) {
-                    Object object = c.getEnvironment().getSharedData().get(LOCAL_INDEX_BUILD);
+            if(needToWrite) {
+                synchronized (sharedData) {
+                    Object object = sharedData.get(SCANS_REFERENCE_COUNT);
                     if (object == null) {
-                        c.getEnvironment().getSharedData().put(LOCAL_INDEX_BUILD, 1);
+                        sharedData.put(SCANS_REFERENCE_COUNT, 1);
                     } else {
                         int numOfScans = ((Integer) object).intValue();
-                        c.getEnvironment().getSharedData().put(LOCAL_INDEX_BUILD, ++numOfScans);
+                        sharedData.put(SCANS_REFERENCE_COUNT, ++numOfScans);
                     }
                 }
             }
@@ -572,15 +583,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 }
             }
         } finally {
-            if(buildLocalIndex) {
-                synchronized (c.getEnvironment().getSharedData()) {
-                    Object object = c.getEnvironment().getSharedData().get(LOCAL_INDEX_BUILD);
+            if(needToWrite) {
+                synchronized (sharedData) {
+                    Object object = sharedData.get(SCANS_REFERENCE_COUNT);
                     if (object != null) {
                         int numOfScans = ((Integer) object).intValue();
                         if (--numOfScans == 0) {
-                            c.getEnvironment().getSharedData().remove(LOCAL_INDEX_BUILD, 1);
+                            sharedData.remove(SCANS_REFERENCE_COUNT, 1);
                         } else {
-                            c.getEnvironment().getSharedData().put(LOCAL_INDEX_BUILD, numOfScans);
+                            sharedData.put(SCANS_REFERENCE_COUNT, numOfScans);
                         }
                     }
                 }
@@ -859,14 +870,29 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         }
     }
+
     @Override
-        public void preSplit(ObserverContext<RegionCoprocessorEnvironment> c, byte[] splitRow)
-                throws IOException {
-                // If the local index build going on don't allow splitting the region. See PHOENIX-3111.
-                        if(c.getEnvironment().getSharedData().containsKey(BaseScannerRegionObserver.LOCAL_INDEX_BUILD)) {
-                       throw new IOException("Local index build going on so splitting not allowed.");
-                   }
+    public void preSplit(ObserverContext<RegionCoprocessorEnvironment> c, byte[] splitRow)
+            throws IOException {
+        // Don't allow splitting if operations need read and write to same region are going on in the
+        // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
+        if (c.getEnvironment().getSharedData().containsKey(SCANS_REFERENCE_COUNT)) {
+            throw new IOException("Operations like local index building/delete/upsert select"
+                    + " might be going on so not allowing to split.");
+        }
     }
+
+    @Override
+    public void preBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> c,
+            List<Pair<byte[], String>> familyPaths) throws IOException {
+        // Don't allow bulkload if operations need read and write to same region are going on in the
+        // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
+        if (c.getEnvironment().getSharedData().containsKey(SCANS_REFERENCE_COUNT)) {
+            throw new DoNotRetryIOException("Operations like local index building/delete/upsert select"
+                    + " might be going on so not allowing to bulkload.");
+        }
+    }
+
     @Override
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
