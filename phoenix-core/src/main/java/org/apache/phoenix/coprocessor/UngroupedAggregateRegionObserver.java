@@ -57,6 +57,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -138,12 +139,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public static final String DELETE_CQ = "DeleteCQ";
     public static final String DELETE_CF = "DeleteCF";
     public static final String EMPTY_CF = "EmptyCF";
+    private final Object lock = new Object();
     /**
-     * Key of shared map used in this coprocessor for maintaining the number of scans used for
-     * create index, delete and upsert select operations which reads and writes to same region in
-     * coprocessors.
+     * To maintain the number of scans used for create index, delete and upsert select operations
+     * which reads and writes to same region in coprocessors.
      */
-    public static final String SCANS_REFERENCE_COUNT = "ScansReferenceCount";
+    private int scansReferenceCount = 0;
+    private boolean isRegionClosing = false;
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
 
@@ -155,7 +157,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
+    private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
                                     long blockingMemstoreSize) throws IOException {
         if (indexUUID != null) {
             for (Mutation m : mutations) {
@@ -166,14 +168,25 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // We are waiting 3 seconds for the memstore flush happen
         for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
             try {
+                checkForRegionClosing();
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 throw new IOException(e);
             }
         }
+        checkForRegionClosing();
         // TODO: should we use the one that is all or none?
         logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.toString());
         region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
+    }
+
+    private void checkForRegionClosing() throws IOException {
+        synchronized (lock) {
+            if(isRegionClosing) {
+                lock.notifyAll();
+                throw new IOException("Region is getting closed. Not allowing to write to avoid possible deadlock.");
+            }
+        }
     }
 
     public static void serializeIntoScan(Scan scan) {
@@ -304,7 +317,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         int batchSize = 0;
         List<Mutation> mutations = Collections.emptyList();
         boolean needToWrite = false;
-        ConcurrentMap<String, Object> sharedData = c.getEnvironment().getSharedData();
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if (isDescRowKeyOrderUpgrade || isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             needToWrite = true;
@@ -326,14 +338,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean aquiredLock = false;
         try {
             if(needToWrite) {
-                synchronized (sharedData) {
-                    Object object = sharedData.get(SCANS_REFERENCE_COUNT);
-                    if (object == null) {
-                        sharedData.put(SCANS_REFERENCE_COUNT, 1);
-                    } else {
-                        int numOfScans = ((Integer) object).intValue();
-                        sharedData.put(SCANS_REFERENCE_COUNT, ++numOfScans);
-                    }
+                synchronized (lock) {
+                    scansReferenceCount++;
                 }
             }
             region.startRegionOperation();
@@ -584,16 +590,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         } finally {
             if(needToWrite) {
-                synchronized (sharedData) {
-                    Object object = sharedData.get(SCANS_REFERENCE_COUNT);
-                    if (object != null) {
-                        int numOfScans = ((Integer) object).intValue();
-                        if (--numOfScans == 0) {
-                            sharedData.remove(SCANS_REFERENCE_COUNT, 1);
-                        } else {
-                            sharedData.put(SCANS_REFERENCE_COUNT, numOfScans);
-                        }
-                    }
+                synchronized (lock) {
+                    scansReferenceCount--;
                 }
             }
             try {
@@ -876,9 +874,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         // Don't allow splitting if operations need read and write to same region are going on in the
         // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
-        if (c.getEnvironment().getSharedData().containsKey(SCANS_REFERENCE_COUNT)) {
-            throw new IOException("Operations like local index building/delete/upsert select"
-                    + " might be going on so not allowing to split.");
+        synchronized (lock) {
+            if (scansReferenceCount != 0) {
+                throw new IOException("Operations like local index building/delete/upsert select"
+                        + " might be going on so not allowing to split.");
+            }
         }
     }
 
@@ -887,9 +887,25 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             List<Pair<byte[], String>> familyPaths) throws IOException {
         // Don't allow bulkload if operations need read and write to same region are going on in the
         // the coprocessors to avoid dead lock scenario. See PHOENIX-3111.
-        if (c.getEnvironment().getSharedData().containsKey(SCANS_REFERENCE_COUNT)) {
-            throw new DoNotRetryIOException("Operations like local index building/delete/upsert select"
-                    + " might be going on so not allowing to bulkload.");
+        synchronized (lock) {
+            if (scansReferenceCount != 0) {
+                throw new DoNotRetryIOException("Operations like local index building/delete/upsert select"
+                        + " might be going on so not allowing to bulkload.");
+            }
+        }
+    }
+
+    @Override
+    public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
+            throws IOException {
+        synchronized (lock) {
+            while (scansReferenceCount != 0) {
+                isRegionClosing = true;
+                try {
+                    lock.wait(1000);
+                } catch (InterruptedException e) {
+                }
+            }
         }
     }
 
