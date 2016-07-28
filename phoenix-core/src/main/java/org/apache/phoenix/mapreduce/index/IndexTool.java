@@ -63,6 +63,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -205,8 +206,10 @@ public class IndexTool extends Configured implements Tool {
             // check if the index type is LOCAL, if so, derive and set the physicalIndexName that is
             // computed from the qDataTable name.
             String physicalIndexTable = pindexTable.getPhysicalName().getString();
+            boolean isLocalIndexBuild = false;
             if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
                 physicalIndexTable = qDataTable;
+                isLocalIndexBuild = true;
             }
 
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
@@ -249,7 +252,7 @@ public class IndexTool extends Configured implements Tool {
                     cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt()));
             } else {
                 job.setMapperClass(PhoenixIndexImportMapper.class);
-                configureRunnableJobUsingBulkLoad(job, outputPath);
+                configureRunnableJobUsingBulkLoad(job, outputPath, isLocalIndexBuild);
                 // finally update the index state to ACTIVE.
                 IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
                     PIndexState.ACTIVE);
@@ -278,7 +281,7 @@ public class IndexTool extends Configured implements Tool {
      * @return
      * @throws Exception
      */
-    private int configureRunnableJobUsingBulkLoad(Job job, Path outputPath) throws Exception {
+    private int configureRunnableJobUsingBulkLoad(Job job, Path outputPath, boolean isLocalIndexBuild) throws Exception {
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         job.setMapOutputValueClass(KeyValue.class);
         final Configuration configuration = job.getConfiguration();
@@ -286,11 +289,24 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.getPhysicalTableName(configuration);
         final HTable htable = new HTable(configuration, physicalIndexTable);
         HFileOutputFormat.configureIncrementalLoad(job, htable);
+        byte[][] splitKeysBeforeJob = null;
+        if(isLocalIndexBuild) {
+            splitKeysBeforeJob = htable.getRegionLocator().getStartKeys();
+        }
         boolean status = job.waitForCompletion(true);
         if (!status) {
             LOG.error("Failed to run the IndexTool job. ");
             htable.close();
             return -1;
+        } else {
+            if (isLocalIndexBuild
+                    && !IndexUtil.matchingSplitKeys(splitKeysBeforeJob, htable.getRegionLocator()
+                            .getStartKeys())) {
+                LOG.error("The index building is happening for local index and the split keys "
+                        + " are not matching before and after running the job. Please rerun the job"
+                        + " otherwise  there may be inconsistencies between actual data and index data");
+                return -1;
+            }
         }
 
         LOG.info("Loading HFiles from {}", outputPath);
