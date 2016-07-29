@@ -79,3 +79,8 @@ cc76ff5 PHOENIX-2359 Configuration for PQS to use Protobuf serialization instead
 3ea11f3 PHOENIX-2449 QueryServer needs Hadoop configuration on classpath with Kerberos
 be9aca6 PHOENIX-2477 ClassCastException in IndexedWALEditCodec after HBASE-14501 (possible dataloss)
 202ceaa PHOENIX-2667 Race condition between IndexBuilder and Split for region lock
+f42ca61 BUG-61791 PHOENIX-3037 Setup proper security context in compaction/split coprocessor hooks
+65951fc PHOENIX-2940 Query the stats table and cache stats in the client (#10)
+bc0d619 BUG-57566 PHOENIX-2878 CURRENT_TIME fails to provide correct time when projected table is using (#6)
+70677de BUG-57030 PHOENIX-2876 Using aggregation function in ORDER BY (Sergey Soldatov) (#7)
+f42ca61 BUG-61791 PHOENIX-3037 Setup proper security context in compaction/split coprocessor hooks
