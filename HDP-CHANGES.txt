@@ -84,3 +84,5 @@ f42ca61 BUG-61791 PHOENIX-3037 Setup proper security context in compaction/split
 bc0d619 BUG-57566 PHOENIX-2878 CURRENT_TIME fails to provide correct time when projected table is using (#6)
 70677de BUG-57030 PHOENIX-2876 Using aggregation function in ORDER BY (Sergey Soldatov) (#7)
 f42ca61 BUG-61791 PHOENIX-3037 Setup proper security context in compaction/split coprocessor hooks
+36cb93d BUG-58450 PHOENIX-2568 phoenix-spark: client-spark JAR conflicts with some distributions
+f6ff000 BUG-55158 PHOENIX-1478 Can't upsert value of 127 into column of type unsigned tinyint(Biju Nair)
