@@ -155,6 +155,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
         // be able to get a single backing buffer for a KeyValue.
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
+        isRegionClosing = false;
+        scansReferenceCount = 0;
     }
 
     private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
@@ -168,23 +170,23 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // We are waiting 3 seconds for the memstore flush happen
         for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
             try {
-                checkForRegionClosing();
+                checkForRegionClosing(region.getRegionInfo());
                 Thread.sleep(100);
             } catch (InterruptedException e) {
                 throw new IOException(e);
             }
         }
-        checkForRegionClosing();
         // TODO: should we use the one that is all or none?
         logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.toString());
         region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
-    private void checkForRegionClosing() throws IOException {
+    private void checkForRegionClosing(HRegionInfo regionInfo) throws IOException {
         synchronized (lock) {
             if(isRegionClosing) {
                 lock.notifyAll();
-                throw new IOException("Region is getting closed. Not allowing to write to avoid possible deadlock.");
+                throw new IOException("Region " + regionInfo
+                        + "is getting closed. Not allowing to write to avoid possible deadlock.");
             }
         }
     }
