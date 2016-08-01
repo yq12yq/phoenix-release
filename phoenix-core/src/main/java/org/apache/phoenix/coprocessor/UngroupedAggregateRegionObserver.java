@@ -40,6 +40,8 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 
+import javax.annotation.concurrent.GuardedBy;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -48,6 +50,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -139,12 +142,35 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     public static final String DELETE_CQ = "DeleteCQ";
     public static final String DELETE_CF = "DeleteCF";
     public static final String EMPTY_CF = "EmptyCF";
+    /**
+     * This lock used for synchronizing the state of
+     * {@link UngroupedAggregateRegionObserver#scansReferenceCount},
+     * {@link UngroupedAggregateRegionObserver#isRegionClosing} variables used to avoid possible
+     * dead lock situation in case below steps: 
+     * 1. We get read lock when we start writing local indexes, deletes etc.. 
+     * 2. when memstore reach threshold, flushes happen. Since they use read (shared) lock they 
+     * happen without any problem until someone tries to obtain write lock. 
+     * 3. at one moment we decide to split/bulkload/close and try to acquire write lock. 
+     * 4. Since that moment all attempts to get read lock will be blocked. I.e. no more 
+     * flushes will happen. But we continue to fill memstore with local index batches and 
+     * finally we get RTBE.
+     * 
+     * The solution to this is to not allow or delay operations acquire the write lock.
+     * 1) In case of split we just throw IOException so split won't happen but it will not cause any harm.
+     * 2) In case of bulkload failing it by throwing the exception. 
+     * 3) In case of region close by balancer/move wait before closing the reason and fail the query which 
+     * does write after reading. 
+     * 
+     * See PHOENIX-3111 for more info.
+     */
     private final Object lock = new Object();
     /**
      * To maintain the number of scans used for create index, delete and upsert select operations
      * which reads and writes to same region in coprocessors.
      */
+    @GuardedBy("lock")
     private int scansReferenceCount = 0;
+    @GuardedBy("lock")
     private boolean isRegionClosing = false;
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
@@ -167,20 +193,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         }
         Mutation[] mutationArray = new Mutation[mutations.size()];
-        // We are waiting 3 seconds for the memstore flush happen
-        for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
-            try {
-                checkForRegionClosing(region.getRegionInfo());
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                throw new IOException(e);
+        try {
+            region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
+        } catch (RegionTooBusyException rtbe) {
+            // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
+            // flush happen which decrease the memstore size and then writes allowed on the region.
+            for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
+                try {
+                    checkForRegionClosing(region.getRegionInfo());
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException(e);
+                }
             }
+            if (region.getMemstoreSize() > blockingMemstoreSize) {
+                throw rtbe;
+            }
+            region.batchMutate(mutationArray, HConstants.NO_NONCE, HConstants.NO_NONCE);
         }
-        // TODO: should we use the one that is all or none?
-        logger.debug("Committing batch of " + mutations.size() + " mutations for " + region.toString());
-        region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
+    /**
+     * There is a chance that region might be closing while running balancer/move/merge. In this
+     * case if the memstore size reaches blockingMemstoreSize better to fail query because there is
+     * a high chance that flush might not proceed and memstore won't be freed up.
+     * @throws IOException
+     */
     private void checkForRegionClosing(HRegionInfo regionInfo) throws IOException {
         synchronized (lock) {
             if(isRegionClosing) {
@@ -248,6 +287,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             flushSize = conf.getLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,
                     HTableDescriptor.DEFAULT_MEMSTORE_FLUSH_SIZE);
         }
+        
+        /**
+         * Upper bound of memstore size allowed for region. Updates will be blocked until the flush
+         * happen if the memstore reaches this threshold.
+         */
         final long blockingMemStoreSize = flushSize * (
                 conf.getLong(HConstants.HREGION_MEMSTORE_BLOCK_MULTIPLIER,
                         HConstants.DEFAULT_HREGION_MEMSTORE_BLOCK_MULTIPLIER)-1) ;
