@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
@@ -200,13 +201,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     public static class ConnectionInfo {
         private static final org.slf4j.Logger logger = LoggerFactory.getLogger(ConnectionInfo.class);
         private static final Object KERBEROS_LOGIN_LOCK = new Object();
-<<<<<<< HEAD
-||||||| parent of ea8f52e... PHOENIX-3891 Compare current user to JDBC url principal with optional realm
-        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
-=======
-        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static final String REALM_EQUIVALENCY_WARNING_MSG = "Provided principal does not contan a realm and the default realm cannot be determined. Ignoring realm equivalency check.";
->>>>>>> ea8f52e... PHOENIX-3891 Compare current user to JDBC url principal with optional realm
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -476,6 +471,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final boolean isConnectionless;
         private final String principal;
         private final String keytab;
+        private final User user;
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
             this.zookeeperQuorum = zookeeperQuorum;
@@ -484,6 +480,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(zookeeperQuorum);
             this.principal = principal;
             this.keytab = keytab;
+            try {
+                this.user = User.getCurrent();
+            } catch (IOException e) {
+                throw new RuntimeException("Couldn't get the current user!!");
+            }
+            if (null == this.user) {
+                throw new RuntimeException("Acquired null user which should never happen");
+            }
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
@@ -555,6 +559,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             result = prime * result + ((rootNode == null) ? 0 : rootNode.hashCode());
             result = prime * result + ((principal == null) ? 0 : principal.hashCode());
             result = prime * result + ((keytab == null) ? 0 : keytab.hashCode());
+            // `user` is guaranteed to be non-null
+            result = prime * result + user.hashCode();
             return result;
         }
 
@@ -564,6 +570,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (obj == null) return false;
             if (getClass() != obj.getClass()) return false;
             ConnectionInfo other = (ConnectionInfo) obj;
+            // `user` is guaranteed to be non-null
+            if (!other.user.equals(user)) return false;
             if (zookeeperQuorum == null) {
                 if (other.zookeeperQuorum != null) return false;
             } else if (!zookeeperQuorum.equals(other.zookeeperQuorum)) return false;
