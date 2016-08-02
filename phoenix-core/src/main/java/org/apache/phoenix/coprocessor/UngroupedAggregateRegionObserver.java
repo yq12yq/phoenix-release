@@ -193,25 +193,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         }
         Mutation[] mutationArray = new Mutation[mutations.size()];
-        try {
-            region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
-        } catch (RegionTooBusyException rtbe) {
-            // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
-            // flush happen which decrease the memstore size and then writes allowed on the region.
-            for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
-                try {
-                    checkForRegionClosing(region.getRegionInfo());
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException(e);
-                }
+        // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
+        // flush happen which decrease the memstore size and then writes allowed on the region.
+        for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
+            try {
+                checkForRegionClosing(region.getRegionInfo());
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(e);
             }
-            if (region.getMemstoreSize() > blockingMemstoreSize) {
-                throw rtbe;
-            }
-            region.batchMutate(mutationArray, HConstants.NO_NONCE, HConstants.NO_NONCE);
         }
+        region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
     /**
