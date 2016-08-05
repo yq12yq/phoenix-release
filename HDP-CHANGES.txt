@@ -46,3 +46,4 @@ b47f414 PHOENIX-2748 Disable auto-commit during bulk load
 7778eea PHOENIX-3021 Using local index during compaction is producing NPE
 300d205 PHOENIX-3136 Do not relocate org.apache.calcite in queryserver/thin-client
 33006f7 PHOENIX-3126 Tie a driver instance to a specific user (Prabhjyot Singh)
+a762402 PHOENIX-3149 Local index got corrupted if intermediate compaction happen during the split.
