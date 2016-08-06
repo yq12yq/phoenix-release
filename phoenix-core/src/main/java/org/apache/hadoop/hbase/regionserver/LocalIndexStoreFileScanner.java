@@ -38,6 +38,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
 
     private IndexHalfStoreFileReader reader;
     private boolean changeBottomKeys;
+    private boolean realSeekDone = false;
     public LocalIndexStoreFileScanner(Reader reader, HFileScanner hfs, boolean useMVCC,
             boolean hasMVCC, long readPt) {
         super(reader, hfs, useMVCC, hasMVCC, readPt);
@@ -58,31 +59,50 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         }
         if (next!=null && (reader.isTop() || changeBottomKeys)) {
             next = getChangedKey(next,  !reader.isTop() && changeBottomKeys);
-        } 
+        }
         return next;
     }
 
     @Override
     public Cell peek() {
         Cell peek = super.peek();
+        if(!realSeekDone) {
+            try {
+                seek(KeyValueUtil.createFirstOnRowColTS(peek, HConstants.LATEST_TIMESTAMP));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            realSeekDone = true;
+            peek = super.peek();
+        }
         if (peek != null && (reader.isTop() || changeBottomKeys)) {
             peek = getChangedKey(peek, !reader.isTop() && changeBottomKeys);
-        } 
+        }
         return peek;
     }
 
     private KeyValue getChangedKey(Cell next, boolean changeBottomKeys) {
         // If it is a top store file change the StartKey with SplitKey in Key
         //and produce the new value corresponding to the change in key
-        byte[] changedKey = getNewRowkeyByRegionStartKeyReplacedWithSplitKey(next, changeBottomKeys);
-        KeyValue changedKv =
-                new KeyValue(changedKey, 0, changedKey.length, next.getFamilyArray(),
-                    next.getFamilyOffset(), next.getFamilyLength(), next.getQualifierArray(),
-                    next.getQualifierOffset(), next.getQualifierLength(),
-                    next.getTimestamp(), Type.codeToType(next.getTypeByte()),
-                    next.getValueArray(), next.getValueOffset(), next.getValueLength(),
-                    next.getTagsArray(), next.getTagsOffset(), next.getTagsLength());
-        return changedKv;
+        try {
+            byte[] changedKey = getNewRowkeyByRegionStartKeyReplacedWithSplitKey(next, changeBottomKeys);
+            KeyValue changedKv =
+                    new KeyValue(changedKey, 0, changedKey.length, next.getFamilyArray(),
+                        next.getFamilyOffset(), next.getFamilyLength(), next.getQualifierArray(),
+                        next.getQualifierOffset(), next.getQualifierLength(),
+                        next.getTimestamp(), Type.codeToType(next.getTypeByte()),
+                        next.getValueArray(), next.getValueOffset(), next.getValueLength(),
+                        next.getTagsArray(), next.getTagsOffset(), next.getTagsLength());
+            return changedKv;
+        } catch(NegativeArraySizeException nase) {
+            System.out.println("Old cell &&&: "+ next);
+            System.out.println("reader.offset &&&:" + reader.getOffset());
+            System.out.println("Kv row length &&&:" + next.getRowLength());
+            System.out.println("Regioninfo &&&:" + reader.getRegionInfo());
+            System.out.println("changeBottomKeys &&&: "+ changeBottomKeys);
+            System.out.println("Split row &&&:" + Bytes.toString(reader.getSplitRow()));
+            throw nase;
+        }
     }
 
     /**
@@ -212,15 +232,16 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                     + ROW_LENGTH_SIZE, key.length - (rowOffset + rowLength));
         return new KeyValue.KeyOnlyKeyValue(replacedKey);
     }
-    
+
     /**
-     * 
+     *
      * @param kv
      * @param isSeek pass true for seek, false for reseek.
-     * @return 
+     * @return
      * @throws IOException
      */
     public boolean seekOrReseek(Cell cell, boolean isSeek) throws IOException{
+        realSeekDone = true;
         KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
         KeyValue keyToSeek = kv;
         if (reader.isTop()) {
