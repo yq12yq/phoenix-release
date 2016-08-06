@@ -18,6 +18,9 @@
 package org.apache.phoenix.hbase.index.table;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.collections.map.LRUMap;
@@ -26,7 +29,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
-
+import org.apache.phoenix.execute.DelegateHTable;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -47,7 +50,7 @@ public class CachingHTableFactory implements HTableFactory {
   public class HTableInterfaceLRUMap extends LRUMap {
 
     public HTableInterfaceLRUMap(int cacheSize) {
-      super(cacheSize);
+      super(cacheSize, true);
     }
 
     @Override
@@ -58,12 +61,17 @@ public class CachingHTableFactory implements HTableFactory {
             + " because it was evicted from the cache.");
       }
       try {
-        table.close();
+        synchronized (workingTables) { //the whole operation of closing and removing the entry should be atomic
+          if (!workingTables.contains(table)) {
+            table.close();
+            return true;
+          }
+        }
       } catch (IOException e) {
         LOG.info("Failed to correctly close HTable: " + Bytes.toString(table.getTableName())
             + " ignoring since being removed from queue.");
       }
-      return true;
+      return false;
     }
   }
 
@@ -73,7 +81,8 @@ public class CachingHTableFactory implements HTableFactory {
 
   private static final Log LOG = LogFactory.getLog(CachingHTableFactory.class);
   private static final String CACHE_SIZE_KEY = "index.tablefactory.cache.size";
-  private static final int DEFAULT_CACHE_SIZE = 10;
+  private static final int DEFAULT_CACHE_SIZE = 1000;
+  private List<HTableInterface> workingTables = Collections.synchronizedList(new ArrayList<HTableInterface>());
 
   private HTableFactory delegate;
 
@@ -96,8 +105,10 @@ public class CachingHTableFactory implements HTableFactory {
     synchronized (openTables) {
       HTableInterface table = (HTableInterface) openTables.get(tableBytes);
       if (table == null) {
-        table = delegate.getTable(tablename);
+        table = new CachedHTableWrapper(delegate.getTable(tablename), workingTables);
         openTables.put(tableBytes, table);
+      }else{
+        workingTables.add(table);
       }
       return table;
     }
@@ -106,5 +117,29 @@ public class CachingHTableFactory implements HTableFactory {
   @Override
   public void shutdown() {
     this.delegate.shutdown();
+  }
+
+  public static class CachedHTableWrapper extends DelegateHTable {
+
+    private List<HTableInterface> workingTables;
+
+    public CachedHTableWrapper(HTableInterface table, List<HTableInterface> workingTables) {
+      super(table);
+      this.workingTables=workingTables;
+      this.workingTables.add(this);
+    }
+
+    @Override
+    public void close() throws IOException {
+      if(!workingTables.remove(this)){ //remove this instance 
+        //from workingTables but don't really close. The real close will
+        //happen when the eviction happens from the cache. Note that, there could
+        //be multiple instances of the same CachedHTableWrapper in workingTables,
+        //and every invocation of this method will remove one instance from the working
+        //set. The eviction will not really close the underlying table until all the instances are cleared
+        //out from the workingTables. TODO: make this a ref-count thing
+        super.close();
+      }
+    }
   }
 }

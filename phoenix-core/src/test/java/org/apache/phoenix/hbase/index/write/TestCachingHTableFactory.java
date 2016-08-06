@@ -19,12 +19,11 @@ package org.apache.phoenix.hbase.index.write;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-import org.mockito.Mockito;
-
 import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.junit.Test;
+import org.mockito.Mockito;
 
 public class TestCachingHTableFactory {
 
@@ -44,9 +43,10 @@ public class TestCachingHTableFactory {
     
     // setup our factory with a cache size of 2
     CachingHTableFactory factory = new CachingHTableFactory(delegate, 2);
-    factory.getTable(t1);
-    factory.getTable(t2);
-    factory.getTable(t3);
+    HTableInterface ft1 =factory.getTable(t1);
+    HTableInterface ft2 =factory.getTable(t2);
+    ft1.close();
+    HTableInterface ft3 = factory.getTable(t3);
     // get the same table a second time, after it has gone out of cache
     factory.getTable(t1);
     

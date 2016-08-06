@@ -21,14 +21,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
-import org.apache.hadoop.hbase.CellScanner;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
@@ -41,7 +38,6 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -151,13 +147,14 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
                     }
+                    HTableInterface table = null;
                     try {
 						if (allowLocalUpdates) {
 							for (Mutation m : mutations) {
 								m.setDurability(Durability.SKIP_WAL);
 							}
 						}
-                        HTableInterface table = factory.getTable(tableReference.get());
+						table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         int i = 0;
                         table.batch(mutations);
@@ -169,6 +166,11 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
                         throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e);
+                    }
+                    finally{
+                        if (table != null) {
+                            table.close();
+                        }
                     }
                     return null;
                 }
