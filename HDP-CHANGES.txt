@@ -48,3 +48,4 @@ b47f414 PHOENIX-2748 Disable auto-commit during bulk load
 33006f7 PHOENIX-3126 Tie a driver instance to a specific user (Prabhjyot Singh)
 a762402 PHOENIX-3149 Local index got corrupted if intermediate compaction happen during the split.
 e93d629 BUG-63793 Phoenix test is failing with Invalid index state transition
+f733e86 PHOENIX-3152 Incorrect comparator in QueryOptimizer may cause IllegalArgumentException
