@@ -87,7 +87,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     private final boolean localIndex;
     private final String tableDDLOptions;
     private final boolean isNamespaceMapped;
-    private String schema = "TEST";
+    public static final String schema = "TEST";
 
     public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped) {
         this.transactional = transactional;
@@ -146,6 +146,10 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             FAIL_WRITE = false;
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+
+            // Create other index which should be local/global if the other index is global/local to check the drop index. 
+            conn.createStatement().execute(
+                "CREATE " + (!localIndex ? "LOCAL " : "") + "INDEX " + indexName+"_2" + " ON " + fullTableName + " (v2) INCLUDE (v1)");
 
             query = "SELECT * FROM " + fullIndexName;
             rs = conn.createStatement().executeQuery(query);
@@ -292,6 +296,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
+            conn.createStatement().execute("DROP INDEX IF EXISTS "+INDEX_NAME+"_2 ON "+fullTableName);
             // verify index table has correct data
             query = "SELECT /*+ INDEX(" + indexName + ") */ k,v1 FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -339,6 +344,16 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
             if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {
+                try {
+                    Connection connection =
+                            QueryUtil.getConnection(c.getEnvironment().getConfiguration());
+                    connection.createStatement().execute(
+                        "DROP INDEX " + INDEX_NAME + "_2" + " ON "
+                                + c.getEnvironment().getRegion().getTableDesc().getNameAsString());
+                    connection.commit();
+                } catch (ClassNotFoundException e) {
+                } catch (SQLException e) {
+                }
                 throw new DoNotRetryIOException();
             }
             Mutation operation = miniBatchOp.getOperation(0);
