@@ -274,20 +274,23 @@ public final class Main extends Configured implements Tool, Runnable {
     public PhoenixDoAsCallback(UserGroupInformation serverUgi, Configuration conf) {
       this.serverUgi = Objects.requireNonNull(serverUgi);
       this.ugiCache = CacheBuilder.newBuilder()
-          .initialCapacity(conf.getInt(QueryServices.QUERY_SERVER_UGI_CACHE_INITIAL_SIZE, QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_INITIAL_SIZE))
-          .concurrencyLevel(conf.getInt(QueryServices.QUERY_SERVER_UGI_CACHE_CONCURRENCY, QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY))
-          .maximumSize(conf.getLong(QueryServices.QUERY_SERVER_UGI_CACHE_MAX_SIZE, QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_MAX_SIZE))
+          .initialCapacity(conf.getInt(QueryServices.QUERY_SERVER_UGI_CACHE_INITIAL_SIZE,
+                  QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_INITIAL_SIZE))
+          .concurrencyLevel(conf.getInt(QueryServices.QUERY_SERVER_UGI_CACHE_CONCURRENCY,
+                  QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY))
+          .maximumSize(conf.getLong(QueryServices.QUERY_SERVER_UGI_CACHE_MAX_SIZE,
+                  QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_MAX_SIZE))
           .build(new UgiCacheLoader(this.serverUgi));
     }
 
     @Override
     public <T> T doAsRemoteUser(String remoteUserName, String remoteAddress, final Callable<T> action) throws Exception {
-      // We are guaranteed by Avatica that the `remoteUserName` is properly authenticated by the time
-      // this method is called. We don't have to verify the wire credentials, we can assume the user
-      // provided valid credentials for who it claimed it was.
+      // We are guaranteed by Avatica that the `remoteUserName` is properly authenticated by the
+      // time this method is called. We don't have to verify the wire credentials, we can assume the
+      // user provided valid credentials for who it claimed it was.
 
-      // Proxy this user on top of the server's user (the real user). Get a cached instance, the LoadingCache
-      // will create a new instance for us if one isn't cached.
+      // Proxy this user on top of the server's user (the real user). Get a cached instance, the
+      // LoadingCache will create a new instance for us if one isn't cached.
       UserGroupInformation proxyUser = createProxyUser(remoteUserName);
 
       // Execute the actual call as this proxy user
@@ -301,10 +304,10 @@ public final class Main extends Configured implements Tool, Runnable {
 
       @VisibleForTesting
       UserGroupInformation createProxyUser(String remoteUserName) throws ExecutionException {
-          // PHOENIX-3164 UGI's hashCode and equals methods rely on reference checks, not value-based
-          // checks. We need to make sure we return the same UGI instance for a remote user, otherwise
-          // downstream code in Phoenix and HBase may not treat two of the same calls from one user
-          // as equivalent.
+          // PHOENIX-3164 UGI's hashCode and equals methods rely on reference checks, not
+          // value-based checks. We need to make sure we return the same UGI instance for a remote
+          // user, otherwise downstream code in Phoenix and HBase may not treat two of the same
+          // calls from one user as equivalent.
           return ugiCache.get(remoteUserName);
       }
 
