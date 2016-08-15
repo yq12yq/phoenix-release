@@ -104,6 +104,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public final static String SCAN_OFFSET = "_RowOffset";
     public static final String SCAN_START_ROW_SUFFIX = "_ScanStartRowSuffix";
     public static final String SCAN_STOP_ROW_SUFFIX = "_ScanStopRowSuffix";
+    public static final String CLIENT_SIDE_UPSERT_SELECT = "_ClientSideUpsertSelect";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations

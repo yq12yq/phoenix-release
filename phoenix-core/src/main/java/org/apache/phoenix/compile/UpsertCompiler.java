@@ -773,6 +773,7 @@ public class UpsertCompiler {
             ////////////////////////////////////////////////////////////////////
             // UPSERT SELECT run client-side
             /////////////////////////////////////////////////////////////////////
+            ScanUtil.setClientSideUpsertSelect(queryPlan.getContext().getScan());
             return new MutationPlan() {
                 @Override
                 public ParameterMetaData getParameterMetaData() {

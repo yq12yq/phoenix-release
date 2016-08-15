@@ -139,7 +139,7 @@ public class TableResultIterator implements ResultIterator {
             try {
                 throw ServerUtil.parseServerException(e);
             } catch(StaleRegionBoundaryCacheException e1) {
-                if(ScanUtil.isNonAggregateScan(scan)) {
+                if(ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
                     // For non aggregate queries if we get stale region boundary exception we can
                     // continue scanning from the next value of lasted fetched result.
                     Scan newScan = ScanUtil.newScan(scan);
@@ -156,8 +156,21 @@ public class TableResultIterator implements ResultIterator {
                         }
                     }
                     plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
-                    this.scanIterator =
-                            plan.iterator(scanGrouper, newScan);
+                    try {
+                        if(ScanUtil.isClientSideUpsertSelect(newScan)) {
+                            if(!ScanUtil.isLocalIndex(newScan)) {
+                                this.scanIterator =
+                                        new ScanningResultIterator(htable.getScanner(newScan), scanMetrics);
+                            } else {
+                                throw e;
+                            }
+                        } else {
+                            this.scanIterator = plan.iterator(scanGrouper, newScan);
+                        }
+                    } catch (IOException ex) {
+                        Closeables.closeQuietly(htable);
+                        throw ServerUtil.parseServerException(ex);
+                    }
                     lastTuple = scanIterator.next();
                 } else {
                     throw e;
