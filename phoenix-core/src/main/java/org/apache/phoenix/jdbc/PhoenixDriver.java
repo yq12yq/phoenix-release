@@ -51,6 +51,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 
@@ -212,7 +213,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             checkClosed();
             ConnectionInfo connInfo = ConnectionInfo.create(url);
             QueryServices services = getQueryServices();
-            ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps());
+            // Also performs the Kerberos login if the URL/properties request this
+            ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
             ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
             if (connectionQueryServices == null) {
                 if (normalizedConnInfo.isConnectionless()) {
@@ -319,5 +321,10 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         case WRITE:
             closeLock.writeLock().unlock();
         }
+    }
+
+    @VisibleForTesting
+    protected ConcurrentMap<ConnectionInfo,ConnectionQueryServices> getCachedConnections() {
+        return this.connectionQueryServicesMap;
     }
 }
