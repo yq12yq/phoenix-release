@@ -49,3 +49,4 @@ a762402 PHOENIX-3149 Local index got corrupted if intermediate compaction happen
 e93d629 BUG-63793 Phoenix test is failing with Invalid index state transition
 f733e86 PHOENIX-3152 Incorrect comparator in QueryOptimizer may cause IllegalArgumentException
 a261ee8 PHOENIX-3223 Add `hadoop classpath` to PQS classpath when available
+82ba256 PHOENIX-3236 Problem with shading apache commons on Azure.
