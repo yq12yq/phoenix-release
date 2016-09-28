@@ -1836,6 +1836,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         try {
             metaConnection.createStatement().executeUpdate("ALTER TABLE " + tableName + " ADD IF NOT EXISTS " + columns );
+        } catch (NewerTableAlreadyExistsException ignore) {
+            logger.warn("Table already modified at this timestamp, so assuming add of these columns already done: " + columns);
         } catch (SQLException e) {
             logger.warn("addColumnsIfNotExists failed due to:" + e);
             sqlE = e;
