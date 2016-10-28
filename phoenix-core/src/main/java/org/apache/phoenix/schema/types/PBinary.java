@@ -134,18 +134,6 @@ public class PBinary extends PBinaryBase {
   }
 
   @Override
-  public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
-      Integer maxLength, Integer scale, Integer desiredMaxLength,
-      Integer desiredScale) {
-    if (ptr.getLength() != 0 && (
-        (srcType.equals(PVarbinary.INSTANCE) && ((String) value).length() != ptr.getLength()) ||
-            (maxLength != null && desiredMaxLength != null && maxLength > desiredMaxLength))) {
-      return false;
-    }
-    return true;
-  }
-
-  @Override
   public Integer estimateByteSizeFromLength(Integer length) {
     return length;
   }

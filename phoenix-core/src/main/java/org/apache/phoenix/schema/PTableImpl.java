@@ -57,7 +57,6 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import com.google.common.base.Objects;
@@ -593,19 +592,14 @@ public class PTableImpl implements PTable {
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
                 Integer	maxLength = column.getMaxLength();
-                if (maxLength != null && type.isFixedWidth() && byteValue.length < maxLength) {
-                    if (rowKeyOrderOptimizable()) {
-                        key.set(byteValue);
-                        type.pad(key, maxLength, sortOrder);
-                        byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
-                    } else {
-                        // TODO: remove this incorrect code and move StringUtil.padChar() to TestUtil
-                        // once we require tables to have been upgraded
-                        byteValue = StringUtil.padChar(byteValue, maxLength);
-                    }
-                } else if (maxLength != null && !type.isArrayType() && byteValue.length > maxLength) {
-                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
+                Integer scale = column.getScale();
+                key.set(byteValue);
+                if (!type.isSizeCompatible(key, null, type, sortOrder, null, null, maxLength, scale)) {
+                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " (" + SchemaUtil.toString(type, byteValue) + ")");
                 }
+                key.set(byteValue);
+                type.pad(key, maxLength, sortOrder);
+                byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
                 os.write(byteValue, 0, byteValue.length);
             }
             // Need trailing byte for DESC columns
@@ -778,6 +772,9 @@ public class PTableImpl implements PTable {
             byte[] qualifier = column.getName().getBytes();
             PDataType type = column.getDataType();
             // Check null, since some types have no byte representation for null
+            if (byteValue == null) {
+                byteValue = ByteUtil.EMPTY_BYTE_ARRAY;
+            }
             boolean isNull = type.isNull(byteValue);
             if (isNull && !getStoreNulls()) {
                 if (!column.isNullable()) {
@@ -787,16 +784,16 @@ public class PTableImpl implements PTable {
                 deleteQuietly(unsetValues, kvBuilder, kvBuilder.buildDeleteColumns(keyPtr, column
                             .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));
             } else {
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue == null ?
-                        HConstants.EMPTY_BYTE_ARRAY : byteValue);
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue);
                 Integer	maxLength = column.getMaxLength();
-            	if (!isNull && type.isFixedWidth() && maxLength != null) {
-    				if (ptr.getLength() < maxLength) {
-                        type.pad(ptr, maxLength, column.getSortOrder());
-                    } else if (ptr.getLength() > maxLength) {
-                        throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
-                    }
-            	}
+                Integer scale = column.getScale();
+                SortOrder sortOrder = column.getSortOrder();
+                if (!type.isSizeCompatible(ptr, null, type, sortOrder, null, null, maxLength, scale)) {
+                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + 
+                            " may not exceed " + maxLength + " (" + SchemaUtil.toString(type, byteValue) + ")");
+                }
+                ptr.set(byteValue);
+                type.pad(ptr, maxLength, sortOrder);
                 removeIfPresent(unsetValues, family, qualifier);
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
                         column.getFamilyName().getBytesPtr(), column.getName().getBytesPtr(),
