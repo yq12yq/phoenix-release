@@ -20,7 +20,6 @@ package org.apache.hadoop.hbase.ipc;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.SimpleRpcScheduler;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
@@ -118,12 +117,12 @@ public class PhoenixRpcScheduler extends RpcScheduler {
 
     @Override
     public long getNumGeneralCallsDropped() {
-        return ((SimpleRpcScheduler)this.delegate).getNumGeneralCallsDropped();
+        return this.delegate.getNumGeneralCallsDropped();
     }
 
     @Override
     public long getNumLifoModeSwitches() {
-        return ((SimpleRpcScheduler)this.delegate).getNumLifoModeSwitches() ;
+        return this.delegate.getNumLifoModeSwitches() ;
     }
 
     @VisibleForTesting
