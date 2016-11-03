@@ -117,12 +117,12 @@ public class PhoenixRpcScheduler extends RpcScheduler {
 
     @Override
     public long getNumGeneralCallsDropped() {
-        return this.delegate.getNumGeneralCallsDropped();
+        return ((SimpleRpcScheduler)this.delegate).getNumGeneralCallsDropped();
     }
 
     @Override
     public long getNumLifoModeSwitches() {
-        return this.delegate.getNumLifoModeSwitches() ;
+        return ((SimpleRpcScheduler)this.delegate).getNumLifoModeSwitches() ;
     }
 
     @VisibleForTesting
