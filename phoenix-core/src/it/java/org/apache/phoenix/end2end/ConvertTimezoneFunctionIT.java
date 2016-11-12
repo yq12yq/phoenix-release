@@ -37,19 +37,35 @@ import org.junit.Test;
 public class ConvertTimezoneFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Test
-    public void testConvertTimezoneEurope() throws Exception {
+    public void testDateConvertTimezoneEurope() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
+        String ddl = "CREATE TABLE IF NOT EXISTS DATE_TIMEZONE_OFFSET_TEST (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates) VALUES (1, TO_DATE('2014-03-01 00:00:00'))";
+        String dml = "UPSERT INTO DATE_TIMEZONE_OFFSET_TEST (k1, dates) VALUES (1, TO_DATE('2014-03-01 00:00:00'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT k1, dates, CONVERT_TZ(dates, 'UTC', 'Europe/Prague') FROM TIMEZONE_OFFSET_TEST");
+                "SELECT k1, dates, CONVERT_TZ(dates, 'UTC', 'Europe/Prague') FROM DATE_TIMEZONE_OFFSET_TEST");
 
         assertTrue(rs.next());
         assertEquals(1393635600000L, rs.getDate(3).getTime()); //Sat, 01 Mar 2014 01:00:00
+    }
+
+    @Test
+    public void testTimestampConvertTimezoneEurope() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE IF NOT EXISTS TIMESTAMP_TIMEZONE_OFFSET_TEST (k1 INTEGER NOT NULL, timestamps TIMESTAMP CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO TIMESTAMP_TIMEZONE_OFFSET_TEST (k1, timestamps) VALUES (1, TO_TIMESTAMP('2014-03-01 00:00:00'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT k1, timestamps, CONVERT_TZ(timestamps, 'UTC', 'Europe/Prague') FROM TIMESTAMP_TIMEZONE_OFFSET_TEST");
+
+        assertTrue(rs.next());
+        assertEquals(1393635600000L, rs.getTimestamp(3).getTime()); //Sat, 01 Mar 2014 01:00:00
     }
 
     @Test
