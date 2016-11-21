@@ -23,6 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HConnection;
@@ -143,11 +144,8 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
                 .newJobContext(new Job(jobConf)));
         boolean splitByStats = jobConf.getBoolean(PhoenixStorageHandlerConstants.SPLIT_BY_STATS,
                 false);
-        int scanCacheSize = jobConf.getInt(PhoenixStorageHandlerConstants.HBASE_SCAN_CACHE, -1);
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Generating splits with scanCacheSize : " + scanCacheSize);
-        }
+        setScanCacheSize(jobConf);
 
         // Adding Localization
         HConnection connection = HConnectionManager.createConnection(jobConf);
@@ -167,10 +165,6 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
 
             if (splitByStats) {
                 for (Scan aScan : scans) {
-                    if (scanCacheSize > 0) {
-                        aScan.setCaching(scanCacheSize);
-                    }
-
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
                                 .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
@@ -184,12 +178,6 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
                     psplits.add(inputSplit);
                 }
             } else {
-                if (scanCacheSize > 0) {
-                    for (Scan aScan : scans) {
-                        aScan.setCaching(scanCacheSize);
-                    }
-                }
-
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
                             .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
@@ -215,6 +203,17 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         }
 
         return psplits;
+    }
+
+    private void setScanCacheSize(JobConf jobConf) {
+        int scanCacheSize = jobConf.getInt(PhoenixStorageHandlerConstants.HBASE_SCAN_CACHE, -1);
+        if (scanCacheSize > 0) {
+            jobConf.setInt(HConstants.HBASE_CLIENT_SCANNER_CACHING, scanCacheSize);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Generating splits with scanCacheSize : " + scanCacheSize);
+        }
     }
 
     @Override
