@@ -27,6 +27,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
@@ -81,10 +82,9 @@ public class PhoenixQueryBuilder {
 
     private String makeQueryString(JobConf jobConf, String tableName, List<String>
             readColumnList, String whereClause, String queryTemplate, String hints, Map<String,
-            String> columnTypeMap) throws IOException {
+            TypeInfo> columnTypeMap) throws IOException {
         StringBuilder sql = new StringBuilder();
-        List<String> conditionColumnList = buildWhereClause(jobConf, sql, whereClause,
-                columnTypeMap);
+        List<String> conditionColumnList = buildWhereClause(jobConf, sql, whereClause,columnTypeMap);
 
         if (conditionColumnList.size() > 0) {
             addConditionColumnToReadColumn(readColumnList, conditionColumnList);
@@ -155,7 +155,7 @@ public class PhoenixQueryBuilder {
     }
 
     public String buildQuery(JobConf jobConf, String tableName, List<String> readColumnList,
-                             String whereClause, Map<String, String> columnTypeMap) throws
+                             String whereClause, Map<String, TypeInfo> columnTypeMap) throws
             IOException {
         String hints = getHint(jobConf, tableName);
 
@@ -199,7 +199,7 @@ public class PhoenixQueryBuilder {
     }
 
     private List<String> buildWhereClause(JobConf jobConf, StringBuilder sql, String whereClause,
-                                          Map<String, String> columnTypeMap) throws IOException {
+                                          Map<String, TypeInfo> columnTypeMap) throws IOException {
         if (whereClause == null || whereClause.isEmpty()) {
             return Collections.emptyList();
         }
@@ -214,11 +214,11 @@ public class PhoenixQueryBuilder {
             if (whereClause.contains(columnName)) {
                 conditionColumnList.add(columnName);
 
-                if (PhoenixStorageHandlerConstants.DATE_TYPE.equals(columnTypeMap.get(columnName)
-                )) {
+                if (PhoenixStorageHandlerConstants.DATE_TYPE.equals(
+                        columnTypeMap.get(columnName).getTypeName())) {
                     whereClause = applyDateFunctionUsingRegex(whereClause, columnName);
-                } else if (PhoenixStorageHandlerConstants.TIMESTAMP_TYPE.equals(columnTypeMap.get
-                        (columnName))) {
+                } else if (PhoenixStorageHandlerConstants.TIMESTAMP_TYPE.equals(
+                        columnTypeMap.get(columnName).getTypeName())) {
                     whereClause = applyTimestampFunctionUsingRegex(whereClause, columnName);
                 }
             }

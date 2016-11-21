@@ -38,6 +38,7 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.*;
@@ -113,8 +114,8 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
             query = PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName,
                     ColumnProjectionUtils.getReadColumnNames(jobConf), conditionList);
         } else if (PhoenixStorageHandlerConstants.TEZ.equals(executionEngine)) {
-            Map<String, String> columnTypeMap = PhoenixStorageHandlerUtil.createColumnTypeMap
-                    (jobConf);
+            Map<String, TypeInfo> columnTypeMap =
+                    PhoenixStorageHandlerUtil.createColumnTypeMap(jobConf);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Column type map for TEZ : " + columnTypeMap);
             }
