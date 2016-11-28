@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentMap;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -49,14 +50,17 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -91,6 +95,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
@@ -106,6 +111,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -180,16 +186,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
-            long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState) throws IOException {
-
-        if (indexMaintainersPtr != null) {
-            mutations.get(0).setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-        }
-
-        if (txState != null) {
-            mutations.get(0).setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-        }
-        
+                                    long blockingMemstoreSize) throws IOException {
         if (indexUUID != null) {
             for (Mutation m : mutations) {
                 m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
@@ -313,7 +310,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         RegionScanner theScanner = s;
         
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
-        byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
         List<Expression> selectExpressions = null;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
@@ -378,7 +374,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
-        byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         boolean aquiredLock = false;
         try {
             if(needToWrite) {
@@ -602,13 +597,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!mutations.isEmpty() && batchSize > 0 &&
                                     mutations.size() % batchSize == 0) {
-                                commitBatch(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState);
+                                commitBatch(region, mutations, indexUUID, blockingMemStoreSize);
                                 mutations.clear();
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!indexMutations.isEmpty() && batchSize > 0 &&
                                     indexMutations.size() % batchSize == 0) {
-                                commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState);
+                                commitBatch(region, indexMutations, null, blockingMemStoreSize);
                                 indexMutations.clear();
                             }
                         } catch (ConstraintViolationException e) {
@@ -624,11 +619,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     }
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    commitBatch(region,mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState);
+                    commitBatch(region,mutations, indexUUID, blockingMemStoreSize);
                 }
 
                 if (!indexMutations.isEmpty()) {
-                    commitBatch(region,indexMutations, null, blockingMemStoreSize, null, txState);
+                    commitBatch(region,indexMutations, null, blockingMemStoreSize);
                     indexMutations.clear();
                 }
             }
@@ -957,5 +952,4 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     protected boolean isRegionObserverFor(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.UNGROUPED_AGG) != null;
     }
-    
 }
