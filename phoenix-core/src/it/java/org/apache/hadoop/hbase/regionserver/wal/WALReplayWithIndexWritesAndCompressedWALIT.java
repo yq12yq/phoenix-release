@@ -193,6 +193,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     RegionServerServices mockRS = Mockito.mock(RegionServerServices.class);
     // mock out some of the internals of the RSS, so we can run CPs
     Mockito.when(mockRS.getWAL(null)).thenReturn(wal);
+    Mockito.when(mockRS.getConfiguration()).thenReturn(UTIL.getConfiguration());
     RegionServerAccounting rsa = Mockito.mock(RegionServerAccounting.class);
     Mockito.when(mockRS.getRegionServerAccounting()).thenReturn(rsa);
     ServerName mockServerName = Mockito.mock(ServerName.class);
