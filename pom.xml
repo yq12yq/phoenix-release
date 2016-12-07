@@ -72,6 +72,11 @@
         <enabled>true</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>public</id>
+      <name>hwx</name>
+      <url>http://nexus-private.hortonworks.com/nexus/content/groups/public/</url>
+    </repository>
   </repositories>
 
   <parent>
