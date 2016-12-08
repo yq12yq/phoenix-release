@@ -880,4 +880,8 @@ public class ScanUtil {
         scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, Bytes.toBytes(offset));
     }
 
+    public static boolean isIndexRebuild(Scan scan) {
+        return scan.getAttribute((BaseScannerRegionObserver.REBUILD_INDEXES)) != null;
+    }
+
 }
