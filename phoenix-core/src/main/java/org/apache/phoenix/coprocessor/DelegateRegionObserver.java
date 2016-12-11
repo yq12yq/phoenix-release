@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 
 import org.apache.hadoop.fs.FileSystem;
@@ -650,6 +651,13 @@ public class DelegateRegionObserver implements RegionObserver {
     public boolean postBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
             List<Pair<byte[], String>> familyPaths, boolean hasLoaded) throws IOException {
         return delegate.postBulkLoadHFile(ctx, familyPaths, hasLoaded);
+    }
+
+    @Override
+    public boolean postBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
+            List<Pair<byte[], String>> familyPaths, Map<byte[], List<Path>> map, boolean hasLoaded)
+      throws IOException {
+        return delegate.postBulkLoadHFile(ctx, familyPaths, map, hasLoaded);
     }
 
     @Override
