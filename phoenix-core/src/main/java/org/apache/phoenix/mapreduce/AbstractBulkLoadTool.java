@@ -41,16 +41,16 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Admin.MasterSwitchType;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -58,11 +58,11 @@ import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -70,7 +70,6 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
@@ -183,7 +182,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         return loadData(conf, cmdLine);
     }
 
-    private int loadData(Configuration conf, CommandLine cmdLine) throws Exception {
+    private int loadData(final Configuration conf, CommandLine cmdLine) throws Exception {
         String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
@@ -236,7 +235,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
 
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
-        PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+        final PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
         boolean hasLocalIndexes = false;
         for(PTable index: table.getIndexes()) {
@@ -247,6 +246,36 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                 if (hasLocalIndexes) break;
             }
         }
+
+        if (hasLocalIndexes) {
+            HBaseAdmin hBaseAdmin = new HBaseAdmin(conf);
+            final boolean wasMergeDisabled = hBaseAdmin.isSplitOrMergeEnabled(MasterSwitchType.MERGE);
+            final boolean wasSplitDisabled = hBaseAdmin.isSplitOrMergeEnabled(MasterSwitchType.SPLIT);
+            LOG.info("Disabling Merge and split because of local index upload and "
+                    + "if the split or merge setting doesn't get restore at the end of the job, "
+                    + "use splitormerge_switch from hbase shell to restore them manually");
+            hBaseAdmin.setSplitOrMergeEnabled(false, true, MasterSwitchType.MERGE, MasterSwitchType.SPLIT);
+            hBaseAdmin.close();
+            Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try (HBaseAdmin hBaseAdmin = new HBaseAdmin(conf)) {
+                        LOG.info("Restoring Merge and split at the end of job");
+                        restoreSplitandMergeSettings(hBaseAdmin, table.getPhysicalName());
+                    } catch (IOException e) {
+                        LOG.warn("Unable to restore split or merge setting because of " + e.getMessage()
+                                + " so please restore it manually by using splitormerge_switch from hbase shell");
+                    }
+                }
+
+                private void restoreSplitandMergeSettings(HBaseAdmin hBaseAdmin, PName physicalName)
+                        throws IOException {
+                    hBaseAdmin.setSplitOrMergeEnabled(wasMergeDisabled, false, MasterSwitchType.MERGE);
+                    hBaseAdmin.setSplitOrMergeEnabled(wasSplitDisabled, false, MasterSwitchType.SPLIT);
+                }
+            }));
+        }
+
         // using conn after it's been closed... o.O
         tablesToBeLoaded.addAll(getIndexTables(conn, schemaName, qualifiedTableName));
 
