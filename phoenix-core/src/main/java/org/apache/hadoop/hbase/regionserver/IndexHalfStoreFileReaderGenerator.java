@@ -19,12 +19,7 @@ package org.apache.hadoop.hbase.regionserver;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
+import java.util.*;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -65,9 +60,12 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
-    
+    private static final Logger logger = LoggerFactory.getLogger(IndexHalfStoreFileReaderGenerator.class);
+
     int storeFilesCount = 0;
     int compactedFilesCount = 0;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -204,7 +202,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             if (reader instanceof IndexHalfStoreFileReader) {
                 newScanners.add(new LocalIndexStoreFileScanner(reader, reader.getScanner(
                     scan.getCacheBlocks(), scanUsePread, false), true, reader.getHFileReader()
-                        .hasMVCCInfo(), store.getSmallestReadPoint()));
+                        .hasMVCCInfo(), store.getSmallestReadPoint(), true));
             } else {
                 newScanners.add(((StoreFileScanner) scanner));
             }
@@ -307,7 +305,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             if (sf.getReader() instanceof IndexHalfStoreFileReader) {
                 keyValueScanners.add(new LocalIndexStoreFileScanner(sf.getReader(), sf.getReader()
                         .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
+                        .getReader().getHFileReader().hasMVCCInfo(), readPt, false));
             } else {
                 keyValueScanners.add(new StoreFileScanner(sf.getReader(), sf.getReader()
                         .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
