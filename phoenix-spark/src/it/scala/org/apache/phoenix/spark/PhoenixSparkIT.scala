@@ -663,5 +663,13 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val epoch = new Date().getTime
     assert(Math.abs(epoch - time) < 86400000)
   }
+  test("can read all Phoenix data types") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "GIGANTIC_TABLE",
+      "zkUrl" -> quorumAddress))
+    df.save("org.apache.phoenix.spark",SaveMode.Overwrite, Map("table" -> "OUTPUT_GIGANTIC_TABLE",
+     "zkUrl" -> quorumAddress))
+    df.count() shouldEqual 1
+  }
 
 }
