@@ -437,6 +437,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // Skip data table salt byte
             int maxRowKeyOffset = rowKeyPtr.getOffset() + rowKeyPtr.getLength();
             dataRowKeySchema.iterator(rowKeyPtr, ptr, dataPosOffset);
+            
+            if (viewIndexId != null) {
+                output.write(viewIndexId);
+            }
+            
             if (isMultiTenant) {
                 dataRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
@@ -444,9 +449,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                     output.writeByte(QueryConstants.SEPARATOR_BYTE);
                 }
                 dataPosOffset++;
-            }
-            if (viewIndexId != null) {
-                output.write(viewIndexId);
             }
             
             // Write index row key
@@ -704,6 +706,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 
             }, false, SortOrder.getDefault());
+        }
+        if (isMultiTenant) {
+            Field field = dataRowKeySchema.getField(dataPosOffset++);
+            builder.addField(field, field.isNullable(), field.getSortOrder());
+            nIndexedColumns--;
         }
         
         Field[] indexFields = new Field[nIndexedColumns];

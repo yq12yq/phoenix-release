@@ -18,10 +18,26 @@
 package org.apache.phoenix.query;
 
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -130,6 +146,7 @@ import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
@@ -730,7 +747,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private static interface RetriableOperation {
         boolean checkForCompletion() throws TimeoutException, IOException;
-        String getOperatioName();
+        String getOperationName();
     }
 
     private void pollForUpdatedTableDescriptor(final HBaseAdmin admin, final HTableDescriptor newTableDescriptor,
@@ -738,7 +755,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         checkAndRetry(new RetriableOperation() {
 
             @Override
-            public String getOperatioName() {
+            public String getOperationName() {
                 return "UpdateOrNewTableDescriptor";
             }
 
@@ -769,7 +786,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // Else, we swallow the exception and retry till we reach maxRetries.
                 if (numTries == 1 || numTries == maxRetries) {
                     watch.stop();
-                    TimeoutException toThrow = new TimeoutException("Operation " + op.getOperatioName()
+                    TimeoutException toThrow = new TimeoutException("Operation " + op.getOperationName()
                             + " didn't complete because of exception. Time elapsed: " + watch.elapsedMillis());
                     toThrow.initCause(ex);
                     throw toThrow;
@@ -782,13 +799,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         watch.stop();
 
         if (!success) {
-            throw new TimeoutException("Operation  " + op.getOperatioName() + " didn't complete within "
+            throw new TimeoutException("Operation  " + op.getOperationName() + " didn't complete within "
                     + watch.elapsedMillis() + " ms "
                     + (numTries > 1 ? ("after trying " + numTries + (numTries > 1 ? "times." : "time.")) : ""));
         } else {
             if (logger.isDebugEnabled()) {
                 logger.debug("Operation "
-                        + op.getOperatioName()
+                        + op.getOperationName()
                         + " completed within "
                         + watch.elapsedMillis()
                         + "ms "

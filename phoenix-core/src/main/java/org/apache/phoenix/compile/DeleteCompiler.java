@@ -103,8 +103,7 @@ public class DeleteCompiler {
         PName tenantId = connection.getTenantId();
         byte[] tenantIdBytes = null;
         if (tenantId != null) {
-            tenantId = ScanUtil.padTenantIdIfNecessary(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
-            tenantIdBytes = tenantId.getBytes();
+            tenantIdBytes = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId, table.getViewIndexId() != null);
         }
         final boolean isAutoCommit = connection.getAutoCommit();
         ConnectionQueryServices services = connection.getQueryServices();
@@ -123,11 +122,11 @@ public class DeleteCompiler {
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             int offset = (table.getBucketNum() == null ? 0 : 1);
             byte[][] values = new byte[pkColumns.size()][];
-            if (isMultiTenant) {
-                values[offset++] = tenantIdBytes;
-            }
             if (isSharedViewIndex) {
                 values[offset++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+            }
+            if (isMultiTenant) {
+                values[offset++] = tenantIdBytes;
             }
             PhoenixResultSet rs = new PhoenixResultSet(iterator, projector, statement);
             int rowCount = 0;

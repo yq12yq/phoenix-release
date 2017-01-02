@@ -47,6 +47,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     @Test
+    public void testUpdatableViewLocalIndexNonStringTenantId() throws Exception {
+        testUpdatableViewNonString(null, true);
+    }
+
+    @Test
     public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
         testUpdatableViewsWithSameNameDifferentTenants(null);
     }
@@ -120,11 +125,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from acme where col1='f'");
         if(localIndex){
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER MT_BASE ['a',-32768,'f']\n"
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER MT_BASE [-32768,'a','f']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE ['a',-32768,'f']\n"
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_MT_BASE [-32768,'a','f']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY",QueryUtil.getExplainPlan(rs));
         }
         

@@ -17,21 +17,8 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
-import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeMap;
-
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -45,6 +32,8 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
@@ -52,15 +41,20 @@ import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.*;
+
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
+import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
 
 /**
  * 
@@ -639,21 +633,31 @@ public class ScanUtil {
         }
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
-    
-    public static PName padTenantIdIfNecessary(RowKeySchema schema, boolean isSalted, PName tenantId) {
-        int pkPos = isSalted ? 1 : 0;
-        String tenantIdStr = tenantId.getString();
+
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable, boolean isSharedIndex)
+            throws SQLException {
+        return isMultiTenantTable ?
+                  getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex)
+                : tenantId.getBytes();
+    }
+
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isSharedIndex)
+            throws SQLException {
+        int pkPos = (isSalted ? 1 : 0) + (isSharedIndex ? 1 : 0); 
         Field field = schema.getField(pkPos);
         PDataType dataType = field.getDataType();
-        boolean isFixedWidth = dataType.isFixedWidth();
-        Integer maxLength = field.getMaxLength();
-        if (isFixedWidth && maxLength != null) {
-            if (tenantIdStr.length() < maxLength) {
-                tenantIdStr = (String)dataType.pad(tenantIdStr, maxLength);
-                return PNameFactory.newName(tenantIdStr);
-            }
+        byte[] convertedValue;
+        try {
+            Object value = dataType.toObject(tenantId.getString());
+            convertedValue = dataType.toBytes(value);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable(convertedValue);
+            dataType.pad(ptr, field.getMaxLength(), field.getSortOrder());
+            convertedValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
+        } catch(IllegalDataException ex) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE)
+                    .build().buildException();
         }
-        return tenantId;
+        return convertedValue;
     }
 
     public static Iterator<Filter> getFilterIterator(Scan scan) {

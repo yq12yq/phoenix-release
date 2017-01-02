@@ -193,7 +193,7 @@ public class ServerCacheClient {
                                                     BlockingRpcCallback<AddServerCacheResponse> rpcCallback =
                                                             new BlockingRpcCallback<AddServerCacheResponse>();
                                                     AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
-                                                    if(connection.getTenantId() != null){
+                                                    if (connection.getTenantId() != null){
                                                         builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
                                                     }
                                                     builder.setCacheId(ByteStringer.wrap(cacheId));
@@ -306,10 +306,10 @@ public class ServerCacheClient {
     							BlockingRpcCallback<RemoveServerCacheResponse> rpcCallback =
     									new BlockingRpcCallback<RemoveServerCacheResponse>();
     							RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest.newBuilder();
-    							if(connection.getTenantId() != null){
-    								builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
-    							}
-    							builder.setCacheId(ByteStringer.wrap(cacheId));
+                                if(connection.getTenantId() != null){
+                                     builder.setTenantId(ByteStringer.wrap(connection.getTenantId().getBytes()));
+                                }
+                                builder.setCacheId(ByteStringer.wrap(cacheId));
     							instance.removeServerCache(controller, builder.build(), rpcCallback);
     							if(controller.getFailedOn() != null) {
     								throw controller.getFailedOn();

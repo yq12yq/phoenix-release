@@ -1154,16 +1154,6 @@ public class MetaDataClient {
                 List<ColumnDefInPkConstraint> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
                 List<ColumnDef> columnDefs = Lists.newArrayListWithExpectedSize(includedColumns.size() + indexParseNodeAndSortOrderList.size());
                 
-                if (dataTable.isMultiTenant()) {
-                    // Add tenant ID column as first column in index
-                    PColumn col = dataTable.getPKColumns().get(posOffset);
-                    RowKeyColumnExpression columnExpression = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, posOffset), col.getName().getString());
-					unusedPkColumns.remove(columnExpression);
-                    PDataType dataType = IndexUtil.getIndexColumnDataType(col);
-                    ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-                    allPkColumns.add(new ColumnDefInPkConstraint(colName, col.getSortOrder(), false));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString(), col.isRowTimestamp()));
-                }
                 /*
                  * Allocate an index ID in two circumstances:
                  * 1) for a local index, as all local indexes will reside in the same HBase table
@@ -1171,11 +1161,20 @@ public class MetaDataClient {
                  */
                 if (isLocalIndex || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
                     allocateIndexId = true;
-                    // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
                     ColumnName colName = ColumnName.caseSensitiveColumnName(MetaDataUtil.getViewIndexIdColumnName());
                     allPkColumns.add(new ColumnDefInPkConstraint(colName, SortOrder.getDefault(), false));
                     columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault(), null, false));
+                }
+                
+                if (dataTable.isMultiTenant()) {
+                    PColumn col = dataTable.getPKColumns().get(posOffset);
+                    RowKeyColumnExpression columnExpression = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, posOffset), col.getName().getString());
+                    unusedPkColumns.remove(columnExpression);
+                    PDataType dataType = IndexUtil.getIndexColumnDataType(col);
+                    ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
+                    allPkColumns.add(new ColumnDefInPkConstraint(colName, col.getSortOrder(), false));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString(), col.isRowTimestamp()));
                 }
                 
                 PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
@@ -1480,7 +1479,7 @@ public class MetaDataClient {
             String tableName = tableNameNode.getTableName();
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
-            String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
+            String tenantIdStr = tenantId == null ? null : tenantId.getString();
             boolean multiTenant = false;
             boolean storeNulls = false;
             Integer saltBucketNum = null;
@@ -2065,7 +2064,7 @@ public class MetaDataClient {
         // NOT NULL is a requirement, since otherwise the table key would conflict
         // potentially with the global table definition.
         PColumn tenantIdCol = iterator.next();
-        if (!tenantIdCol.getDataType().isCoercibleTo(PVarchar.INSTANCE) || tenantIdCol.isNullable()) {
+        if ( tenantIdCol.isNullable()) {
             throw new SQLExceptionInfo.Builder(INSUFFICIENT_MULTI_TENANT_COLUMNS).setSchemaName(schemaName).setTableName(tableName).build().buildException();
         }
     }

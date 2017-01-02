@@ -99,21 +99,25 @@ public class WhereOptimizer {
      * @param whereClause the where clause expression
      * @return the new where clause with the key expressions removed
      */
-    public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement, Expression whereClause) {
+    public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement, Expression whereClause)
+            throws SQLException{
         return pushKeyExpressionsToScan(context, statement, whereClause, null);
     }
 
     // For testing so that the extractedNodes can be verified
     public static Expression pushKeyExpressionsToScan(StatementContext context, FilterableStatement statement,
-            Expression whereClause, Set<Expression> extractNodes) {
+            Expression whereClause, Set<Expression> extractNodes) throws SQLException {
         PName tenantId = context.getConnection().getTenantId();
+        byte[] tenantIdBytes = null;
         PTable table = context.getCurrentTable().getTable();
     	Integer nBuckets = table.getBucketNum();
     	boolean isSalted = nBuckets != null;
     	RowKeySchema schema = table.getRowKeySchema();
     	boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+    	boolean isSharedIndex = table.getViewIndexId() != null;
+    	
     	if (isMultiTenant) {
-    		tenantId = ScanUtil.padTenantIdIfNecessary(schema, isSalted, tenantId);
+            tenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex);
     	}
 
         if (whereClause == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
@@ -167,7 +171,7 @@ public class WhereOptimizer {
         boolean hasViewIndex = table.getViewIndexId() != null;
         if (hasMinMaxRange) {
             int minMaxRangeSize = (isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0)
-                    + (isMultiTenant ? tenantId.getBytes().length + 1 : 0) 
+                    + (isMultiTenant ? tenantIdBytes.length + 1 : 0)
                     + (hasViewIndex ? MetaDataUtil.getViewIndexIdDataType().getByteSize() : 0);
             minMaxRangePrefix = new byte[minMaxRangeSize];
         }
@@ -186,21 +190,6 @@ public class WhereOptimizer {
             pkPos++;
         }
         
-        // Add tenant data isolation for tenant-specific tables
-        if (isMultiTenant) {
-            byte[] tenantIdBytes = tenantId.getBytes();
-            KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
-            cnf.add(singletonList(tenantIdKeyRange));
-            if (hasMinMaxRange) {
-                System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, minMaxRangeOffset, tenantIdBytes.length);
-                minMaxRangeOffset += tenantIdBytes.length;
-                if (!schema.getField(pkPos).getDataType().isFixedWidth()) {
-                    minMaxRangePrefix[minMaxRangeOffset] = QueryConstants.SEPARATOR_BYTE;
-                    minMaxRangeOffset++;
-                }
-            }
-            pkPos++;
-        }
         // Add unique index ID for shared indexes on views. This ensures
         // that different indexes don't interleave.
         if (hasViewIndex) {
@@ -210,6 +199,21 @@ public class WhereOptimizer {
             if (hasMinMaxRange) {
                 System.arraycopy(viewIndexBytes, 0, minMaxRangePrefix, minMaxRangeOffset, viewIndexBytes.length);
                 minMaxRangeOffset += viewIndexBytes.length;
+            }
+            pkPos++;
+        }
+        
+        // Add tenant data isolation for tenant-specific tables
+        if (isMultiTenant) {
+            KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
+            cnf.add(singletonList(tenantIdKeyRange));
+            if (hasMinMaxRange) {
+                System.arraycopy(tenantIdBytes, 0, minMaxRangePrefix, minMaxRangeOffset, tenantIdBytes.length);
+                minMaxRangeOffset += tenantIdBytes.length;
+                if (!schema.getField(pkPos).getDataType().isFixedWidth()) {
+                    minMaxRangePrefix[minMaxRangeOffset] = QueryConstants.SEPARATOR_BYTE;
+                    minMaxRangeOffset++;
+                }
             }
             pkPos++;
         }
