@@ -52,3 +52,4 @@ a261ee8 PHOENIX-3223 Add `hadoop classpath` to PQS classpath when available
 82ba256 PHOENIX-3236 Problem with shading apache commons on Azure.
 a6ff352 PHOENIX-32451 Support both DATE and TIMESTAMP in CONVERT_TZ()
 3c3eea7 PHOENIX-3246 Treat U+2002 as whitespace in parser
+2358f2c PHOENIX-3565 Set failIfNoTests=false on surefire and failsafe
