@@ -49,7 +49,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -95,7 +94,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         this.tableDDLOptions = " SALT_BUCKETS=2 " + (transactional ? ", TRANSACTIONAL=true " : "");
         this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "")
                 + (isNamespaceMapped ? "_NM" : "");
-        this.indexName = INDEX_NAME;
+        this.indexName = FailingRegionObserver.INDEX_NAME;
         this.fullTableName = SchemaUtil.getTableName(schema, tableName);
         this.fullIndexName = SchemaUtil.getTableName(schema, indexName);
         this.isNamespaceMapped = isNamespaceMapped;
@@ -143,7 +142,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
-            FAIL_WRITE = false;
+            FailingRegionObserver.FAIL_WRITE = false;
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
 
@@ -195,7 +194,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("z", rs.getString(2));
             assertFalse(rs.next());
 
-            FAIL_WRITE = true;
+            FailingRegionObserver.FAIL_WRITE = true;
 
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?,?)");
             // Insert new row
@@ -270,7 +269,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             }
 
             // re-enable index table
-            FAIL_WRITE = false;
+            FailingRegionObserver.FAIL_WRITE = false;
             
             boolean isActive = false;
             if (!transactional) {
@@ -341,6 +340,8 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     public static class FailingRegionObserver extends SimpleRegionObserver {
+        public static volatile boolean FAIL_WRITE = false;
+        public static final String INDEX_NAME = "IDX";
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
             if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {

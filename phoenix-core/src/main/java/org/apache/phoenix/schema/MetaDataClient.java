@@ -26,6 +26,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_T
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_CREATED_DATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
@@ -94,7 +95,6 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -218,8 +218,6 @@ import com.google.common.primitives.Ints;
 
 import co.cask.tephra.TxConstants;
 
-import co.cask.tephra.TxConstants;
-
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
 
@@ -301,16 +299,27 @@ public class MetaDataClient {
         TENANT_ID + "," +
         TABLE_SCHEM + "," +
         TABLE_NAME + "," +
-        INDEX_STATE +
-        ") VALUES (?, ?, ?, ?)";
+        INDEX_STATE + "," +
+        ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
+        ") VALUES (?, ?, ?, ?, ?)";
+    
+    private static final String UPDATE_INDEX_REBUILD_ASYNC_STATE =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
+                     ") VALUES (?, ?, ?, ?)";
+    
     private static final String UPDATE_INDEX_STATE_TO_ACTIVE =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
             TABLE_SCHEM + "," +
             TABLE_NAME + "," +
             INDEX_STATE + "," +
-            INDEX_DISABLE_TIMESTAMP +
-            ") VALUES (?, ?, ?, ?, ?)";
+            INDEX_DISABLE_TIMESTAMP +","+
+            ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() +
+            ") VALUES (?, ?, ?, ?, ?, ?)";
     //TODO: merge INSERT_COLUMN_CREATE_TABLE and INSERT_COLUMN_ALTER_TABLE column when
     // the new major release is out.
     private static final String INSERT_COLUMN_CREATE_TABLE =
@@ -3201,7 +3210,13 @@ public class MetaDataClient {
             String dataTableName = statement.getTableName();
             String schemaName = statement.getTable().getName().getSchemaName();
             String indexName = statement.getTable().getName().getTableName();
+            boolean isAsync = statement.isAsync();
             PIndexState newIndexState = statement.getIndexState();
+            if (isAsync && newIndexState != PIndexState.REBUILD) { throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.ASYNC_NOT_ALLOWED)
+                            .setMessage(" ASYNC building of index is allowed only with REBUILD index state")
+                            .setSchemaName(schemaName).setTableName(indexName).build().buildException(); }
+
             if (newIndexState == PIndexState.REBUILD) {
                 newIndexState = PIndexState.BUILDING;
             }
@@ -3212,15 +3227,16 @@ public class MetaDataClient {
             try {
                 if(newIndexState == PIndexState.ACTIVE){
                     tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE);
-                } else {
+                }else{
                     tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
                 }
                 tableUpsert.setString(1, connection.getTenantId() == null ? null : connection.getTenantId().getString());
                 tableUpsert.setString(2, schemaName);
                 tableUpsert.setString(3, indexName);
                 tableUpsert.setString(4, newIndexState.getSerializedValue());
+                tableUpsert.setLong(5, 0);
                 if(newIndexState == PIndexState.ACTIVE){
-                    tableUpsert.setLong(5, 0);
+                    tableUpsert.setLong(6, 0);
                 }
                 tableUpsert.execute();
             } finally {
@@ -3247,9 +3263,25 @@ public class MetaDataClient {
                     addTableToCache(result);
                     // Set so that we get the table below with the potentially modified rowKeyOrderOptimizable flag set
                     indexRef.setTable(result.getTable());
+                    if (newIndexState == PIndexState.BUILDING && isAsync) {
+                        try {
+                            tableUpsert = connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE);
+                            tableUpsert.setString(1,
+                                    connection.getTenantId() == null ? null : connection.getTenantId().getString());
+                            tableUpsert.setString(2, schemaName);
+                            tableUpsert.setString(3, indexName);
+                            tableUpsert.setLong(4, result.getTable().getTimeStamp());
+                            tableUpsert.execute();
+                            connection.commit();
+                        } finally {
+                            if (tableUpsert != null) {
+                                tableUpsert.close();
+                            }
+                        }
+                    }
                 }
             }
-            if (newIndexState == PIndexState.BUILDING) {
+            if (newIndexState == PIndexState.BUILDING && !isAsync) {
                 PTable index = indexRef.getTable();
                 // First delete any existing rows of the index
                 Long scn = connection.getSCN();

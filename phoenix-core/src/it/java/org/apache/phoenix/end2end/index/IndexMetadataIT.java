@@ -33,6 +33,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Properties;
 
@@ -45,10 +46,13 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -214,7 +218,16 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             assertActiveIndex(conn, INDEX_DATA_SCHEMA, MUTABLE_INDEX_DATA_TABLE);
-
+            
+            ddl = "ALTER INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + " REBUILD ASYNC";
+            conn.createStatement().execute(ddl);
+            // Verify the metadata for index is correct.
+            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(INDEX_DATA_SCHEMA), "IDX" , new String[] {PTableType.INDEX.toString()});
+            assertTrue(rs.next());
+            assertEquals("IDX" , rs.getString(3));
+            assertEquals(PIndexState.BUILDING.toString(), rs.getString("INDEX_STATE"));
+            assertFalse(rs.next());
+            
             ddl = "DROP INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
             stmt = conn.prepareStatement(ddl);
             stmt.execute();
@@ -548,6 +561,51 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         assertEquals("IDX2", rs.getString(1));
         Date d2 = rs.getDate(2);
         assertTrue(d2.after(d1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testAsyncRebuildTimestamp() throws Exception {
+        long startTimestamp = System.currentTimeMillis();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String testTable = "TEST_TABLE_ASYNC";
+
+
+        String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
+        String indexName = "R_ASYNCIND_" + "TEST_TABLE_ASYNC";
+        
+        ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + indexName + "2 ON " + testTable  + " (v2) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + indexName + "3 ON " + testTable  + " (v3)";
+        stmt.execute(ddl);
+        conn.createStatement().execute("ALTER INDEX "+indexName+"1 ON " + testTable +" DISABLE ");
+        conn.createStatement().execute("ALTER INDEX "+indexName+"2 ON " + testTable +" REBUILD ");
+        conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" REBUILD ASYNC");
+        
+        ResultSet rs = conn.createStatement().executeQuery(
+            "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
+            "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
+            "where " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " !=0 and table_name like 'R_ASYNCIND_%' " +
+            "order by table_name");
+        assertTrue(rs.next());
+        assertEquals(indexName + "3", rs.getString(1));
+        long asyncTimestamp = rs.getLong(2);
+		assertTrue("Async timestamp is recent timestamp", asyncTimestamp > startTimestamp);
+        PTable table = PhoenixRuntime.getTable(conn, indexName+"3");
+        assertEquals(table.getTimeStamp(), asyncTimestamp);
+        assertFalse(rs.next());
+        conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" DISABLE");
+        rs = conn.createStatement().executeQuery(
+                "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
+                "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
+                "where " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " !=0 and table_name like 'ASYNCIND_%' " +
+                "order by table_name" );
         assertFalse(rs.next());
     }
 }
