@@ -422,17 +422,29 @@ public class PhoenixMetricsIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testMetricsForUpsertSelectWithAutoCommit() throws Exception {
         String tableName1 = "UPSERTFROMAUTOCOMMIT";
         long table1SaltBuckets = 6;
-        String ddl = "CREATE TABLE " + tableName1 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
-                + table1SaltBuckets;
+        String ddl = "CREATE TABLE " + tableName1 + " (K BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, V VARCHAR)"
+                + " SALT_BUCKETS = " + table1SaltBuckets + ", IMMUTABLE_ROWS = true";
         Connection ddlConn = DriverManager.getConnection(getUrl());
         ddlConn.createStatement().execute(ddl);
         ddlConn.close();
         int numRows = 10;
-        insertRowsInTable(tableName1, numRows);
-
+        String dml = "UPSERT INTO " + tableName1 + " VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            for (int i = 1; i <= numRows; i++) {
+                stmt.setLong(1, i);
+                stmt.setString(2, "value" + i);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
         String tableName2 = "UPSERTTOAUTCOMMIT";
-        ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 10";
+        ddl = "CREATE TABLE " + tableName2 + " (K BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, V VARCHAR)"
+                + " SALT_BUCKETS = 10" + ", IMMUTABLE_ROWS = true";
         ddlConn = DriverManager.getConnection(getUrl());
+        ddlConn.createStatement().execute(ddl);
+        String indexName = "INDEXUPSERTFROMAUTOCOMMIT";
+        ddl = "CREATE INDEX " + indexName + " ON " + tableName2 + " (V)";
         ddlConn.createStatement().execute(ddl);
         ddlConn.close();
 
