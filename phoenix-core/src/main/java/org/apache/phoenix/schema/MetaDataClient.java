@@ -1649,6 +1649,9 @@ public class MetaDataClient {
             }
 
             Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
+            if (indexType != null && parent != null) {
+                tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, parent.getTableName().getString());
+            }
             Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
             // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
             HColumnDescriptor defaultDescriptor = new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);

@@ -510,6 +510,10 @@ public class MetaDataUtil {
     public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
     public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
 
+    public static final String DATA_TABLE_NAME_PROP_NAME = "DATA_TABLE_NAME";
+
+    private static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
+
 
 
     public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp){
@@ -553,5 +557,9 @@ public class MetaDataUtil {
         } else {
             return physicalName.startsWith(VIEW_INDEX_TABLE_PREFIX);
         }
+    }
+    
+    public static String getPhoenixTableNameFromDesc(HTableDescriptor tableDesc) {
+        return Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
     }
 }
