@@ -53,3 +53,4 @@ a261ee8 PHOENIX-3223 Add `hadoop classpath` to PQS classpath when available
 a6ff352 PHOENIX-32451 Support both DATE and TIMESTAMP in CONVERT_TZ()
 3c3eea7 PHOENIX-3246 Treat U+2002 as whitespace in parser
 2358f2c PHOENIX-3565 Set failIfNoTests=false on surefire and failsafe
+7d29a1f PHOENIX-2930 Cannot resolve columns aliased to its own name
