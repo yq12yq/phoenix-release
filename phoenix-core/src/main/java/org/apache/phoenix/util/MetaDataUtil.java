@@ -512,7 +512,7 @@ public class MetaDataUtil {
 
     public static final String DATA_TABLE_NAME_PROP_NAME = "DATA_TABLE_NAME";
 
-    private static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
+    public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
 
 
 
@@ -559,7 +559,4 @@ public class MetaDataUtil {
         }
     }
     
-    public static String getPhoenixTableNameFromDesc(HTableDescriptor tableDesc) {
-        return Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
-    }
 }
