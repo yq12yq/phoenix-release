@@ -116,8 +116,8 @@ public class IndexMemStore implements KeyValueStore {
 
   @Override
   public void add(KeyValue kv, boolean overwrite) {
-    if (LOG.isDebugEnabled()) {
-      LOG.info("Inserting: " + toString(kv));
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Inserting: " + toString(kv));
     }
     // if overwriting, we will always update
     if (!overwrite) {

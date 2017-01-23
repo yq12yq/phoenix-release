@@ -264,8 +264,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // If Aggregators not found for this distinct
                 // value, clone our original one (we need one
                 // per distinct value)
-                if (logger.isDebugEnabled()) {
-                    logger.debug(LogUtil.addCustomAnnotations("Adding new aggregate bucket for row key "
+                if (logger.isTraceEnabled()) {
+                    logger.trace(LogUtil.addCustomAnnotations("Adding new aggregate bucket for row key "
                             + Bytes.toStringBinary(key.get(), key.getOffset(),
                                 key.getLength()), customAnnotations));
                 }
@@ -299,8 +299,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // Generate byte array of Aggregators and set as value of row
                 byte[] value = aggregators.toBytes(rowAggregators);
 
-                if (logger.isDebugEnabled()) {
-                    logger.debug(LogUtil.addCustomAnnotations("Adding new distinct group: "
+                if (logger.isTraceEnabled()) {
+                    logger.trace(LogUtil.addCustomAnnotations("Adding new distinct group: "
                             + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength())
                             + " with aggregators " + Arrays.asList(rowAggregators).toString()
                             + " value = " + Bytes.toStringBinary(value), customAnnotations));
@@ -368,8 +368,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
     private RegionScanner scanUnordered(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
             final RegionScanner scanner, final List<Expression> expressions,
             final ServerAggregators aggregators, long limit) throws IOException {
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over unordered rows with scan " + scan
+        if (logger.isTraceEnabled()) {
+            logger.trace(LogUtil.addCustomAnnotations("Grouped aggregation over unordered rows with scan " + scan
                     + ", group by " + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
         RegionCoprocessorEnvironment env = c.getEnvironment();
@@ -394,8 +394,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             boolean hasMore;
 
             MultiKeyValueTuple result = new MultiKeyValueTuple();
-            if (logger.isDebugEnabled()) {
-                logger.debug(LogUtil.addCustomAnnotations("Spillable groupby enabled: " + spillableEnabled, ScanUtil.getCustomAnnotations(scan)));
+            if (logger.isTraceEnabled()) {
+                logger.trace(LogUtil.addCustomAnnotations("Spillable groupby enabled: " + spillableEnabled, ScanUtil.getCustomAnnotations(scan)));
             }
 
             Region region = c.getEnvironment().getRegion();
@@ -451,8 +451,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
             final ServerAggregators aggregators, final long limit) throws IOException {
 
-        if (logger.isDebugEnabled()) {
-            logger.debug(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
+        if (logger.isTraceEnabled()) {
+            logger.trace(LogUtil.addCustomAnnotations("Grouped aggregation over ordered rows with scan " + scan + ", group by "
                     + expressions + ", aggregators " + aggregators, ScanUtil.getCustomAnnotations(scan)));
         }
         return new BaseRegionScanner(scanner) {
@@ -490,8 +490,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                                 aggBoundary = currentKey != null && currentKey.compareTo(key) != 0;
                                 if (!aggBoundary) {
                                     aggregators.aggregate(rowAggregators, result);
-                                    if (logger.isDebugEnabled()) {
-                                        logger.debug(LogUtil.addCustomAnnotations(
+                                    if (logger.isTraceEnabled()) {
+                                        logger.trace(LogUtil.addCustomAnnotations(
                                             "Row passed filters: " + kvs
                                             + ", aggregated values: "
                                             + Arrays.asList(rowAggregators),
@@ -516,8 +516,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                                 currentKey.getLength(), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
                                 AGG_TIMESTAMP, value, 0, value.length);
                     results.add(keyValue);
-                    if (logger.isDebugEnabled()) {
-                        logger.debug(LogUtil.addCustomAnnotations("Adding new aggregate row: "
+                    if (logger.isTraceEnabled()) {
+                        logger.trace(LogUtil.addCustomAnnotations("Adding new aggregate row: "
                                 + keyValue
                                 + ",for current key "
                                 + Bytes.toStringBinary(currentKey.get(), currentKey.getOffset(),
