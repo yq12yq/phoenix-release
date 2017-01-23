@@ -22,6 +22,8 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -44,6 +46,7 @@ import com.google.common.cache.RemovalNotification;
  * @since 0.1
  */
 public class TenantCacheImpl implements TenantCache {
+    private static final Log logger = LogFactory.getLog(TenantCacheImpl.class);
     private final int maxTimeToLiveMs;
     private final MemoryManager memoryManager;
     private final Ticker ticker;
@@ -88,6 +91,9 @@ public class TenantCacheImpl implements TenantCache {
                         .removalListener(new RemovalListener<ImmutableBytesPtr, Closeable>(){
                             @Override
                             public void onRemoval(RemovalNotification<ImmutableBytesPtr, Closeable> notification) {
+                                if (logger.isDebugEnabled()) {
+                                    logger.debug("Removing cache entry from " + getClass().getSimpleName() + " for " + notification.getKey());
+                                }
                                 Closeables.closeAllQuietly(Collections.singletonList(notification.getValue()));
                             }
                         })
