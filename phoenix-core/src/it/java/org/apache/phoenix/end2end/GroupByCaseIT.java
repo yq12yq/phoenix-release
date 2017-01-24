@@ -32,7 +32,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -307,43 +306,5 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
                 "CLIENT MERGE SORT\n" + 
                 "CLIENT FILTER BY COUNT(1) > 1",QueryUtil.getExplainPlan(rs));
     }
-
-    @Test
-    public void testGroupByWithAliasWithSameColumnName() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test3 (pk integer primary key, col integer)";
-        conn.createStatement().execute(ddl);
-        ddl = "create table test4 (pk integer primary key, col integer)";
-        conn.createStatement().execute(ddl);
-        ddl = "create table test5 (notPk integer primary key, col integer)";
-        conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO test3 VALUES (1,2)");
-        conn.createStatement().execute("UPSERT INTO test4 VALUES (1,2)");
-        conn.createStatement().execute("UPSERT INTO test5 VALUES (1,2)");
-        // Make sure the values make it to the table
-        conn.commit();
-        conn.createStatement().executeQuery("select test3.pk as pk from test3 group by pk");
-        conn.createStatement().executeQuery("select test3.pk as pk from test3 group by test3.pk");
-        conn.createStatement().executeQuery("select test3.pk as pk from test3 as t group by t.pk");
-        conn.createStatement().executeQuery("select test3.col as pk from test3");
-        conn.createStatement().executeQuery("select * from test3");
-        conn.createStatement().executeQuery("select * from test5");
-        conn.createStatement()
-                .executeQuery("select test3.pk as pk from test3 join test5 on (test3.pk=test5.notPk) group by pk");
-        try {
-            conn.createStatement().executeQuery("select test3.col as pk from test3 group by pk");
-            fail();
-        } catch (AmbiguousColumnException e) {}
-        try {
-            conn.createStatement().executeQuery("select col as pk from test3 group by pk");
-            fail();
-        } catch (AmbiguousColumnException e) {}
-        try {
-            conn.createStatement()
-                    .executeQuery("select test3.pk as pk from test3 join test4 on (test3.pk=test4.pk) group by pk");
-            fail();
-        } catch (AmbiguousColumnException e) {}
-        conn.close();
-    }
+    
 }
