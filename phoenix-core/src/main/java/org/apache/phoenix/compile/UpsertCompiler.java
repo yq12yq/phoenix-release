@@ -81,6 +81,7 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
@@ -497,10 +498,11 @@ public class UpsertCompiler {
                         parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe, useServerTimestampToBe);
                         // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
                         // so we might be able to run it entirely on the server side.
+                        // For a table with row timestamp column, we can't guarantee that the row key will reside in the
                         // region space managed by region servers. So we bail out on executing on server side.
                         runOnServer = isAutoCommit && !table.isTransactional()
                                 && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
-                                && !select.isJoin();
+                                && !select.isJoin() && table.getRowTimestampColPos() == -1;
                     }
                     // If we may be able to run on the server, add a hint that favors using the data table
                     // if all else is equal.
@@ -655,7 +657,7 @@ public class UpsertCompiler {
                         projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i));
                     }
                     // Build table from projectedColumns
-                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns);
+                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns, PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)));
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
                     StatementContext statementContext = queryPlan.getContext();

@@ -753,9 +753,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             PColumn column = tableRef.getTable().getPKColumns().get(i);
             Expression source = projectedExpressions.get(i);
             if (source == null || !source
-                    .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return false; }
+                    .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return true; }
         }
-        return true;
+        return false;
     }
 
     private boolean readyToCommit(List<Mutation> mutations,int batchSize){
