@@ -597,41 +597,6 @@ public class PhoenixMetricsIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
     
     @Test
-    public void testMetricsForUpsertSelectSameTable() throws Exception {
-        String tableName = "UPSERTSAME";
-        long table1SaltBuckets = 6;
-        String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
-                + table1SaltBuckets;
-        Connection ddlConn = DriverManager.getConnection(getUrl());
-        ddlConn.createStatement().execute(ddl);
-        ddlConn.close();
-        int numRows = 10;
-        insertRowsInTable(tableName, numRows);
-
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.setAutoCommit(false);
-        String upsertSelect = "UPSERT INTO " + tableName + " SELECT * FROM " + tableName;
-        conn.createStatement().executeUpdate(upsertSelect);
-        conn.commit();
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-        
-        Map<String, Map<String, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(pConn);
-        // Because auto-commit is off, upsert select into the same table will run on the client.
-        // So we should have client side read and write metrics available.
-        assertMutationMetrics(tableName, numRows, mutationMetrics);
-        Map<String, Map<String, Long>> readMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
-        assertReadMetricsForMutatingSql(tableName, table1SaltBuckets, readMetrics);
-        PhoenixRuntime.resetMetrics(pConn);
-        // With autocommit on, still, this upsert select runs on the client side.
-        conn.setAutoCommit(true);
-        conn.createStatement().executeUpdate(upsertSelect);
-        Map<String, Map<String, Long>> autoCommitMutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(pConn);
-        Map<String, Map<String, Long>> autoCommitReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
-        assertMetricsAreSame(mutationMetrics, autoCommitMutationMetrics, mutationMetricsToSkip);
-        assertMetricsAreSame(readMetrics, autoCommitReadMetrics, readMetricsToSkip);
-    }
-    
-    @Test
     public void testOpenConnectionsCounter() throws Exception {
         long numOpenConnections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
