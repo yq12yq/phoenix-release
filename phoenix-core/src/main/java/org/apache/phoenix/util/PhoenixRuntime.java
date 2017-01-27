@@ -94,6 +94,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
+import org.apache.phoenix.util.repairtool.RepairTool;
 import co.cask.tephra.util.TxUtils;
 
 import com.google.common.base.Joiner;
@@ -225,6 +226,11 @@ public class PhoenixRuntime {
             if (execCmd.binaryEncoding != null) {
                 props.setProperty(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING, execCmd.binaryEncoding);
             }
+            if(execCmd.repairTool) {
+                System.out.println("Starting the Phoenix repair tool.");
+                RepairTool.checkAndRepair(jdbcUrl);
+            }
+
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
@@ -544,8 +550,9 @@ public class PhoenixRuntime {
         private String srcTable;
         private boolean localIndexUpgrade;
         private String binaryEncoding;
+        private boolean repairTool;
 
-        /**
+       /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
          */
         public static ExecutionCommand parseArgs(String[] args) {
@@ -590,6 +597,9 @@ public class PhoenixRuntime {
             Option localIndexUpgradeOption = new Option("l", "local-index-upgrade", false,
                 "Used to upgrade local index data by moving index data from separate table to "
                 + "separate column families in the same table.");
+            Option repairUtilOption = new Option("r", "repair", false,
+                    "Used to check and repair system catalog. Other options will be ignored");
+
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -602,6 +612,7 @@ public class PhoenixRuntime {
             options.addOption(bypassUpgradeOption);
             options.addOption(mapNamespaceOption);
             options.addOption(localIndexUpgradeOption);
+            options.addOption(repairUtilOption);
             options.addOption(binaryEncodingOption);
 
             CommandLineParser parser = new PosixParser();
@@ -614,6 +625,10 @@ public class PhoenixRuntime {
 
             ExecutionCommand execCmd = new ExecutionCommand();
             execCmd.connectionString = "";
+            if(cmdLine.hasOption(repairUtilOption.getOpt())){
+                execCmd.repairTool = true;
+            }
+
             if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
                 execCmd.mapNamespace = true;
                 execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
@@ -666,7 +681,7 @@ public class PhoenixRuntime {
             }
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
-            if (argList.isEmpty()) {
+            if (argList.isEmpty() && !execCmd.repairTool) {
                 usageError("At least one input file must be supplied", options);
             }
             List<String> inputFiles = Lists.newArrayList();
@@ -684,7 +699,8 @@ public class PhoenixRuntime {
                 i++;
             }
 
-            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace() && !execCmd.isLocalIndexUpgrade()) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace() &&
+                    !execCmd.isLocalIndexUpgrade() && !execCmd.repairTool) {
                 usageError("At least one input file must be supplied", options);
             }
 
@@ -719,11 +735,12 @@ public class PhoenixRuntime {
         private static void usageError(Options options) {
             HelpFormatter formatter = new HelpFormatter();
             formatter.printHelp(
-                    "psql [-t table-name] [-h comma-separated-column-names | in-line] [-d " +
+                    "psql [-r] [-t table-name] [-h comma-separated-column-names | in-line] [-d " +
                             "field-delimiter-char quote-char escape-char]<zookeeper>  " +
                             "<path-to-sql-or-csv-file>...",
                     options);
             System.out.println("Examples:\n" +
+                    "  psql -r\n" +
                     "  psql my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql my_table.csv\n" +
