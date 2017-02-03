@@ -34,6 +34,7 @@ import javax.annotation.concurrent.Immutable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -192,6 +193,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
      * @since 0.1.1
      */
     public static class ConnectionInfo {
+        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -242,8 +244,18 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 }
                 tokens[nTokens++] = token;
             }
+            // Look-forward to see if the last token is actually the C:\\ path
             if (tokenizer.hasMoreTokens() && !TERMINATOR.equals(token)) {
-                throw getMalFormedUrlException(url);
+                String extraToken = tokenizer.nextToken();
+                if (WINDOWS_SEPARATOR_CHAR == extraToken.charAt(0)) {
+                  String prevToken = tokens[nTokens - 1];
+                  tokens[nTokens - 1] = prevToken + ":" + extraToken;
+                  if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
+                      throw getMalFormedUrlException(url);
+                  }
+                } else {
+                    throw getMalFormedUrlException(url);
+                }
             }
             String quorum = null;
             Integer port = null;
@@ -273,6 +285,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                             principal = tokens[tokenIndex++]; // Found principal
                             if (nTokens > tokenIndex) {
                                 keytabFile = tokens[tokenIndex++]; // Found keytabFile
+                                // There's still more after, try to see if it's a windows file path
+                                if (tokenIndex < tokens.length) {
+                                    String nextToken = tokens[tokenIndex++];
+                                    // The next token starts with the directory separator, assume
+                                    // it's still the keytab path.
+                                    if (null != nextToken && WINDOWS_SEPARATOR_CHAR == nextToken.charAt(0)) {
+                                        keytabFile = keytabFile + ":" + nextToken;
+                                    }
+                                }
                             }
                         }
                     }
