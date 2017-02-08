@@ -155,6 +155,7 @@
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
     <numForkedIT>5</numForkedIT>
+    <reuseForks>true</reuseForks>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
@@ -467,7 +468,7 @@
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
-          <reuseForks>true</reuseForks>
+          <reuseForks>${reuseForks}</reuseForks>
           <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
