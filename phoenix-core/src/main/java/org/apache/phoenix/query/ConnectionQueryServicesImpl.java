@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -792,7 +793,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param tableName
      * @param splits
      * @param modifyExistingMetaData TODO
-     * @return true if table was created and false if it already exists
+     * @return return null if no metadata is changed otherwise updated descriptor
      * @throws SQLException
      */
     private HTableDescriptor ensureTableCreated(byte[] tableName, PTableType tableType , Map<String,Object> props, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, boolean modifyExistingMetaData) throws SQLException {
@@ -800,23 +801,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         HTableDescriptor existingDesc = null;
         boolean isMetaTable = SchemaUtil.isMetaTable(tableName);
+        byte[] physicalTable = SchemaUtil.getPhysicalHBaseTableName(Bytes.toString(tableName), false, tableType).getBytes();
         boolean tableExist = true;
+        boolean accessDeniedToSystemTable=false;
+        admin = getAdmin();
         try {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
-            admin = new HBaseAdmin(config);
+            tableExist = admin.tableExists(physicalTable);
             try {
                 existingDesc = admin.getTableDescriptor(tableName);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                tableExist = false;
-                if (tableType == PTableType.VIEW) {
+                if (tableExist && SchemaUtil.isSystemTable(physicalTable)) {
+                    // Ranger might be throwing tableNotFoundException instead
+                    // of AccessDeniedException
+                    accessDeniedToSystemTable = true;
+                } else if (tableType == PTableType.VIEW) {
                     String fullTableName = Bytes.toString(tableName);
                     throw new ReadOnlyTableException(
                             "An HBase table for a VIEW must already exist",
                             SchemaUtil.getSchemaNameFromFullName(fullTableName),
                             SchemaUtil.getTableNameFromFullName(fullTableName));
                 }
+            } catch (AccessDeniedException e) {
+                if (SchemaUtil.isSystemTable(physicalTable)) {
+                    accessDeniedToSystemTable = true;
+                } else {
+                    throw e;
+                }
+            }
+            if (accessDeniedToSystemTable) {
+                logger.debug("Unable to confirm the descriptor of " + Bytes.toString(physicalTable)
+                        + " because user doesn't have access to the table");
+                if (isMetaTable) {
+                    checkClientServerCompatibility();
+                }
+                return null;
             }
 
             HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, tableType , props, families, splits);
@@ -2001,7 +2022,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw Throwables.propagate(e);
         }
     }
-    
+
     private static int getSaltBuckets(TableAlreadyExistsException e) {
         PTable table = e.getTable();
         Integer sequenceSaltBuckets = table == null ? null : table.getBucketNum();

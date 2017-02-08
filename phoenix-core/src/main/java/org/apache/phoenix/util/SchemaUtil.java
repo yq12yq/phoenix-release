@@ -44,20 +44,9 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.AmbiguousColumnException;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PMetaData;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -725,5 +714,11 @@ public class SchemaUtil {
         checkArgument(!isNullOrEmpty(fullColumnName), "Column name cannot be null or empty");
         fullColumnName = fullColumnName.replaceAll(ESCAPE_CHARACTER, "");
        	return fullColumnName.trim();
+    }
+
+    public static PName getPhysicalHBaseTableName(String tableName, boolean isNamespaceMapped, PTableType type) {
+        if (!isNamespaceMapped) { return PNameFactory.newName(tableName); }
+        return PNameFactory
+            .newName(tableName.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
     }
 }
