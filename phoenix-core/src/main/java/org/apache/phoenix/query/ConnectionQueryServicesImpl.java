@@ -84,6 +84,7 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -206,6 +207,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.sun.org.apache.commons.logging.Log;
 
 import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
@@ -998,7 +1000,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param tableName
      * @param splits
      * @param modifyExistingMetaData TODO
-     * @return true if table was created and false if it already exists
+     * @return return null if no metadata is changed otherwise updated descriptor
      * @throws SQLException
      */
     private HTableDescriptor ensureTableCreated(byte[] tableName, PTableType tableType, Map<String, Object> props,
@@ -1009,23 +1011,42 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean isMetaTable = SchemaUtil.isMetaTable(tableName);
         byte[] physicalTable = SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes();
         boolean tableExist = true;
+        boolean accessDeniedToSystemTable=false;
         try (HBaseAdmin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
+            tableExist = admin.tableExists(physicalTable);
             try {
                 existingDesc = admin.getTableDescriptor(physicalTable);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                tableExist = false;
-                if (tableType == PTableType.VIEW) {
+                if (tableExist && SchemaUtil.isSystemTable(physicalTable)) {
+                    // Ranger might be throwing tableNotFoundException instead
+                    // of AccessDeniedException
+                    accessDeniedToSystemTable = true;
+                } else if (tableType == PTableType.VIEW) {
                     String fullTableName = Bytes.toString(tableName);
                     throw new ReadOnlyTableException(
                             "An HBase table for a VIEW must already exist",
                             SchemaUtil.getSchemaNameFromFullName(fullTableName),
                             SchemaUtil.getTableNameFromFullName(fullTableName));
                 }
+            } catch (AccessDeniedException e) {
+                if (SchemaUtil.isSystemTable(physicalTable)) {
+                    accessDeniedToSystemTable = true;
+                } else {
+                    throw e;
+                }
             }
-
+            if (accessDeniedToSystemTable) {
+                logger.debug("Unable to confirm the descriptor of " + Bytes.toString(physicalTable)
+                        + " because user doesn't have access to the table");
+                if (isMetaTable) {
+                    checkClientServerCompatibility(
+                            SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                }
+                return null;
+            }
             HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, tableType, props, families,
                     splits, isNamespaceMapped);
 
@@ -2609,9 +2630,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     HTableInterface metatable = null;
                     try (HBaseAdmin admin = getAdmin()) {
                         ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
-                        List<HTableDescriptor> tables = Arrays
-                                .asList(admin.listTables(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*", false));
-                        List<String> tableNames = getTableNames(tables);
+                        List<TableName> tableNames = Arrays
+                                .asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
                         if (tableNames.size() == 0) { return; }
                         if (tableNames.size() > 4) { throw new IllegalArgumentException(
                                 "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
@@ -2629,10 +2649,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
                         }
-                        for (String table : tableNames) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable, table, props, null, PTableType.SYSTEM,
+                        for (TableName table : tableNames) {
+                            UpgradeUtil.mapTableToNamespace(admin, metatable, table.getNameAsString(), props, null, PTableType.SYSTEM,
                                     null);
-                            ConnectionQueryServicesImpl.this.removeTable(null, table, null,
+                            ConnectionQueryServicesImpl.this.removeTable(null, table.getNameAsString(), null,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                         }
                         if (!tableNames.isEmpty()) {
@@ -2657,14 +2677,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } else {
             return columnsToAddSoFar + ", " + columns;
         }
-    }
-
-    private List<String> getTableNames(List<HTableDescriptor> tables) {
-        List<String> tableNames = new ArrayList<String>(4);
-        for (HTableDescriptor desc : tables) {
-            tableNames.add(desc.getNameAsString());
-        }
-        return tableNames;
     }
 
     /**
