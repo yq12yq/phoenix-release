@@ -36,6 +36,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -353,7 +354,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                                 // Double check the current user, might have changed since we checked last. Don't want
                                 // to re-login if it's the same user.
                                 currentUser = UserGroupInformation.getCurrentUser();
-                                if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                                if (!currentUser.hasKerberosCredentials() || !isSameName(currentUser.getUserName(), principal)) {
                                     final Configuration config = getConfiguration(props, info, principal, keytab);
                                     logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
                                             config.get(QueryServices.HBASE_CLIENT_KEYTAB));
@@ -376,6 +377,19 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             } // else, no connection, no need to login
             // Will use the current User from UGI
             return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+        }
+
+        // Visible for testing
+        static boolean isSameName(String currentName, String newName) throws IOException {
+            return isSameName(currentName, newName, null);
+        }
+
+        static boolean isSameName(String currentName, String newName, String hostname) throws IOException {
+            // Make sure to replace "_HOST" if it exists before comparing the principals.
+            if (newName.contains(org.apache.hadoop.security.SecurityUtil.HOSTNAME_PATTERN)) {
+                newName = org.apache.hadoop.security.SecurityUtil.getServerPrincipal(newName, hostname);
+            }
+            return currentName.equals(newName);
         }
 
         /**
