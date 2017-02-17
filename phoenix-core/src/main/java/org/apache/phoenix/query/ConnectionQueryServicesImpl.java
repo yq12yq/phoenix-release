@@ -2619,9 +2619,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     HTableInterface metatable = null;
                     try (HBaseAdmin admin = getAdmin()) {
                         ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
-                        List<HTableDescriptor> tables = Arrays
-                                .asList(admin.listTables(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*", false));
-                        List<String> tableNames = getTableNames(tables);
+                        List<TableName> tableNames = Arrays
+                                .asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
                         if (tableNames.size() == 0) { return; }
                         if (tableNames.size() > 4) { throw new IllegalArgumentException(
                                 "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
@@ -2639,10 +2638,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
                         }
-                        for (String table : tableNames) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable, table, props, null, PTableType.SYSTEM,
+                        for (TableName table : tableNames) {
+                            UpgradeUtil.mapTableToNamespace(admin, metatable, table.getNameAsString(), props, null, PTableType.SYSTEM,
                                     null);
-                            ConnectionQueryServicesImpl.this.removeTable(null, table, null,
+                            ConnectionQueryServicesImpl.this.removeTable(null, table.getNameAsString(), null,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                         }
                         if (!tableNames.isEmpty()) {
