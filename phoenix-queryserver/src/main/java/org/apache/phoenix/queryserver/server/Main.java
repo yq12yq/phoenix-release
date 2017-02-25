@@ -170,6 +170,8 @@ public final class Main extends Configured implements Tool, Runnable {
     logProcessInfo(getConf());
     try {
       final boolean isKerberos = "kerberos".equalsIgnoreCase(getConf().get(QueryServices.QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB));
+      final boolean disableSpnego = getConf().getBoolean(QueryServices.QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB,
+              QueryServicesOptions.DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED);
 
       // handle secure cluster credentials
       if (isKerberos) {
@@ -200,7 +202,7 @@ public final class Main extends Configured implements Tool, Runnable {
           .withHandler(service, getSerialization(getConf()));
 
       // Enable SPNEGO and Impersonation when using Kerberos
-      if (isKerberos) {
+      if (isKerberos && !disableSpnego) {
         UserGroupInformation ugi = UserGroupInformation.getLoginUser();
 
         // Make sure the proxyuser configuration is up to date
