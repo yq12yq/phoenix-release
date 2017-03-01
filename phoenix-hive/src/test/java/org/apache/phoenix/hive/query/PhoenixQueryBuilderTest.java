@@ -59,8 +59,8 @@ public class PhoenixQueryBuilderTest {
     public void testBuildQueryWithCharColumns() throws IOException {
         final String COLUMN_CHAR = "Column_Char";
         final String COLUMN_VARCHAR = "Column_VChar";
-        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_CHAR + "," + COLUMN_VARCHAR +
-                " from TEST_TABLE where ";
+        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ \"" + COLUMN_CHAR + "\",\"" + COLUMN_VARCHAR +
+                "\" from TEST_TABLE where ";
 
         JobConf jobConf = new JobConf();
         List<String> readColumnList = Lists.newArrayList(COLUMN_CHAR, COLUMN_VARCHAR);
@@ -69,7 +69,7 @@ public class PhoenixQueryBuilderTest {
                 mockedIndexSearchCondition("GenericUDFOPEqual", "CHAR_VALUE2", null, COLUMN_VARCHAR, "varchar(10)", false)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char = 'CHAR_VALUE' and Column_VChar = 'CHAR_VALUE2'",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" = 'CHAR_VALUE' and \"Column_VChar\" = 'CHAR_VALUE2'",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -77,7 +77,7 @@ public class PhoenixQueryBuilderTest {
                         new Object[]{"CHAR1", "CHAR2", "CHAR3"}, COLUMN_CHAR, "char(10)", false)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char in ('CHAR1', 'CHAR2', 'CHAR3')",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" in ('CHAR1', 'CHAR2', 'CHAR3')",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -85,7 +85,7 @@ public class PhoenixQueryBuilderTest {
                         new Object[]{"CHAR1", "CHAR2", "CHAR3"}, COLUMN_CHAR, "char(10)", true)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char not in ('CHAR1', 'CHAR2', 'CHAR3')",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" not in ('CHAR1', 'CHAR2', 'CHAR3')",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -93,7 +93,7 @@ public class PhoenixQueryBuilderTest {
                         new Object[]{"CHAR1", "CHAR2"}, COLUMN_CHAR, "char(10)", false)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char between 'CHAR1' and 'CHAR2'",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" between 'CHAR1' and 'CHAR2'",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -101,7 +101,7 @@ public class PhoenixQueryBuilderTest {
                         new Object[]{"CHAR1", "CHAR2"}, COLUMN_CHAR, "char(10)", true)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char not between 'CHAR1' and 'CHAR2'",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" not between 'CHAR1' and 'CHAR2'",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
     }
 
@@ -109,8 +109,8 @@ public class PhoenixQueryBuilderTest {
     public void testBuildBetweenQueryWithDateColumns() throws IOException {
         final String COLUMN_DATE = "Column_Date";
         final String tableName = "TEST_TABLE";
-        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_DATE +
-                " from " + tableName + " where ";
+        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ \"" + COLUMN_DATE +
+                "\" from " + tableName + " where ";
 
         JobConf jobConf = new JobConf();
         List<String> readColumnList = Lists.newArrayList(COLUMN_DATE);
@@ -121,7 +121,7 @@ public class PhoenixQueryBuilderTest {
         );
 
         assertEquals(expectedQueryPrefix +
-                        COLUMN_DATE + " between to_date('1992-01-02') and to_date('1992-02-02')",
+                        "\"" + COLUMN_DATE + "\" between to_date('1992-01-02') and to_date('1992-02-02')",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -130,7 +130,7 @@ public class PhoenixQueryBuilderTest {
         );
 
         assertEquals(expectedQueryPrefix +
-                        COLUMN_DATE + " not between to_date('1992-01-02') and to_date('1992-02-02')",
+                        "\"" + COLUMN_DATE + "\" not between to_date('1992-01-02') and to_date('1992-02-02')",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
     }
 
@@ -138,8 +138,8 @@ public class PhoenixQueryBuilderTest {
     public void testBuildQueryWithNotNull() throws IOException {
         final String COLUMN_DATE = "Column_Date";
         final String tableName = "TEST_TABLE";
-        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_DATE +
-                " from " + tableName + " where ";
+        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ \"" + COLUMN_DATE +
+                "\" from " + tableName + " where ";
 
         JobConf jobConf = new JobConf();
         List<String> readColumnList = Lists.newArrayList(COLUMN_DATE);
@@ -150,7 +150,7 @@ public class PhoenixQueryBuilderTest {
         );
 
         assertEquals(expectedQueryPrefix +
-                        COLUMN_DATE + " is not null ",
+                        "\"" + COLUMN_DATE + "\" is not null ",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
     }
 }
