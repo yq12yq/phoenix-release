@@ -24,6 +24,15 @@ import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import javax.annotation.Nullable;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -33,15 +42,12 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
+import org.apache.phoenix.hive.util.ColumnMappingUtils;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.hive.util.PhoenixUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import javax.annotation.Nullable;
-import java.io.IOException;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import static org.apache.phoenix.hive.util.ColumnMappingUtils.getColumnMappingMap;
 
 /**
  * Query builder. Produces a query depending on the colummn list and conditions
@@ -88,13 +94,16 @@ public class PhoenixQueryBuilder {
             TypeInfo> columnTypeMap) throws IOException {
         StringBuilder sql = new StringBuilder();
         List<String> conditionColumnList = buildWhereClause(jobConf, sql, whereClause, columnTypeMap);
+        readColumnList  = replaceColumns(jobConf, readColumnList);
 
         if (conditionColumnList.size() > 0) {
             addConditionColumnToReadColumn(readColumnList, conditionColumnList);
+            readColumnList = ColumnMappingUtils.quoteColumns(readColumnList);
             sql.insert(0, queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
         } else {
+            readColumnList = ColumnMappingUtils.quoteColumns(readColumnList);
             sql.append(queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
@@ -107,18 +116,46 @@ public class PhoenixQueryBuilder {
         return sql.toString();
     }
 
+    private static String findReplacement(JobConf jobConf, String column) {
+        Map<String, String> columnMappingMap = getColumnMappingMap(jobConf.get
+                (PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING));
+        if (columnMappingMap != null && columnMappingMap.containsKey(column)) {
+            return columnMappingMap.get(column);
+        } else {
+            return column;
+        }
+    }
+    private static List<String> replaceColumns(JobConf jobConf, List<String> columnList) {
+        Map<String, String> columnMappingMap = getColumnMappingMap(jobConf.get
+                (PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING));
+        if(columnMappingMap != null) {
+          List<String> newList = Lists.newArrayList();
+            for(String column:columnList) {
+                if(columnMappingMap.containsKey(column)) {
+                    newList.add(columnMappingMap.get(column));
+                } else {
+                    newList.add(column);
+                }
+            }
+            return newList;
+        }
+        return null;
+    }
+
     private String makeQueryString(JobConf jobConf, String tableName, List<String>
             readColumnList, List<IndexSearchCondition> searchConditions, String queryTemplate,
                                    String hints) throws IOException {
         StringBuilder query = new StringBuilder();
-        List<String> conditionColumnList = buildWhereClause(query, searchConditions);
+        List<String> conditionColumnList = buildWhereClause(jobConf, query, searchConditions);
 
         if (conditionColumnList.size() > 0) {
+            readColumnList  = replaceColumns(jobConf, readColumnList);
             addConditionColumnToReadColumn(readColumnList, conditionColumnList);
             query.insert(0, queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
         } else {
+            readColumnList  = replaceColumns(jobConf, readColumnList);
             query.append(queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
@@ -133,7 +170,7 @@ public class PhoenixQueryBuilder {
 
     private String getSelectColumns(JobConf jobConf, String tableName, List<String>
             readColumnList) throws IOException {
-        String selectColumns = Joiner.on(PhoenixStorageHandlerConstants.COMMA).join(readColumnList);
+        String selectColumns = Joiner.on(PhoenixStorageHandlerConstants.COMMA).join(ColumnMappingUtils.quoteColumns(readColumnList));
 
         if (PhoenixStorageHandlerConstants.EMPTY_STRING.equals(selectColumns)) {
             selectColumns = "*";
@@ -143,10 +180,8 @@ public class PhoenixQueryBuilder {
                 StringBuilder pkColumns = new StringBuilder();
 
                 for (String pkColumn : pkColumnList) {
-                    String pkColumnName = pkColumn.toLowerCase();
-
-                    if (!readColumnList.contains(pkColumnName)) {
-                        pkColumns.append(pkColumnName).append(PhoenixStorageHandlerConstants.COMMA);
+                    if (!readColumnList.contains(pkColumn)) {
+                        pkColumns.append("\"").append(pkColumn).append("\"" + PhoenixStorageHandlerConstants.COMMA);
                     }
                 }
 
@@ -215,7 +250,10 @@ public class PhoenixQueryBuilder {
 
         for (String columnName : columnTypeMap.keySet()) {
             if (whereClause.contains(columnName)) {
-                conditionColumnList.add(columnName);
+                String column = findReplacement(jobConf, columnName);
+                whereClause = StringUtils.replaceEach(whereClause, new String[] {columnName}, new String[] {"\""+column + "\""});
+                conditionColumnList.add(column);
+
 
                 if (PhoenixStorageHandlerConstants.DATE_TYPE.equals(
                         columnTypeMap.get(columnName).getTypeName())) {
@@ -614,7 +652,7 @@ public class PhoenixQueryBuilder {
         return itsMine;
     }
 
-    protected List<String> buildWhereClause(StringBuilder sql,
+    protected List<String> buildWhereClause(JobConf jobConf, StringBuilder sql,
                                             List<IndexSearchCondition> conditions)
             throws IOException {
         if (conditions == null || conditions.size() == 0) {
@@ -625,21 +663,27 @@ public class PhoenixQueryBuilder {
         sql.append(" where ");
 
         Iterator<IndexSearchCondition> iter = conditions.iterator();
-        appendExpression(sql, iter.next(), columns);
+        appendExpression(jobConf, sql, iter.next(), columns);
         while (iter.hasNext()) {
             sql.append(" and ");
-            appendExpression(sql, iter.next(), columns);
+            appendExpression(jobConf, sql, iter.next(), columns);
         }
 
         return columns;
     }
 
-    private void appendExpression(StringBuilder sql, IndexSearchCondition condition,
+    private void appendExpression(JobConf jobConf, StringBuilder sql, IndexSearchCondition condition,
                                   List<String> columns) {
         Expression expr = findExpression(condition);
         if (expr != null) {
-            sql.append(expr.buildExpressionStringFrom(condition));
-            columns.add(condition.getColumnDesc().getColumn());
+            sql.append(expr.buildExpressionStringFrom(jobConf, condition));
+            String column = condition.getColumnDesc().getColumn();
+            String rColumn = findReplacement(jobConf, column);
+            if(rColumn != null) {
+                column = rColumn;
+            }
+
+            columns.add(column);
         }
     }
 
@@ -716,10 +760,15 @@ public class PhoenixQueryBuilder {
             return condition.getComparisonOp().endsWith(hiveCompOp) && checkCondition(condition);
         }
 
-        public String buildExpressionStringFrom(IndexSearchCondition condition) {
+        public String buildExpressionStringFrom(JobConf jobConf, IndexSearchCondition condition) {
             final String type = condition.getColumnDesc().getTypeString();
+            String column = condition.getColumnDesc().getColumn();
+            String rColumn = findReplacement(jobConf, column);
+            if(rColumn != null) {
+                column = rColumn;
+            }
             return JOINER_SPACE.join(
-                    condition.getColumnDesc().getColumn(),
+                    "\"" + column + "\"",
                     getSqlCompOpString(condition),
                     joiner != null ? createConstants(type, condition.getConstantDescs()) :
                             createConstant(type, condition.getConstantDesc()));
