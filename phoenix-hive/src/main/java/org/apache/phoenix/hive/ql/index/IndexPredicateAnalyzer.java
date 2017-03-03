@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
+import org.apache.phoenix.hive.util.TypeInfoUtils;
 
 /**
  * Clone of org.apache.hadoop.hive.ql.index.IndexPredicateAnalyzer with modifying
@@ -211,45 +212,82 @@ public class IndexPredicateAnalyzer {
     private void processingBetweenOperator(ExprNodeGenericFuncDesc expr,
                                            List<IndexSearchCondition> searchConditions, Object...
                                                    nodeOutputs) {
-        ExprNodeColumnDesc columnDesc = null;
         String[] fields = null;
 
-        if (nodeOutputs[1] instanceof ExprNodeFieldDesc) {
+        final boolean isNot = (Boolean) ((ExprNodeConstantDesc) nodeOutputs[0]).getValue();
+        ExprNodeDesc columnNodeDesc = (ExprNodeDesc) nodeOutputs[1];
+
+        if (columnNodeDesc instanceof ExprNodeFieldDesc) {
             // rowKey field
-            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[1];
+            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) columnNodeDesc;
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
             ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
                     nodeOutputs[1], (ExprNodeDesc) nodeOutputs[2]);
-            columnDesc = (ExprNodeColumnDesc) extracted[0];
-        } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[1])
-                    .getChildren().get(0);
-        } else {
-            columnDesc = (ExprNodeColumnDesc) nodeOutputs[1];
+            columnNodeDesc = extracted[0];
         }
 
-        String udfName = expr.getGenericUDF().getUdfName();
-        ExprNodeConstantDesc[] betweenConstants = new ExprNodeConstantDesc[]{
-                (ExprNodeConstantDesc) nodeOutputs[2], (ExprNodeConstantDesc) nodeOutputs[3]};
-        boolean isNot = (Boolean) ((ExprNodeConstantDesc) nodeOutputs[0]).getValue();
+        addSearchConditionIfPossible(expr, searchConditions, fields, isNot, columnNodeDesc,
+                Arrays.copyOfRange(nodeOutputs, 2, nodeOutputs.length));
+    }
 
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, betweenConstants,
+    private void addSearchConditionIfPossible(ExprNodeGenericFuncDesc expr,
+                                              List<IndexSearchCondition> searchConditions,
+                                              String[] fields,
+                                              boolean isNot,
+                                              ExprNodeDesc columnNodeDesc,
+                                              Object[] nodeOutputs) {
+        ExprNodeColumnDesc columnDesc;
+        columnNodeDesc = getColumnExpr(columnNodeDesc);
+        if (!(columnNodeDesc instanceof ExprNodeColumnDesc)) {
+            return;
+        }
+        columnDesc = (ExprNodeColumnDesc) columnNodeDesc;
+        String udfName = expr.getGenericUDF().getUdfName();
+        ExprNodeConstantDesc[] constantDescs = null;
+        if (nodeOutputs != null) {
+            constantDescs = extractConstants(columnDesc, nodeOutputs);
+            if (constantDescs == null) {
+                return;
+            }
+        }
+
+        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, constantDescs,
                 expr, fields, isNot));
+    }
+
+    private boolean isAcceptableConstants(ExprNodeDesc columnDesc, ExprNodeDesc constant) {
+        // from(constant) -> to(columnDesc)
+        return TypeInfoUtils.implicitConvertible(constant.getTypeInfo(), columnDesc.getTypeInfo());
+    }
+
+    private ExprNodeConstantDesc[] extractConstants(ExprNodeColumnDesc columnDesc, Object... nodeOutputs) {
+        ExprNodeConstantDesc[] constantDescs = new ExprNodeConstantDesc[nodeOutputs.length];
+        for (int i = 0; i < nodeOutputs.length; i++) {
+            ExprNodeDesc[] extracted =
+                    ExprNodeDescUtils.extractComparePair(columnDesc, (ExprNodeDesc) nodeOutputs[i]);
+            if (extracted == null || !isAcceptableConstants(columnDesc, extracted[1])) {
+                return null;
+            }
+            constantDescs[i] = (ExprNodeConstantDesc) extracted[1];
+        }
+
+        return constantDescs;
     }
 
     private void processingInOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
             searchConditions, boolean isNot, Object... nodeOutputs) {
-        ExprNodeColumnDesc columnDesc = null;
+        ExprNodeDesc columnDesc;
         String[] fields = null;
 
         if (LOG.isTraceEnabled()) {
             LOG.trace("Processing In Operator. nodeOutputs : " + Lists.newArrayList(nodeOutputs));
         }
 
-        if (nodeOutputs[0] instanceof ExprNodeFieldDesc) {
+        columnDesc = (ExprNodeDesc) nodeOutputs[0];
+        if (columnDesc instanceof ExprNodeFieldDesc) {
             // rowKey field
-            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[0];
+            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) columnDesc;
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
             ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
@@ -264,85 +302,55 @@ public class IndexPredicateAnalyzer {
                         nodeOutputs[1] + " => " + Lists.newArrayList(extracted));
             }
 
-            columnDesc = (ExprNodeColumnDesc) extracted[0];
-        } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0])
-                    .getChildren().get(0);
-        } else {
-            columnDesc = (ExprNodeColumnDesc) nodeOutputs[0];
+            columnDesc = extracted[0];
         }
 
-        String udfName = expr.getGenericUDF().getUdfName();
-        ExprNodeConstantDesc[] inConstantDescs = new ExprNodeConstantDesc[nodeOutputs.length - 1];
-
-        for (int i = 0, limit = inConstantDescs.length; i < limit; i++) {
-            if (!(nodeOutputs[i + 1] instanceof ExprNodeConstantDesc)) {    // adding for tez
-                return;
-            }
-
-            inConstantDescs[i] = (ExprNodeConstantDesc) nodeOutputs[i + 1];
-        }
-
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, inConstantDescs, expr,
-                fields, isNot));
+        addSearchConditionIfPossible(expr, searchConditions, fields, isNot, columnDesc,
+                Arrays.copyOfRange(nodeOutputs, 1, nodeOutputs.length));
     }
 
     private void processingNullOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
             searchConditions, Object... nodeOutputs) {
-        ExprNodeColumnDesc columnDesc = null;
+        ExprNodeDesc columnDesc = null;
+//        ExprNodeColumnDesc columnDesc = null;
         String[] fields = null;
 
-        if (nodeOutputs[0] instanceof ExprNodeFieldDesc) {
+        columnDesc = (ExprNodeDesc) nodeOutputs[0];
+        if (columnDesc instanceof ExprNodeFieldDesc) {
             // rowKey field
-            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[0];
+            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) columnDesc;
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
-            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
-                    nodeOutputs[0], new ExprNodeConstantDesc());
-            columnDesc = (ExprNodeColumnDesc) extracted[0];
-        } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0])
-                    .getChildren().get(0);
-        } else {
-            columnDesc = (ExprNodeColumnDesc) nodeOutputs[0];
+            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair(
+                    columnDesc, new ExprNodeConstantDesc());
+            columnDesc = extracted[0];
         }
 
-        String udfName = expr.getGenericUDF().getUdfName();
-
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, null, expr, fields,
-                false));
+        addSearchConditionIfPossible(expr, searchConditions, fields, false, columnDesc, null);
     }
 
     private void processingNotNullOperator(ExprNodeGenericFuncDesc expr,
                                            List<IndexSearchCondition> searchConditions, Object...
                                                    nodeOutputs) {
-        ExprNodeColumnDesc columnDesc = null;
+        ExprNodeDesc columnDesc;
         String[] fields = null;
 
-        if (nodeOutputs[0] instanceof ExprNodeFieldDesc) {
+        columnDesc = (ExprNodeDesc) nodeOutputs[0];
+        if (columnDesc instanceof ExprNodeFieldDesc) {
             // rowKey field
-            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[0];
+            ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) columnDesc;
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
-            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
-                    nodeOutputs[0], new ExprNodeConstantDesc());
-            columnDesc = (ExprNodeColumnDesc) extracted[0];
-        } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0])
-                    .getChildren().get(0);
-        } else {
-            columnDesc = (ExprNodeColumnDesc) nodeOutputs[0];
+            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair(
+                    columnDesc, new ExprNodeConstantDesc());
+            columnDesc = extracted[0];
         }
 
-        String udfName = expr.getGenericUDF().getUdfName();
-
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, null, expr, fields,
-                true));
+        addSearchConditionIfPossible(expr, searchConditions, fields, true, columnDesc, null);
     }
 
     private ExprNodeDesc analyzeExpr(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
             searchConditions, Object... nodeOutputs) throws SemanticException {
-
         if (FunctionRegistry.isOpAnd(expr)) {
             assert (nodeOutputs.length == 2);
             ExprNodeDesc residual1 = (ExprNodeDesc) nodeOutputs[0];
