@@ -17,9 +17,15 @@
  */
 package org.apache.phoenix.hive.ql.index;
 
+import com.google.common.collect.Lists;
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
+import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeColumnDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
+import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFIn;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
 /**
  * IndexSearchCondition represents an individual search condition found by
@@ -129,7 +135,17 @@ public class IndexSearchCondition {
     }
 
     public ExprNodeGenericFuncDesc getComparisonExpr() {
-        return comparisonExpr;
+        ExprNodeGenericFuncDesc ret = comparisonExpr;
+        try {
+            if (GenericUDFIn.class == comparisonExpr.getGenericUDF().getClass() && isNot) {
+                ret = new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo,
+                        FunctionRegistry.getFunctionInfo("not").getGenericUDF(),
+                        Lists.<ExprNodeDesc>newArrayList(comparisonExpr));
+            }
+        } catch (SemanticException e) {
+            throw new RuntimeException("hive operator -- never be thrown", e);
+        }
+        return ret;
     }
 
     public String[] getFields() {
