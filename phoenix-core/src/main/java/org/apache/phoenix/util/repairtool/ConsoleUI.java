@@ -25,7 +25,7 @@ public class ConsoleUI {
     public static int question (String intro, String[] questions) {
         System.out.println(intro);
         for(int i = 0; i <questions.length;i++) {
-            System.out.println((i+1) + ". " +questions[i]);
+            System.out.println("\t" + (i+1) + ". " +questions[i]);
         }
         int result = -1;
         while(result <= 0 || result >questions.length) {

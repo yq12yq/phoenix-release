@@ -112,7 +112,7 @@ public class RepairTool {
                     ConsoleUI.infoMessage(snapshot.getName());
                     snapshotNames.add(snapshot.getName());
                 }
-                int answer = ConsoleUI.question("\nPlease choose one of the actions: ", new String[]  {
+                int answer = ConsoleUI.question("\nPlease choose one of the actions:\n ", new String[]  {
                         "Restore from one of the previous snapshot and exit",
                         "Delete all snapshots and continue",
                         "Continue without deleting snapshots",
@@ -130,7 +130,9 @@ public class RepairTool {
                         System.exit(0);
                         break;
                     case 2:
+                        ConsoleUI.infoMessage("\nDeleting previous snapshots...");
                         admin.deleteSnapshots(snapshotPattern);
+                        ConsoleUI.infoMessage("\nSnapshots successfully deleted.");
                         break;
                     case 3:
                         break;
@@ -156,25 +158,22 @@ public class RepairTool {
      * @throws SQLException
      */
     private void checkSystemTablesEnabled() throws IOException, SQLException {
-        if (!HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, admin)) {
-            //Catalog was not found. Instantiate Phoenix connection to perform table creation
-            int answer = ConsoleUI.question("SYSTEM.CATALOG doesn't exist. Do you want to crate it?", new String[] {"Yes", "No"});
-            if(answer == 1) {
-                ConsoleUI.infoMessage("Trying instantiate Phoenix JDBC connection to create system tables");
-
-                // The simple way to create all system tables. TODO: should we try to create it manually using HBase API?
-                DriverManager.getConnection("jdbc:phoenix:localhost");
-                if (!HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, admin)) {
-                    ConsoleUI.failure("Unable to initialize SYSTEM.CATALOG... Exiting");
-                    System.exit(-1);
-                }
-            } else {
-                ConsoleUI.failure("Unable to proceed without system catalog");
+        try {
+            if (!HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, admin)) {
+                //Catalog was not found. Instantiate Phoenix connection to perform table creation
+                ConsoleUI.failure("Unable to initialize system tables... Exiting");
                 System.exit(-1);
             }
+        } catch (TableNotFoundException e) {
+            ConsoleUI.infoMessage("System catalog was not found. It will be automatically created during the first client run");
+            System.exit(0);
         }
-        HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, admin);
-        HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, admin);
+        try {
+            HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, admin);
+            HBaseUtils.checkTableEnabledAndOnline(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, admin);
+        } catch (TableNotFoundException e) {
+            //We may just ignore it until the next client run. 
+        }
 
     }
 

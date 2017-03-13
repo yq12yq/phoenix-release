@@ -15,16 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.util.repairtool.modules;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.filter.*;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.repairtool.ConsoleUI;
@@ -41,6 +42,7 @@ import java.util.*;
 import static org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 /**
@@ -218,11 +220,6 @@ public class SystemCatalogCheck {
         Collections.sort(FUNCTION_KV_COLUMNS, KeyValue.COMPARATOR);
     }
 
-    private static final int CLASS_NAME_INDEX = FUNCTION_KV_COLUMNS.indexOf(CLASS_NAME_KV);
-    private static final int JAR_PATH_INDEX = FUNCTION_KV_COLUMNS.indexOf(JAR_PATH_KV);
-    private static final int RETURN_TYPE_INDEX = FUNCTION_KV_COLUMNS.indexOf(RETURN_TYPE_KV);
-    private static final int NUM_ARGS_INDEX = FUNCTION_KV_COLUMNS.indexOf(NUM_ARGS_KV);
-
     private static final List<KeyValue> FUNCTION_ARG_KV_COLUMNS = Arrays.<KeyValue>asList(
             TYPE_KV,
             IS_ARRAY_KV,
@@ -236,16 +233,12 @@ public class SystemCatalogCheck {
         Collections.sort(FUNCTION_ARG_KV_COLUMNS, KeyValue.COMPARATOR);
     }
 
-    private static final int IS_ARRAY_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(IS_ARRAY_KV);
-    private static final int IS_CONSTANT_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(IS_CONSTANT_KV);
-    private static final int DEFAULT_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(DEFAULT_VALUE_KV);
-    private static final int MIN_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(MIN_VALUE_KV);
-    private static final int MAX_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(MAX_VALUE_KV);
 
-
+    //Map of all tables for further integrity check.
     static Map<String, PTableImpl> allTables = new HashMap<>();
 
     HBaseAdmin admin;
+    HTable catalog;
     Configuration conf;
 
     public SystemCatalogCheck(HBaseAdmin admin) {
@@ -254,39 +247,112 @@ public class SystemCatalogCheck {
     }
 
 
+    /**
+     * Entry point for system catalog integrity check
+     * @param admin
+     * @throws IOException
+     * @throws SQLException
+     */
     public static void check(HBaseAdmin admin) throws IOException, SQLException {
         SystemCatalogCheck sc = new SystemCatalogCheck(admin);
-        sc.getTableList();
+        sc.checkConsistency();
     }
 
 
     public boolean checkConsistency() throws IOException, SQLException {
         getTableList();
+        ConsoleUI.infoMessage("\nStarting cross table integrity check \n");
+        integrityCheck();
+        ConsoleUI.infoMessage("\nSystem catalog consistency check is completed.");
         return true;
     }
 
+    private void integrityCheck() throws IOException {
+        List<PTable> indexTables = new ArrayList<>();
+        List<PTable> userTables = new ArrayList<>();
+        List<PTable> systemTables = new ArrayList<>();
+        Set<String> tableNames = allTables.keySet();
 
-    public static Scan getScannerTable(byte[] startKey, byte[] stopKey, long startTimeStamp, long stopTimeStamp) {
-        Scan scan = new Scan();
-        ScanUtil.setTimeRange(scan, startTimeStamp, stopTimeStamp);
-        scan.setStartRow(startKey);
-
-        if (stopKey == null) {
-            stopKey = ByteUtil.concat(startKey, QueryConstants.SEPARATOR_BYTE_ARRAY);
-            ByteUtil.nextKey(stopKey, stopKey.length);
+        //Separate all tables into different lists
+        for(String tableName : tableNames) {
+            PTable table = allTables.get(tableName);
+            switch (table.getType()) {
+                case TABLE:
+                    userTables.add(table);
+                    break;
+                case INDEX:
+                    indexTables.add(table);
+                    break;
+                case SYSTEM:
+                    systemTables.add(table);
+                    break;
+            }
         }
-        scan.setStopRow(stopKey);
-        return scan;
+        // Iterate over user tables. If physical table doesn't exist, delete the record and all corresponding index records
+        for(PTable table : userTables) {
+            PName pname = table.getPhysicalName();
+            try {
+                HBaseUtils.checkTableEnabledAndOnline(pname.getBytes(), admin);
+                //Validate indexes
+                List<PTable> indexes = table.getIndexes();
+                for (PTable index : indexes) {
+                    try {
+                        HBaseUtils.checkTableEnabledAndOnline(index.getPhysicalName().getBytes(), admin);
+                    } catch (TableNotFoundException e ) {
+                        ConsoleUI.infoMessage(" |-- Unable to find the physical table for index " + index.getTableName());
+                        int answer = ConsoleUI.question("\nClean the corresponding record in the catalog and update user table ?\n", new String[]{
+                                "Yes",
+                                "No"
+                        });
+                        if (answer == 1) {
+                            deleteTable(index);
+                            deleteRecordForIndexFromTable(table,index);
+                            ConsoleUI.infoMessage(" |-- Record for " + index.getName().getString() + " deleted from system catalog");
+                        }
+                    }
+                }
+
+            } catch (TableNotFoundException e) {
+                ConsoleUI.infoMessage("Unable to find the physical table for " + table.getTableName());
+                int answer = ConsoleUI.question("\nClean the corresponding record in the catalog?\n", new String[]{
+                        "Yes",
+                        "No"
+                });
+                if (answer == 1) {
+                    deleteTable(table);
+                    ConsoleUI.infoMessage("Record for " + table.getName().getString() + " deleted");
+                    List<PTable> indexes = table.getIndexes();
+                    for (PTable index : indexes) {
+                        ConsoleUI.infoMessage(" |-- Cleaning record for corresponding index " + index.getName().getString());
+                        deleteTable(index);
+                    }
+                }
+            }
+        }
     }
 
+    private void deleteRecordForIndexFromTable(PTable table, PTable index) throws IOException {
+        byte[] tablekey = SchemaUtil.getTableKey(table.getTenantId() == null ?
+                ByteUtil.EMPTY_BYTE_ARRAY : table.getTenantId().getBytes(), table.getSchemaName().getBytes(), table.getTableName().getBytes());
+        byte key[] = ByteUtil.concat(tablekey, QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY, index.getTableName().getBytes());
+        Delete del = new Delete(key);
+        catalog.delete(del);
+    }
 
+    /**
+     * Perform the scan over catalog for Rows that contains BASE_COLUMN_COUNT qualifier. Gets the table name
+     * and build Phoenix PTable instance that may be used for cross table integrity check
+     * TODO: find a better way to identify entry rows for table records.
+     * @throws IOException
+     * @throws SQLException
+     */
     public void getTableList() throws IOException, SQLException {
         Scan scan = new Scan();
         Filter f = new QualifierFilter(CompareFilter.CompareOp.EQUAL,
-                new BinaryComparator(TABLE_TYPE_KV.getQualifier()));
+                new BinaryComparator(BASE_COLUMN_COUNT_KV.getQualifier()));
         scan.setFilter(f);
-        HTable table = new HTable(conf, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-        ResultScanner scanner = table.getScanner(scan);
+        catalog = new HTable(conf, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+        ResultScanner scanner = catalog.getScanner(scan);
 
         while (true) {
             Result result = scanner.next();
@@ -294,7 +360,6 @@ public class SystemCatalogCheck {
                 break;
             }
             List<Cell> results = result.listCells();
-            // Create PTable based on KeyValues from scan
             Cell keyValue = results.get(0);
             byte[] keyBuffer = keyValue.getRowArray();
             int keyLength = keyValue.getRowLength();
@@ -311,22 +376,27 @@ public class SystemCatalogCheck {
             System.arraycopy(keyBuffer, keyOffset + schemaNameLength + 1 + tenantIdLength + 1,
                     tableNameBytes, 0, tableNameLength);
             PName tableName = PNameFactory.newName(tableNameBytes);
-            ConsoleUI.infoMessage("Found record for " + SchemaUtil.getTableName(schemaName.getBytes(), tableName.getBytes()));
-            TableName fullName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableNameAsBytes(schemaName.getBytes(), tableName.getBytes()), conf);
-            HBaseUtils.checkTableEnabledAndOnline(fullName.getName(), admin);
+            ConsoleUI.infoMessage("\nFound record for table " + SchemaUtil.getTableName(schemaName.getBytes(), tableName.getBytes()));
             byte[] key = SchemaUtil.getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName.getBytes(), tableName.getBytes());
-            getTable(key);
+            PTable table = getTable(key);
         }
+    }
+
+    private void deleteTable(PTable table) throws IOException {
+        byte[] key = SchemaUtil.getTableKey(table.getTenantId() == null?
+                ByteUtil.EMPTY_BYTE_ARRAY : table.getTenantId().getBytes(), table.getSchemaName().getBytes(), table.getTableName().getBytes());
+        deleteTableRecord(key);
     }
 
 
     private PTableImpl getTable(byte[] name) throws IOException, SQLException {
 
         Scan scan = MetaDataUtil.newTableRowsScan(name, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
-        HTable table = new HTable(conf, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-        ResultScanner scanner = table.getScanner(scan);
+        ResultScanner scanner = catalog.getScanner(scan);
         Result result = scanner.next();
-
+        if(result == null || result.isEmpty()) {
+            return null;
+        }
         Cell[] tableKeyValues = new Cell[TABLE_KV_COLUMNS.size()];
         Cell[] colKeyValues = new Cell[COLUMN_KV_COLUMNS.size()];
         List<Cell> results = result.listCells();
@@ -347,20 +417,8 @@ public class SystemCatalogCheck {
         System.arraycopy(keyBuffer, keyOffset + schemaNameLength + 1 + tenantIdLength + 1,
                 tableNameBytes, 0, tableNameLength);
         PName tableName = PNameFactory.newName(tableNameBytes);
-
         int offset = tenantIdLength + schemaNameLength + tableNameLength + 3;
-        // This will prevent the client from continually looking for the current
-        // table when we know that there will never be one since we disallow updates
-        // unless the table is the latest
-        // If we already have a table newer than the one we just found and
-        // the client timestamp is less that the existing table time stamp,
-        // bump up the timeStamp to right before the client time stamp, since
-        // we know it can't possibly change.
         long timeStamp = keyValue.getTimestamp();
-        // long timeStamp = tableTimeStamp > keyValue.getTimestamp() &&
-        // clientTimeStamp < tableTimeStamp
-        // ? clientTimeStamp-1
-        // : keyValue.getTimestamp();
 
         int i = 0;
         int j = 0;
@@ -380,15 +438,26 @@ public class SystemCatalogCheck {
                 timeStamp = Math.max(timeStamp, kv.getTimestamp());
                 tableKeyValues[j++] = null;
             } else {
-                ConsoleUI.failure("Unexpected KV in system table header row : " + kv + ".");
+                ConsoleUI.failure(" |-- WARNING: Unexpected KV in system table header row : " + kv + ".");
                 i++; // shouldn't happen - means unexpected KV in system table header row
             }
         }
         // TABLE_TYPE, TABLE_SEQ_NUM and COLUMN_COUNT are required.
         if (tableKeyValues[TABLE_TYPE_INDEX] == null || tableKeyValues[TABLE_SEQ_NUM_INDEX] == null
                 || tableKeyValues[COLUMN_COUNT_INDEX] == null) {
-            throw new IllegalStateException(
-                    "Didn't find expected key values for table row in metadata row");
+            ConsoleUI.infoMessage(" |-- The record doesn't have required key values. That may prevent Phoenix running correctly");
+            int answer = ConsoleUI.question("Choose the action", new String[] {
+                    "Delete this record",
+                    "Ignore and continue"
+            });
+            switch(answer) {
+                case 1:
+                    // Scan for all records related to this table and delete them.
+                    deleteTableRecord(name);
+                    return null;
+                case 2:
+                    break;
+            }
         }
 
         Cell tableTypeKv = tableKeyValues[TABLE_TYPE_INDEX];
@@ -403,8 +472,6 @@ public class SystemCatalogCheck {
         int columnCount =
                 PInteger.INSTANCE.getCodec().decodeInt(columnCountKv.getValueArray(),
                         columnCountKv.getValueOffset(), SortOrder.getDefault());
-
-        ConsoleUI.infoMessage("Column counts:  " + columnCount);
 
         Cell pkNameKv = tableKeyValues[PK_NAME_INDEX];
         PName pkName =
@@ -479,7 +546,7 @@ public class SystemCatalogCheck {
         List<PName> physicalTables = Lists.newArrayList();
         PName parentTableName = tableType == INDEX ? dataTableName : null;
         PName parentSchemaName = tableType == INDEX ? schemaName : null;
-        ConsoleUI.infoMessage("Reading columns information...");
+        ConsoleUI.infoMessage(" |-- Checking table internal structure...");
         while (true) {
             Result columnResult = scanner.next();
             if (columnResult == null) {
@@ -497,7 +564,18 @@ public class SystemCatalogCheck {
             if (colName.getString().isEmpty() && famName != null) {
                 PTable.LinkType linkType = PTable.LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
                 if (linkType == PTable.LinkType.INDEX_TABLE) {
-                    addIndexToTable(tenantId, schemaName, famName, tableName, HConstants.LATEST_TIMESTAMP, indexes);
+                    PTable index = addIndexToTable(tenantId, schemaName, famName, tableName, HConstants.LATEST_TIMESTAMP, indexes);
+                    if(index == null) {
+                        // Incorrect record for the index. We need to clean up it.
+                        int answer = ConsoleUI.question("Unable to obtain index information. Clean it?", new String[]{
+                                "Yes",
+                                "No"
+                        });
+                        if(answer == 1) {
+                            catalog.delete(new Delete(columnResult.getRow()));
+                            ConsoleUI.infoMessage("Done");
+                        }
+                    }
                 } else if (linkType == PTable.LinkType.PHYSICAL_TABLE) {
                     physicalTables.add(famName);
                 } else if (linkType == PTable.LinkType.PARENT_TABLE) {
@@ -512,7 +590,11 @@ public class SystemCatalogCheck {
         boolean addToList = true;
 
         if (columnCount != columns.size()) {
-            int answer = ConsoleUI.question("The number of columns records doesn't match the table meta information. Update meta information?", new String[]{"Yes", "No"});
+            int answer = ConsoleUI.question("The number of columns records doesn't match the table meta information. " +
+                    "Update meta information?", new String[]{
+                    "Yes",
+                    "No"
+            });
             if (answer == 1) {
                 // Update Meta row.
                 Put put = new Put(result.getRow());
@@ -520,7 +602,7 @@ public class SystemCatalogCheck {
                 PInteger.INSTANCE.getCodec().encodeInt(columns.size(), ptr, 0);
 
                 put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES, ptr);
-                table.put(put);
+                catalog.put(put);
                 columnCount = columns.size();
             } else {
                 ConsoleUI.infoMessage("Consider to fix it in the future because this type of problem may lead to unpredictable exceptions when Phoenix is working");
@@ -532,34 +614,36 @@ public class SystemCatalogCheck {
         for (Iterator<PColumn> iterator = columns.listIterator(); iterator.hasNext(); ) {
             PColumn col = iterator.next();
             if ((saltBucketNum != null ? 2 : 1) + col.getPosition() > columnCount) {
-                int answer = ConsoleUI.question("Column " + col.getName() + " has incorrect position " + (col.getPosition() + 1) + ". Please choose: ", new String[]{"Delete column record", "Manually assign column position", "Ignore"});
+                int answer = ConsoleUI.question("Column " + col.getName() + " has incorrect position " +
+                        (col.getPosition() + 1) + ". Please choose the action: ", new String[]{
+                        "Delete column record",
+                        "Ignore"
+                        });
+
                 switch (answer) {
                     case 1:
                         byte[] key = getColumnKey(tenantId == null ? null : tenantId.getString(), schemaName.getString(), tableName.getString(), col.getName().getString(), col.getFamilyName().getString());
                         Delete del = new Delete(key);
-                        table.delete(del);
+                        catalog.delete(del);
                         iterator.remove();
                         deletedColumns++;
                         break;
                     case 2:
-                        // TODO: List of columns and try manually assign it.
-                        break;
-
-                    case 3:
-                        ConsoleUI.infoMessage("Ignoring may cause problems with accessing the table further. Consider to run Repair tool again to get in fixed.");
+                        ConsoleUI.infoMessage("Ignoring may cause problems with accessing the table further. \n " +
+                                "Consider to run Repair tool again to get in fixed.");
                         addToList = false;
                         break;
                 }
             }
         }
-        //Update meta number of columns.
+        //Update number of columns in meta data.
         if (deletedColumns > 0) {
             columnCount = columns.size();
             Put put = new Put(result.getRow());
             byte[] ptr = new byte[PInteger.INSTANCE.getByteSize()];
             PInteger.INSTANCE.getCodec().encodeInt(columnCount, ptr, 0);
             put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES, ptr);
-            table.put(put);
+            catalog.put(put);
 
         }
 
@@ -576,9 +660,26 @@ public class SystemCatalogCheck {
         return null;
     }
 
+    /**
+     * Scan for the specific table key and delete all rows that are related (like column/index records)
+     * @param name
+     * @throws IOException
+     */
+    private void deleteTableRecord(byte[] name) throws IOException {
+        Scan scanToDelete = MetaDataUtil.newTableRowsScan(name, MetaDataProtocol.MIN_TABLE_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
+        ResultScanner sc = catalog.getScanner(scanToDelete);
+        while(true) {
+            Result res = sc.next();
+            if (res == null || res.isEmpty()) {
+                break;
+            }
+            Delete del = new Delete(res.getRow());
+            catalog.delete(del);
+        }
+    }
 
 
-    private static void addColumnToTable(List<Cell> results, PName colName, PName famName,
+    private  void addColumnToTable(List<Cell> results, PName colName, PName famName,
                                          Cell[] colKeyValues, List<PColumn> columns, boolean isSalted) {
         int i = 0;
         int j = 0;
@@ -595,7 +696,6 @@ public class SystemCatalogCheck {
             } else if (cmp > 0) {
                 colKeyValues[j++] = null;
             } else {
-                System.out.println("INCORRECT VALUE for COLUMN: " + kv);
                 i++; // shouldn't happen - means unexpected KV in system table column row
             }
         }
@@ -654,19 +754,16 @@ public class SystemCatalogCheck {
         columns.add(column);
 
     }
-    private void addIndexToTable(PName tenantId, PName schemaName, PName indexName, PName tableName, long clientTimeStamp, List<PTable> indexes) throws IOException, SQLException
-    {
+    private PTable addIndexToTable(PName tenantId, PName schemaName, PName indexName, PName tableName, long clientTimeStamp, List<PTable> indexes) throws IOException, SQLException {
         byte[] key = SchemaUtil.getTableKey(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getBytes(), schemaName.getBytes(), indexName.getBytes());
         PTable indexTable = getTable(key);
-        if (indexTable == null) {
-
-            //TODO: Check for the physical table. If it doesn't exist, we may ask to remove it from the user table
-            ConsoleUI.failure("Unable to find index table " + indexName.getString() + " for table " + tableName.getString());
-            return;
+        if (indexTable != null) {
+            indexes.add(indexTable);
         }
-        indexes.add(indexTable);
+        return indexTable;
     }
-    private static PName newPName(byte[] keyBuffer, int keyOffset, int keyLength) {
+
+    private  PName newPName(byte[] keyBuffer, int keyOffset, int keyLength) {
         if (keyLength <= 0) {
             return null;
         }
@@ -674,18 +771,33 @@ public class SystemCatalogCheck {
         return PNameFactory.newName(keyBuffer, keyOffset, length);
     }
 
-    public static byte[] getColumnKey(String tenantId, String schemaName, String tableName, String columnName, String familyName) {
+    public  byte[] getColumnKey(String tenantId, String schemaName, String tableName, String columnName, String familyName) {
         if (familyName == null) {
-            return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
+            return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
                     QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
                     QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
                     QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName));
         }
-        return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
+        return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
                 QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
                 QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
                 QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName),
                 QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
+    }
+
+
+    /**
+     * We need it for testing purposes.
+     * @param args
+     * @throws IOException
+     * @throws SQLException
+     */
+    public static void main(String[] args) throws IOException, SQLException {
+        Configuration conf = HBaseConfiguration.create();
+        HBaseAdmin admin = new HBaseAdmin(conf);
+        SystemCatalogCheck sc = new SystemCatalogCheck(admin);
+        sc.check(admin);
+
     }
 
 
