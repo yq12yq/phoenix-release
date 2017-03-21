@@ -43,12 +43,14 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
 /**
  * Comprehensive test that ensures we are adding custom index handlers
  */
+@Ignore("Absolete test")
 public class IndexHandlerIT {
 
     public static class CountingIndexClientRpcFactory extends RpcControllerFactory {
