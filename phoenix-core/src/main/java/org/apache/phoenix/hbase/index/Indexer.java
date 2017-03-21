@@ -140,8 +140,7 @@ public class Indexer extends BaseRegionObserver {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
         this.environment = env;
-        env.getRegionServerServices()
-            .getConfiguration()
+        env.getConfiguration()
             .setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, ServerRpcControllerFactory.class,
                     RpcControllerFactory.class);
         String serverName = env.getRegionServerServices().getServerName().getServerName();
