@@ -2393,6 +2393,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                                 + " is found but client does not have "
                                                                 + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                                                         .build().buildException(); }
+                            } catch (PhoenixIOException e) {
+                                if (e.getCause() instanceof AccessDeniedException) {
+                                    // User might not be privileged to access the Phoenix system tables
+                                    // in the HBase "SYSTEM" namespace. Let them proceed without verifying
+                                    // the system table configuration.
+                                  logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
+                                } else {
+                                    initializationException = e;
+                                }
+                                return null;
                             }
  
                             try {
