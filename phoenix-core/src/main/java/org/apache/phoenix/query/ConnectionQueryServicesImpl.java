@@ -2384,10 +2384,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         //check if the server is already updated and have namespace config properly set.
                                         checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
                                     }
-                                    if (!ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps())) {
-                                        logger.debug("Failed to upgrade system tables, exiting early.");
-                                        return null;
-                                    }
+                                    ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
                                 } else if (mappedSystemCatalogExists) { throw new SQLExceptionInfo.Builder(
                                                 SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
                                                         .setMessage("Cannot initiate connection as "
@@ -2396,6 +2393,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                                 + " is found but client does not have "
                                                                 + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                                                         .build().buildException(); }
+                            } catch (PhoenixIOException e) {
+                                if (e.getCause() instanceof AccessDeniedException) {
+                                    // User might not be privileged to access the Phoenix system tables
+                                    // in the HBase "SYSTEM" namespace. Let them proceed without verifying
+                                    // the system table configuration.
+                                  logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
+                                } else {
+                                    initializationException = e;
+                                }
+                                return null;
                             }
  
                             try {
@@ -2637,30 +2644,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
 
 
-                /**
-                 * @return If the system tables were successfully upgraded as required. False if further initialization should not proceed.
-                 */
-                private boolean ensureSystemTablesUpgraded(ReadOnlyProps props)
+                private void ensureSystemTablesUpgraded(ReadOnlyProps props)
                         throws SQLException, IOException, IllegalArgumentException, InterruptedException {
-                    if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, props)) { return true; }
+                    if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, props)) { return; }
                     HTableInterface metatable = null;
                     try (HBaseAdmin admin = getAdmin()) {
-                        // Namespace-mapping is enabled
-                        try {
-                            ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
-                        } catch (PhoenixIOException e) {
-                            if (e.getCause() instanceof AccessDeniedException) {
-                                // User might not be privileged to access the Phoenix system tables
-                                // in the HBase "SYSTEM" namespace. Let them proceed without verifying
-                                // the system table configuration.
-                                logger.warn("Could not access system namespace, assuming it exists");
-                                return false;
-                            }
-                            throw e;
-                        }
+                        ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
                         List<TableName> tableNames = Arrays
                                 .asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
-                        if (tableNames.size() == 0) { return true; }
+                        if (tableNames.size() == 0) { return; }
                         if (tableNames.size() > 4) { throw new IllegalArgumentException(
                                 "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
                         byte[] mappedSystemTable = SchemaUtil
@@ -2691,7 +2683,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             metatable.close();
                         }
                     }
-                    return true;
                 }
             });
         } catch (Exception e) {
