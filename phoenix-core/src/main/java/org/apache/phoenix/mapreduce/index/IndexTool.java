@@ -184,9 +184,12 @@ public class IndexTool extends Configured implements Tool {
             final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             final String qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+            final String indexTableName = SchemaUtil.getTableName(schemaName, indexTable);
+            final String dataTableName = SchemaUtil.getTableName(schemaName, dataTable);
+
 
             connection = ConnectionUtil.getInputConnection(configuration);
-            if (!isValidIndexTable(connection, qDataTable, indexTable)) {
+            if (!isValidIndexTable(connection, dataTableName, indexTable)) {
                 throw new IllegalArgumentException(String.format(
                     " %s is not an index table for %s ", qIndexTable, qDataTable));
             }
@@ -220,15 +223,14 @@ public class IndexTool extends Configured implements Tool {
             final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
             final String selectQuery = ddlCompiler.getSelectQuery();
             final String upsertQuery =
-                    QueryUtil.constructUpsertStatement(qIndexTable, indexColumns, Hint.NO_INDEX);
-
+                    QueryUtil.constructUpsertStatement(indexTableName, indexColumns, Hint.NO_INDEX);
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
             PhoenixConfigurationUtil.setOutputTableName(configuration, indexTable);
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
                 indexColumns.toArray(new String[indexColumns.size()]));
             final List<ColumnInfo> columnMetadataList =
-                    PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
+                    PhoenixRuntime.generateColumnInfo(connection, indexTableName, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
             final Path outputPath = CsvBulkImportUtil
@@ -244,7 +246,7 @@ public class IndexTool extends Configured implements Tool {
             PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
                 selectQuery);
             TableMapReduceUtil.initCredentials(job);
-            
+
             boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             if (useDirectApi) {
                 job.setMapperClass(PhoenixIndexImportDirectMapper.class);
@@ -254,7 +256,7 @@ public class IndexTool extends Configured implements Tool {
                 job.setMapperClass(PhoenixIndexImportMapper.class);
                 configureRunnableJobUsingBulkLoad(job, outputPath, isLocalIndexBuild);
                 // finally update the index state to ACTIVE.
-                IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
+                IndexToolUtil.updateIndexState(connection, dataTableName, indexTable,
                     PIndexState.ACTIVE);
             }
             return 0;
@@ -372,15 +374,15 @@ public class IndexTool extends Configured implements Tool {
     private boolean isValidIndexTable(final Connection connection, final String masterTable,
             final String indexTable) throws SQLException {
         final DatabaseMetaData dbMetaData = connection.getMetaData();
-        final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
+        final String schemaName = SchemaUtil.normalizeIdentifier(SchemaUtil.getSchemaNameFromFullName(masterTable));
         final String tableName = SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
-
+        final String indexTableName = SchemaUtil.normalizeIdentifier(indexTable);
         ResultSet rs = null;
         try {
             rs = dbMetaData.getIndexInfo(null, schemaName, tableName, false, false);
             while (rs.next()) {
                 final String indexName = rs.getString(6);
-                if (indexTable.equalsIgnoreCase(indexName)) {
+                if (indexTableName.equals(indexName)) {
                     return true;
                 }
             }
