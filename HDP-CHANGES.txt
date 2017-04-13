@@ -55,3 +55,19 @@ d7a4295 PHOENIX-3246 Treat U+2002 as whitespace in parser
 7d29a1f PHOENIX-2930 Cannot resolve columns aliased to its own name
 b1936a9 PHOENIX-2900 Unable to find hash cache once a salted table 's first region has split (chenglei)
 adbc5dc PHOENIX-2900 Unable to find hash cache once a salted table 's first region has split
+0222896 PHOENIX-1754 Phoenix jdbc url can not support keytab PATH in window file system
+a4720d6 PHOENIX-3078 Hive storage handler does not work if phoenix.table.name contains the schema name
+65d35ec PHOENIX-3387 Hive PhoenixStorageHandler fails with join on numeric fields
+aea3bdf PHOENIX-3416 Memory leak in PhoenixStorageHandler
+bc09f9f PHOENIX-3408 arithmetic/mathematical operations with Decimal columns failed in Hive with PheonixStorageHandler.
+a317541 PHOENIX-3386 PhoenixStorageHandler throws NPE if local tasks executed via child
+4b6e5e7 PHOENIX-3422 PhoenixQueryBuilder doesn't make value string correctly for char(/varchar) column type.
+0509f69 PHOENIX-3486 RoundRobinResultIterator doesn't work correctly because of setting Scan's cache size inappropriately in PhoenixInputForamt
+5407057 PHOENIX-3503 PhoenixStorageHandler doesn't work properly when execution engine of Hive is Tez.
+27adfee PHOENIX-3490 PhoenixStorageHandler doesn't handler hbase configuration properly and don't work in secured env
+9de1e73 PHOENIX-3512 PhoenixStorageHandler makes erroneous query string when handling between clauses with date constants.
+569f5ca PHOENIX-3346 Hive PhoenixStorageHandler doesn't work well with column
+251ba69 PHOENIX-3662 PhoenixStorageHandler throws ClassCastException (by Jeongdae Kim)
+3ae5ed9 PHOENIX-3608 KeyRange interset should return EMPTY_RANGE when one of it is NULL_RANGE(Rajeshbabu)
+81fba99 PHOENIX-3652 User requires all Create privilege on 'default' namespace (Ankit Singhal)
+707760f PHOENIX-3686 Allow client-authentication to be disabled for PQS
