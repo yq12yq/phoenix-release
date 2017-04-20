@@ -205,6 +205,67 @@ public class SystemTablePermissionsIT {
         });
     }
 
+    @Test
+    public void testListRegression() throws Exception {
+      testUtil = new HBaseTestingUtility();
+      clientProperties = new Properties();
+      Configuration conf = testUtil.getConfiguration();
+      setCommonConfigProperties(conf);
+      testUtil.startMiniCluster(1);
+      final UserGroupInformation superUser =
+          UserGroupInformation.createUserForTesting(SUPERUSER, new String[0]);
+      final UserGroupInformation regularUser =
+          UserGroupInformation.createUserForTesting("user", new String[0]);
+
+      superUser.doAs(new PrivilegedExceptionAction<Void>() {
+          @Override
+          public Void run() throws Exception {
+              createTable();
+              readTable();
+              return null;
+          }
+      });
+
+      Set<String> tables = getHBaseTables();
+      assertTrue("HBase tables do not include expected Phoenix tables: " + tables,
+          tables.containsAll(PHOENIX_SYSTEM_TABLES));
+
+      // Grant permission to the system tables for the unprivileged user
+      // An unprivileged user should only need to be able to Read and eXecute on them.
+      superUser.doAs(new PrivilegedExceptionAction<Void>() {
+          @Override
+          public Void run() throws Exception {
+              try {
+                  grantGlobalPermissions(regularUser.getShortUserName(), Action.EXEC, Action.READ,
+                      Action.ADMIN, Action.WRITE, Action.CREATE);
+              } catch (Throwable e) {
+                  if (e instanceof Exception) {
+                      throw (Exception) e;
+                  } else {
+                      throw new Exception(e);
+                  }
+              }
+              return null;
+          }
+      });
+
+      // Stop hbase, set the namespace mapping, restart hbase
+      testUtil.shutdownMiniHBaseCluster();
+      testUtil.getConfiguration().set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+      clientProperties.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+      testUtil.startMiniHBaseCluster(1, 1);
+
+      // Use a difference user so we don't get the cached ConnectionQueryServicesImpl
+      regularUser.doAs(new PrivilegedExceptionAction<Void>() {
+          @Override
+          public Void run() throws Exception {
+              // We expect this to not throw an error
+              readTable();
+              return null;
+          }
+      });
+    }
+
     private String getJdbcUrl() {
         return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
     }
@@ -240,6 +301,10 @@ public class SystemTablePermissionsIT {
             }
             assertEquals(NUM_RECORDS, i);
         }
+    }
+
+    private void grantGlobalPermissions(String toUser, Action... actions) throws Throwable {
+        AccessControlClient.grant(testUtil.getConnection(), toUser, actions);
     }
 
     private void grantPermissions(String toUser, Set<String> tablesToGrant, Action... actions)
