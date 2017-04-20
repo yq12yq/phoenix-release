@@ -2703,7 +2703,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     List<TableName> getSystemTableNames(HBaseAdmin admin) throws IOException {
-        return Arrays.asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+        return new ArrayList<>(Arrays.asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*")));
     }
 
     private String addColumn(String columnsToAddSoFar, String columns) {
