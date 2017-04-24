@@ -314,11 +314,12 @@ public class IndexTool extends Configured implements Tool {
         private Job configureJobForAysncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi)
                 throws Exception {
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+            final String indexTableName = SchemaUtil.getTableName(schemaName, indexTable);
             final String qIndexTable;
             if (schemaName != null && !schemaName.isEmpty()) {
                 qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
             } else {
-                qIndexTable = indexTable;
+                qIndexTable = SchemaUtil.normalizeIdentifier(indexTable);
             }
             final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
             
@@ -347,15 +348,14 @@ public class IndexTool extends Configured implements Tool {
             final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
             final String selectQuery = ddlCompiler.getSelectQuery();
             final String upsertQuery =
-                    QueryUtil.constructUpsertStatement(qIndexTable, indexColumns, Hint.NO_INDEX);
-
+                    QueryUtil.constructUpsertStatement(indexTableName, indexColumns, Hint.NO_INDEX);
             configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
             PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
                 indexColumns.toArray(new String[indexColumns.size()]));
             final List<ColumnInfo> columnMetadataList =
-                    PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
+                    PhoenixRuntime.generateColumnInfo(connection, indexTableName, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
             FileSystem.get(configuration).delete(outputPath, true);
             
@@ -447,6 +447,7 @@ public class IndexTool extends Configured implements Tool {
             final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
             final boolean isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+            final String dataTableName = SchemaUtil.getTableName(schemaName, dataTable);
             boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
@@ -455,12 +456,12 @@ public class IndexTool extends Configured implements Tool {
             boolean isLocalIndexBuild = false;
             PTable pindexTable = null;
             if (indexTable != null) {
-                if (!isValidIndexTable(connection, qDataTable,indexTable)) {
+                if (!isValidIndexTable(connection, dataTableName, indexTable)) {
                     throw new IllegalArgumentException(String.format(
                         " %s is not an index table for %s ", indexTable, qDataTable));
                 }
                 pindexTable = PhoenixRuntime.getTable(connection, schemaName != null && !schemaName.isEmpty()
-                        ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : indexTable);
+                        ? SchemaUtil.getQualifiedTableName(schemaName, indexTable) : SchemaUtil.normalizeIdentifier(indexTable));
                 htable = (HTable)connection.unwrap(PhoenixConnection.class).getQueryServices()
                         .getTable(pindexTable.getPhysicalName().getBytes());
                 if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
@@ -492,22 +493,22 @@ public class IndexTool extends Configured implements Tool {
                     if (isLocalIndexBuild) {
                         validateSplitForLocalIndex(splitKeysBeforeJob, htable);
                     }
-                        LOG.info("Loading HFiles from {}", outputPath);
-                        LoadIncrementalHFiles loader = new LoadIncrementalHFiles(configuration);
-                        loader.doBulkLoad(outputPath, htable);
-                        htable.close();
-                        // Without direct API, we need to update the index state to ACTIVE from client.
-                        IndexToolUtil.updateIndexState(connection, qDataTable, indexTable, PIndexState.ACTIVE);
-                        FileSystem.get(configuration).delete(outputPath, true);
-                    }
-                    return 0;
-                } else {
-                    LOG.error("IndexTool job failed! Check logs for errors..");
-                    return -1;
-                 }
-            } catch (Exception ex) {
-            LOG.error(" An exception occured while performing the indexing job : "
-                    + ExceptionUtils.getStackTrace(ex));
+                    LOG.info("Loading HFiles from {}", outputPath);
+                    LoadIncrementalHFiles loader = new LoadIncrementalHFiles(configuration);
+                    loader.doBulkLoad(outputPath, htable);
+                    htable.close();
+                    // Without direct API, we need to update the index state to ACTIVE from client.
+                    IndexToolUtil.updateIndexState(connection, dataTableName, indexTable, PIndexState.ACTIVE);
+                    FileSystem.get(configuration).delete(outputPath, true);
+                }
+                return 0;
+            } else {
+                LOG.error("IndexTool job failed! Check logs for errors..");
+                return -1;
+            }
+        } catch (Exception ex) {
+            LOG.error("An exception occurred while performing the indexing job: "
+                    + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
             try {
@@ -535,15 +536,15 @@ public class IndexTool extends Configured implements Tool {
     private boolean isValidIndexTable(final Connection connection, final String masterTable,
             final String indexTable) throws SQLException {
         final DatabaseMetaData dbMetaData = connection.getMetaData();
-        final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
+        final String schemaName = SchemaUtil.normalizeIdentifier(SchemaUtil.getSchemaNameFromFullName(masterTable));
         final String tableName = SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
-
+        final String indexTableName = SchemaUtil.normalizeIdentifier(indexTable);
         ResultSet rs = null;
         try {
             rs = dbMetaData.getIndexInfo(null, schemaName, tableName, false, false);
             while (rs.next()) {
                 final String indexName = rs.getString(6);
-                if (indexTable.equalsIgnoreCase(indexName)) {
+                if (indexTableName.equals(indexName)) {
                     return true;
                 }
             }
