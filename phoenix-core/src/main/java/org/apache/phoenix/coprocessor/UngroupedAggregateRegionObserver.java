@@ -545,7 +545,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                                     ImmutableBytesPtr.copyBytesIfNecessary(ptr),
                                                     results);
                                         Put put = maintainer.buildUpdateMutation(kvBuilder,
-                                            valueGetter, ptr, ts,
+                                            valueGetter, ptr, results.get(0).getTimestamp(),
                                             env.getRegion().getRegionInfo().getStartKey(),
                                             env.getRegion().getRegionInfo().getEndKey());
                                         indexMutations.add(put);
