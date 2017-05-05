@@ -2541,7 +2541,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
                                 } catch (PhoenixIOException e) {
                                     if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
-                                        // Pas
+                                        // Pass
                                         logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
                                         checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
                                     } else {
@@ -2619,7 +2619,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 try {
                                     metaConnection.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS "
                                             + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
-                                } catch (NewerSchemaAlreadyExistsException e) {}
+                                } catch (NewerSchemaAlreadyExistsException e) {
+                                } catch (PhoenixIOException e) {
+                                    if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
+                                        // Pass
+                                        logger.debug("Couldn't create SYSTEM schema, assuming it exists");
+                                    } else {
+                                        initializationException = e;
+                                    }
+                                    return null;
+                                }
                             }
                             scheduleRenewLeaseTasks(); 
                         } catch (Exception e) {

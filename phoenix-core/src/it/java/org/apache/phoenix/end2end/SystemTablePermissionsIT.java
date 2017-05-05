@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.security.access.AccessControlClient;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.After;
 import org.junit.BeforeClass;
@@ -133,6 +135,11 @@ public class SystemTablePermissionsIT {
             }
         });
 
+        // Even though we're using a different user here, we'll get the same ConnectionInfo, and
+        // thus, the same ConnectionQueryServices. A little hack to let us avoid setting up Kerberos
+        // for this test class.
+        clearCachedConnections();
+
         // Make sure that the unprivileged user can read the table
         regularUser.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
@@ -191,6 +198,11 @@ public class SystemTablePermissionsIT {
                 return null;
             }
         });
+
+        // Even though we're using a different user here, we'll get the same ConnectionInfo, and
+        // thus, the same ConnectionQueryServices. A little hack to let us avoid setting up Kerberos
+        // for this test class.
+        clearCachedConnections();
 
         regularUser.doAs(new PrivilegedExceptionAction<Void>() {
             @Override
@@ -252,7 +264,11 @@ public class SystemTablePermissionsIT {
       clientProperties.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
       testUtil.startMiniHBaseCluster(1, 1);
 
-      // Use a difference user so we don't get the cached ConnectionQueryServicesImpl
+      // Even though we're using a different user here, we'll get the same ConnectionInfo, and
+      // thus, the same ConnectionQueryServices. A little hack to let us avoid setting up Kerberos
+      // for this test class.
+      clearCachedConnections();
+
       regularUser.doAs(new PrivilegedExceptionAction<Void>() {
           @Override
           public Void run() throws Exception {
@@ -265,6 +281,11 @@ public class SystemTablePermissionsIT {
 
     private String getJdbcUrl() {
         return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
+    }
+
+    private void clearCachedConnections() throws SQLException {
+        Driver driver = DriverManager.getDriver(getJdbcUrl());
+        ((PhoenixDriver) driver).clearCachedQueryServices();
     }
 
     private void createTable() throws SQLException {
