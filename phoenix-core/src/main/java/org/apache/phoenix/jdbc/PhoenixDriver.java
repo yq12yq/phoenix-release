@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -255,6 +257,20 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     private void checkClosed() {
         if (closed) {
             throwDriverClosedException();
+        }
+    }
+
+    //VisibleForTesting
+    public void clearCachedQueryServices() {
+        Iterator<Entry<ConnectionInfo,ConnectionQueryServices>> iter = connectionQueryServicesMap.entrySet().iterator();
+        while (iter.hasNext()) {
+          Entry<ConnectionInfo,ConnectionQueryServices> entry = iter.next();
+          try {
+            entry.getValue().close();
+          } catch (SQLException e) {
+            logger.warn("Caught exception closing service for " + entry.getKey(), e);
+          }
+          iter.remove();
         }
     }
     

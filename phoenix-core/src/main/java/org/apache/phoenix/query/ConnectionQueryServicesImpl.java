@@ -2613,8 +2613,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 } catch (PhoenixIOException e) {
                                     if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
                                         // Pass
-                                        logger.warn("Could not create SYSTEM schema, assuming it exists");
-                                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
+                                        logger.debug("Couldn't create SYSTEM schema, assuming it exists");
                                     } else {
                                         initializationException = e;
                                     }
