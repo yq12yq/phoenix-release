@@ -18,7 +18,9 @@
 package org.apache.phoenix.hbase.index.covered.filter;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -30,6 +32,7 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.filter.FilterBase;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
@@ -59,17 +62,15 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   private Hinter currentHint;
   private DeleteColumnHinter columnHint = new DeleteColumnHinter();
   private DeleteFamilyHinter familyHint = new DeleteFamilyHinter();
-  
+
   /**
    * Setup the filter to only include the given families. This allows us to seek intelligently pass
-   * families we don't care about.
-   * @param families
+   * families we don't care about. Creates a new list from the provided {@code families}.
    */
   public ApplyAndFilterDeletesFilter(Set<ImmutableBytesPtr> families) {
     this.families = new ArrayList<ImmutableBytesPtr>(families);
     Collections.sort(this.families);
   }
-      
   
   private ImmutableBytesPtr getNextFamily(ImmutableBytesPtr family) {
     int index = Collections.binarySearch(families, family);

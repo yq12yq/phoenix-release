@@ -116,8 +116,8 @@ public class IndexMemStore implements KeyValueStore {
 
   @Override
   public void add(KeyValue kv, boolean overwrite) {
-    if (LOG.isDebugEnabled()) {
-      LOG.info("Inserting: " + toString(kv));
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Inserting: " + toString(kv));
     }
     // if overwriting, we will always update
     if (!overwrite) {
@@ -147,8 +147,8 @@ public class IndexMemStore implements KeyValueStore {
 
   @Override
   public void rollback(KeyValue kv) {
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Rolling back: " + toString(kv));
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Rolling back: " + toString(kv));
     }
     // If the key is in the store, delete it
     this.kvset.remove(kv);

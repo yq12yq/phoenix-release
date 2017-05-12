@@ -21,6 +21,7 @@ import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowInd
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -486,12 +487,13 @@ public class Indexer extends BaseRegionObserver {
                         current.addTimelineAnnotation("Actually doing index update for first time");
                         writer.writeAndKillYourselfOnFailure(indexUpdates, allowLocalUpdates);
                     } else if (allowLocalUpdates) {
+                        final byte[] tableName = environment.getRegion().getTableDesc().getTableName().getName();
                         Collection<Pair<Mutation, byte[]>> localUpdates =
                                 new ArrayList<Pair<Mutation, byte[]>>();
                         current.addTimelineAnnotation("Actually doing local index update for first time");
                         for (Pair<Mutation, byte[]> mutation : indexUpdates) {
-                            if (Bytes.toString(mutation.getSecond()).equals(
-                                environment.getRegion().getTableDesc().getNameAsString())) {
+                            // Avoid creating the byte[] into a string numerous times
+                            if (Arrays.equals(mutation.getSecond(), tableName)) {
                                 localUpdates.add(mutation);
                             }
                         }
@@ -533,7 +535,9 @@ public class Indexer extends BaseRegionObserver {
    * @return the mutations to apply to the index tables
    */
   private Collection<Pair<Mutation, byte[]>> extractIndexUpdate(WALEdit edit) {
-    Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
+    // Avoid multiple internal array resizings. Initial size of 64, unless we have fewer cells in the edit
+    int initialSize = Math.min(edit.size(), 64);
+    Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(initialSize);
     for (Cell kv : edit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;

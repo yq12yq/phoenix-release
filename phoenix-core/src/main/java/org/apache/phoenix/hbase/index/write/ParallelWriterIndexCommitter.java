@@ -147,8 +147,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     // early exit, if that's the case
                     throwFailureIfDone();
 
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
+                    if (LOG.isTraceEnabled()) {
+                        LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     try {
                         // TODO: Once HBASE-11766 is fixed, reexamine whether this is necessary.

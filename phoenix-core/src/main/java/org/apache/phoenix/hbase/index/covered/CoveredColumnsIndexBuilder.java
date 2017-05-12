@@ -98,8 +98,8 @@ public class CoveredColumnsIndexBuilder extends BaseIndexBuilder {
 
     batchMutationAndAddUpdates(updateMap, mutation);
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Found index updates for Mutation: " + mutation + "\n" + updateMap);
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Found index updates for Mutation: " + mutation + "\n" + updateMap);
     }
 
     return updateMap.toMap();
@@ -461,8 +461,8 @@ public class CoveredColumnsIndexBuilder extends BaseIndexBuilder {
       batchMutationAndAddUpdates(updateMap, d);
     }
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Found index updates for Delete: " + d + "\n" + updateMap);
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Found index updates for Delete: " + d + "\n" + updateMap);
     }
 
     return updateMap.toMap();
