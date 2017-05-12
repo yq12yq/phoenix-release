@@ -654,7 +654,7 @@ public class UpsertCompiler {
                     for (int i = 0 ; i < projectedExpressions.size(); i++) {
                         // Must make new column if position has changed
                         PColumn column = allColumns.get(allColumnsIndexes[i]);
-                        projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i));
+                        projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i + posOff));
                     }
                     // Build table from projectedColumns
                     PTable projectedTable = PTableImpl.makePTable(table, projectedColumns, PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)));

@@ -118,9 +118,7 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
-
 import org.apache.commons.lang.RandomStringUtils;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -805,19 +803,34 @@ public abstract class BaseTest {
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {
-        ensureTableCreated(url, tableName, null, null);
+        ensureTableCreated(url, tableName, null, null,null);
     }
 
     public static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
-        ensureTableCreated(url, tableName, splits, null);
+        ensureTableCreated(url, tableName, splits, null,null);
+    }
+    
+    public static void ensureTableCreated(String url, String tableName, byte[][] splits, String tableDDLOptions) throws SQLException {
+        ensureTableCreated(url, tableName, splits, null,tableDDLOptions);
     }
 
     protected static void ensureTableCreated(String url, String tableName, Long ts) throws SQLException {
-        ensureTableCreated(url, tableName, null, ts);
+        ensureTableCreated(url, tableName, null, ts,null);
     }
-
-    protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts) throws SQLException {
+    
+    protected static void ensureTableCreated(String url, String tableName, Long ts,String tableDDLOptions) throws SQLException {
+        ensureTableCreated(url, tableName, null, ts,tableDDLOptions);
+    }
+    
+    protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts) throws SQLException{
+        ensureTableCreated(url, tableName, splits, ts,null);
+    }
+    
+    protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts,String tableDDLOptions) throws SQLException {
         String ddl = tableDDLMap.get(tableName);
+        if (tableDDLOptions!=null) {
+            ddl += tableDDLOptions;
+        }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
     }
@@ -1119,13 +1132,15 @@ public abstract class BaseTest {
         initATableValues(tenantId, splits, date, null, url);
     }
     
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception{
+        initATableValues(tenantId, splits, date, ts, url, null);
+    }
     
-    
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url, String tableDDLOptions) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ATABLE_NAME, splits);
+            ensureTableCreated(url, ATABLE_NAME, splits, tableDDLOptions);
         } else {
-            ensureTableCreated(url, ATABLE_NAME, splits, ts-5);
+            ensureTableCreated(url, ATABLE_NAME, splits, ts-5, tableDDLOptions);
         }
         
         Properties props = new Properties();
