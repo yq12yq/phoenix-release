@@ -121,41 +121,11 @@ public class IndexBuildManager implements Stoppable {
     final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
 
-    // parallelize each mutation into its own task
-    // each task is cancelable via two mechanisms: (1) underlying HRegion is closing (which would
-    // fail lookups/scanning) and (2) by stopping this via the #stop method. Interrupts will only be
-    // acknowledged on each thread before doing the actual lookup, but after that depends on the
-    // underlying builder to look for the closed flag.
-    TaskBatch<Collection<Pair<Mutation, byte[]>>> tasks =
-        new TaskBatch<Collection<Pair<Mutation, byte[]>>>(mutations.size());
+    // This used to be multi-threaded but was removed as it was unsafe.
+    ArrayList<Pair<Mutation, byte[]>> results = new ArrayList<>(mutations.size());
     for (final Mutation m : mutations) {
-      tasks.add(new Task<Collection<Pair<Mutation, byte[]>>>() {
-
-        @Override
-        public Collection<Pair<Mutation, byte[]>> call() throws IOException {
-          return delegate.getIndexUpdate(m, indexMetaData);
-        }
-
-      });
+      results.addAll(delegate.getIndexUpdate(m, indexMetaData));
     }
-    List<Collection<Pair<Mutation, byte[]>>> allResults = null;
-    try {
-      allResults = pool.submitUninterruptible(tasks);
-    } catch (CancellationException e) {
-      throw e;
-    } catch (ExecutionException e) {
-      LOG.error("Found a failed index update!");
-      throw e.getCause();
-    }
-
-    // we can only get here if we get successes from each of the tasks, so each of these must have a
-    // correct result
-    Collection<Pair<Mutation, byte[]>> results = new ArrayList<Pair<Mutation, byte[]>>();
-    for (Collection<Pair<Mutation, byte[]>> result : allResults) {
-      assert result != null : "Found an unsuccessful result, but didn't propagate a failure earlier";
-      results.addAll(result);
-    }
-
     return results;
   }
 

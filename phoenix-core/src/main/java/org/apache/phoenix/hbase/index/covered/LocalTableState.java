@@ -88,6 +88,13 @@ public class LocalTableState implements TableState {
         }
     }
 
+    private void addUpdateCells(List<Cell> list, boolean overwrite) {
+        if (list == null) return;
+        for (Cell c : list) {
+            this.memstore.add(KeyValueUtil.ensureKeyValue(c), overwrite);
+        }
+    }
+
     @Override
     public RegionCoprocessorEnvironment getEnvironment() {
         return this.env;
@@ -176,7 +183,7 @@ public class LocalTableState implements TableState {
         if (toCover.isEmpty()) { return; }
 
         // add the current state of the row
-        this.addUpdate(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).list(), false);
+        this.addUpdateCells(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).listCells(), false);
 
         // add the covered columns to the set
         for (ColumnReference ref : toCover) {

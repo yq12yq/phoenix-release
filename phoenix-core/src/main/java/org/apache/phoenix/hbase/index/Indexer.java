@@ -22,6 +22,7 @@ import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowInd
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -423,9 +424,9 @@ public class Indexer extends BaseRegionObserver {
             		  Collection<Pair<Mutation, byte[]>> localUpdates =
             				  new ArrayList<Pair<Mutation, byte[]>>();
             		  current.addTimelineAnnotation("Actually doing local index update for first time");
+                  final byte[] tableName = environment.getRegion().getTableDesc().getTableName().getName();
             		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
-            			  if (Bytes.toString(mutation.getSecond()).equals(
-            					  environment.getRegion().getTableDesc().getNameAsString())) {
+                    if (Arrays.equals(mutation.getSecond(), tableName)) {
             				  localUpdates.add(mutation);
             			  }
             		  }
@@ -466,7 +467,9 @@ public class Indexer extends BaseRegionObserver {
    * @return the mutations to apply to the index tables
    */
   private Collection<Pair<Mutation, byte[]>> extractIndexUpdate(WALEdit edit) {
-    Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
+    // Avoid multiple internal array resizings. Initial size of 64, unless we have fewer cells in the edit
+    int initialSize = Math.min(edit.size(), 64);
+    Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(initialSize);
     for (Cell kv : edit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;

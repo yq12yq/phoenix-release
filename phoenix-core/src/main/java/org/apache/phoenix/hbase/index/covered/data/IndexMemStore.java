@@ -147,8 +147,8 @@ public class IndexMemStore implements KeyValueStore {
 
   @Override
   public void rollback(KeyValue kv) {
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Rolling back: " + toString(kv));
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Rolling back: " + toString(kv));
     }
     // If the key is in the store, delete it
     this.kvset.remove(kv);

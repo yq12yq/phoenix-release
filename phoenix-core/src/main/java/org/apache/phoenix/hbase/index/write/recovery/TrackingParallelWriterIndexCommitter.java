@@ -157,8 +157,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 							}
 						}
 
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
+                        if (LOG.isTraceEnabled()) {
+                            LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                         }
 
                         HTableInterface table = factory.getTable(tableReference.get());
