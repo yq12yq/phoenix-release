@@ -971,16 +971,25 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             int count=getCount(conn, tableName, "L#0");
             assertTrue(count > 14);
-            admin.majorCompact(tableName);
+            admin.majorCompact(TableName.valueOf(tableName));
             int tryCount = 5;// need to wait for rebuilding of corrupted local index region
             while (tryCount-- > 0 && count != 14) {
-                Thread.sleep(30000);
+                Thread.sleep(15000);
                 count = getCount(conn, tableName, "L#0");
             }
             assertEquals(14, count);
             rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName1);
             assertTrue(rs.next());
             assertEquals(7, rs.getLong(1));
+            statement.execute("DROP INDEX " + indexName1 + " ON " + tableName);
+            admin.majorCompact(TableName.valueOf(tableName));
+            statement.execute("DROP INDEX " + indexName + " ON " + tableName);
+            admin.majorCompact(TableName.valueOf(tableName));
+            Thread.sleep(15000);
+            admin.majorCompact(TableName.valueOf(tableName));
+            Thread.sleep(15000);
+            rs = statement.executeQuery("SELECT COUNT(*) FROM " + tableName);
+            assertTrue(rs.next());
         }
     }
 
