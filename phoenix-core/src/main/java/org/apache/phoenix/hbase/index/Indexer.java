@@ -53,9 +53,14 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.EnvironmentEdge;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceImpl;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
@@ -109,6 +114,19 @@ public class Indexer extends BaseRegionObserver {
 
   private static final String INDEX_RECOVERY_FAILURE_POLICY_KEY = "org.apache.hadoop.hbase.index.recovery.failurepolicy";
 
+  private static final String INDEXER_POST_BATCH_MUTATE_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.post.batch.mutate.threshold";
+  private static final long INDEXER_POST_BATCH_MUTATE_SLOW_THRESHOLD_DEFAULT = 3_000;
+  private static final String INDEXER_PRE_BATCH_MUTATE_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.batch.mutate.threshold";
+  private static final long INDEXER_PRE_BATCH_MUTATE_SLOW_THREHSOLD_DEFAULT = 3_000;
+  private static final String INDEXER_PRE_WAL_RESTORE_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.pre.wal.restore.threshold";
+  private static final long INDEXER_PRE_WAL_RESTORE_SLOW_THRESHOLD_DEFAULT = 3_000;
+  private static final String INDEXER_POST_PUT_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.post.put.threshold";
+  private static final long INDEXER_POST_PUT_SLOW_THRESHOLD_DEFAULT = 1_000;
+  private static final String INDEXER_POST_DELETE_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.post.delete.threshold";
+  private static final long INDEXER_POST_DELETE_SLOW_THRESHOLD_DEFAULT = 1_000;
+  private static final String INDEXER_POST_OPEN_SLOW_THRESHOLD_KEY = "phoenix.indexer.slow.open.threshold";
+  private static final long INDEXER_POST_OPEN_SLOW_THRESHOLD_DEFAULT = 3_000;
+
   /**
    * cache the failed updates to the various regions. Used for making the WAL recovery mechanisms
    * more robust in the face of recoverying index regions that were on the same server as the
@@ -122,8 +140,16 @@ public class Indexer extends BaseRegionObserver {
    */
   private IndexWriter recoveryWriter;
 
+  private MetricsIndexerSource metricSource;
+
   private boolean stopped;
   private boolean disabled;
+  private long slowPostBatchMutateThreshold;
+  private long slowPostPutThreshold;
+  private long slowPreBatchMutateThreshold;
+  private long slowPreWALRestoreThreshold;
+  private long slowPostDeleteThreshold;
+  private long slowPostOpenThreshold;
 
   public static final String RecoveryFailurePolicyKeyForTesting = INDEX_RECOVERY_FAILURE_POLICY_KEY;
 
@@ -154,6 +180,11 @@ public class Indexer extends BaseRegionObserver {
 
         // setup the actual index writer
         this.writer = new IndexWriter(env, serverName + "-index-writer");
+
+        // Metrics impl for the Indexer -- avoiding unnecessary indirection for hadoop-1/2 compat
+        this.metricSource = MetricsIndexerSourceFactory.getInstance().create();
+
+        setSlowThresholds(e.getConfiguration());
     
         // setup the recovery writer that does retries on the failed edits
         TrackingParallelWriterIndexCommitter recoveryCommmiter =
@@ -181,6 +212,24 @@ public class Indexer extends BaseRegionObserver {
       }
   }
 
+  /**
+   * Extracts the slow call threshold values from the configuration.
+   */
+  private void setSlowThresholds(Configuration c) {
+      slowPreBatchMutateThreshold = c.getLong(INDEXER_POST_BATCH_MUTATE_SLOW_THRESHOLD_KEY,
+          INDEXER_POST_BATCH_MUTATE_SLOW_THRESHOLD_DEFAULT);
+      slowPostBatchMutateThreshold = c.getLong(INDEXER_PRE_BATCH_MUTATE_SLOW_THRESHOLD_KEY,
+          INDEXER_PRE_BATCH_MUTATE_SLOW_THREHSOLD_DEFAULT);
+      slowPostDeleteThreshold = c.getLong(INDEXER_POST_DELETE_SLOW_THRESHOLD_KEY,
+          INDEXER_POST_DELETE_SLOW_THRESHOLD_DEFAULT);
+      slowPostPutThreshold = c.getLong(INDEXER_POST_PUT_SLOW_THRESHOLD_KEY,
+          INDEXER_POST_PUT_SLOW_THRESHOLD_DEFAULT);
+      slowPreWALRestoreThreshold = c.getLong(INDEXER_PRE_WAL_RESTORE_SLOW_THRESHOLD_KEY,
+          INDEXER_PRE_WAL_RESTORE_SLOW_THRESHOLD_DEFAULT);
+      slowPostOpenThreshold = c.getLong(INDEXER_POST_OPEN_SLOW_THRESHOLD_KEY,
+          INDEXER_POST_OPEN_SLOW_THRESHOLD_DEFAULT);
+  }
+
   @Override
   public void stop(CoprocessorEnvironment e) throws IOException {
     if (this.stopped) {
@@ -197,6 +246,13 @@ public class Indexer extends BaseRegionObserver {
     this.recoveryWriter.stop(msg);
   }
 
+  private String getCallTooSlowMessage(String callName, long duration, long threshold) {
+      StringBuilder sb = new StringBuilder(64);
+      sb.append("(callTooSlow) ").append(callName).append(" duration=").append(duration);
+      sb.append("ms, threshold=").append(threshold).append("ms");
+      return sb.toString();
+  }
+
   @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
@@ -204,11 +260,21 @@ public class Indexer extends BaseRegionObserver {
           super.preBatchMutate(c, miniBatchOp);
           return;
       }
+      long start = EnvironmentEdgeManager.currentTime();
       try {
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
       } catch (Throwable t) {
           rethrowIndexingException(t);
+      } finally {
+          long duration = EnvironmentEdgeManager.currentTime() - start;
+          if (duration >= slowPreBatchMutateThreshold) {
+              if (LOG.isDebugEnabled()) {
+                  LOG.debug(getCallTooSlowMessage("preBatchMutate", duration, slowPreBatchMutateThreshold));
+              }
+              metricSource.incrementNumSlowPreBatchMutateCalls();
+          }
+          metricSource.updatePreBatchMutateTime(duration);
       }
       throw new RuntimeException(
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
@@ -378,7 +444,19 @@ public class Indexer extends BaseRegionObserver {
       super.postPut(e, put, edit, durability);
           return;
         }
-    doPost(edit, put, durability, true, false);
+      long start = EnvironmentEdgeManager.currentTime();
+      try {
+          doPost(edit, put, durability, true, false);
+      } finally {
+          long duration = EnvironmentEdgeManager.currentTime() - start;
+          if (duration >= slowPostPutThreshold) {
+              if (LOG.isDebugEnabled()) {
+                  LOG.debug(getCallTooSlowMessage("postPut", duration, slowPostPutThreshold));
+              }
+              metricSource.incrementNumSlowPostPutCalls();
+          }
+          metricSource.updatePostPutTime(duration);
+      }
   }
 
   @Override
@@ -388,7 +466,19 @@ public class Indexer extends BaseRegionObserver {
       super.postDelete(e, delete, edit, durability);
           return;
         }
-    doPost(edit, delete, durability, true, false);
+        long start = EnvironmentEdgeManager.currentTime();
+        try {
+            doPost(edit, delete, durability, true, false);
+        } finally {
+            long duration = EnvironmentEdgeManager.currentTime() - start;
+            if (duration >= slowPostDeleteThreshold) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug(getCallTooSlowMessage("postDelete", duration, slowPostDeleteThreshold));
+                }
+                metricSource.incrementNumSlowPostDeleteCalls();
+            }
+            metricSource.updatePostDeleteTime(duration);
+        }
   }
 
   @Override
@@ -398,15 +488,27 @@ public class Indexer extends BaseRegionObserver {
         super.postBatchMutate(c, miniBatchOp);
         return;
       }
-      WALEdit edit = miniBatchOp.getWalEdit(0);
-      if (edit != null) {
-        IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
-        if (ikv != null) {
-          // This will prevent the postPut and postDelete hooks from doing anything
-          // We need to do this now, as the postBatchMutateIndispensably (where the
-          // actual index writing gets done) is called after the postPut and postDelete.
-          ikv.markBatchFinished();
-        }
+      long start = EnvironmentEdgeManager.currentTime();
+      try {
+          WALEdit edit = miniBatchOp.getWalEdit(0);
+          if (edit != null) {
+            IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
+            if (ikv != null) {
+              // This will prevent the postPut and postDelete hooks from doing anything
+              // We need to do this now, as the postBatchMutateIndispensably (where the
+              // actual index writing gets done) is called after the postPut and postDelete.
+              ikv.markBatchFinished();
+            }
+          }
+      } finally {
+          long duration = EnvironmentEdgeManager.currentTime() - start;
+          if (duration >= slowPostBatchMutateThreshold) {
+              if (LOG.isDebugEnabled()) {
+                  LOG.debug(getCallTooSlowMessage("postBatchMutate", duration, slowPostBatchMutateThreshold));
+              }
+              metricSource.incrementNumSlowPostBatchMutateCalls();
+          }
+          metricSource.updatePostBatchMutateTime(duration);
       }
   }
   
@@ -417,18 +519,30 @@ public class Indexer extends BaseRegionObserver {
           super.postBatchMutateIndispensably(c, miniBatchOp, success);
           return;
         }
-    this.builder.batchCompleted(miniBatchOp);
-    
-    if (success) { // if miniBatchOp was successfully written, write index updates
-        //each batch operation, only the first one will have anything useful, so we can just grab that
-        Mutation mutation = miniBatchOp.getOperation(0);
-        WALEdit edit = miniBatchOp.getWalEdit(0);
-        // We're forcing the index writes here because we've marked the index batch as "finished"
-        // to prevent postPut and postDelete from doing anything, but hold off on writing them
-        // until now so we're outside of the MVCC lock (see PHOENIX-3789). Without this hacky
-        // forceWrite flag, we'd ignore them again here too.
-        doPost(edit, mutation, mutation.getDurability(), false, true);
-    }
+      long start = EnvironmentEdgeManager.currentTime();
+      try {
+          this.builder.batchCompleted(miniBatchOp);
+
+          if (success) { // if miniBatchOp was successfully written, write index updates
+              //each batch operation, only the first one will have anything useful, so we can just grab that
+              Mutation mutation = miniBatchOp.getOperation(0);
+              WALEdit edit = miniBatchOp.getWalEdit(0);
+              // We're forcing the index writes here because we've marked the index batch as "finished"
+              // to prevent postPut and postDelete from doing anything, but hold off on writing them
+              // until now so we're outside of the MVCC lock (see PHOENIX-3789). Without this hacky
+              // forceWrite flag, we'd ignore them again here too.
+              doPost(edit, mutation, mutation.getDurability(), false, true);
+          }
+      } finally {
+          long duration = EnvironmentEdgeManager.currentTime() - start;
+          if (duration >= slowPostBatchMutateThreshold) {
+              if (LOG.isDebugEnabled()) {
+                  LOG.debug(getCallTooSlowMessage("postBatchMutateIndispensably", duration, slowPostBatchMutateThreshold));
+              }
+              metricSource.incrementNumSlowPostBatchMutateIndispensablyCalls();
+          }
+          metricSource.updatePostBatchMutateIndispensablyTime(duration);
+      }
   }
 
   private void doPost(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates, boolean forceWrite) throws IOException {
@@ -550,25 +664,37 @@ public class Indexer extends BaseRegionObserver {
 
   @Override
   public void postOpen(final ObserverContext<RegionCoprocessorEnvironment> c) {
-    Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
-    
     if (this.disabled) {
         super.postOpen(c);
         return;
       }
-    LOG.info("Found some outstanding index updates that didn't succeed during"
-        + " WAL replay - attempting to replay now.");
-    //if we have no pending edits to complete, then we are done
-    if (updates == null || updates.size() == 0) {
-      return;
-    }
-    
-    // do the usual writer stuff, killing the server again, if we can't manage to make the index
-    // writes succeed again
+
+    long start = EnvironmentEdgeManager.currentTime();
     try {
-        writer.writeAndKillYourselfOnFailure(updates, true);
-    } catch (IOException e) {
-        LOG.error("Exception thrown instead of killing server during index writing", e);
+        Multimap<HTableInterfaceReference, Mutation> updates = failedIndexEdits.getEdits(c.getEnvironment().getRegion());
+        LOG.info("Found some outstanding index updates that didn't succeed during"
+            + " WAL replay - attempting to replay now.");
+        //if we have no pending edits to complete, then we are done
+        if (updates == null || updates.size() == 0) {
+          return;
+        }
+
+        // do the usual writer stuff, killing the server again, if we can't manage to make the index
+        // writes succeed again
+        try {
+            writer.writeAndKillYourselfOnFailure(updates, true);
+        } catch (IOException e) {
+            LOG.error("Exception thrown instead of killing server during index writing", e);
+        }
+    } finally {
+        long duration = EnvironmentEdgeManager.currentTime() - start;
+        if (duration >= slowPostOpenThreshold) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(getCallTooSlowMessage("postOpen", duration, slowPostOpenThreshold));
+            }
+            metricSource.incrementNumSlowPostOpenCalls();
+        }
+        metricSource.updatePostOpenTime(duration);
     }
   }
 
@@ -585,12 +711,24 @@ public class Indexer extends BaseRegionObserver {
     // into their own recovered.edits file. This then lets us do a straightforward recovery of each
     // region (and more efficiently as we aren't writing quite as hectically from this one place).
 
-    /*
-     * Basically, we let the index regions recover for a little while long before retrying in the
-     * hopes they come up before the primary table finishes.
-     */
-    Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-    recoveryWriter.write(indexUpdates, true);
+    long start = EnvironmentEdgeManager.currentTime();
+    try {
+        /*
+         * Basically, we let the index regions recover for a little while long before retrying in the
+         * hopes they come up before the primary table finishes.
+         */
+        Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
+        recoveryWriter.write(indexUpdates, true);
+    } finally {
+        long duration = EnvironmentEdgeManager.currentTime() - start;
+        if (duration >= slowPreWALRestoreThreshold) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(getCallTooSlowMessage("preWALRestore", duration, slowPreWALRestoreThreshold));
+            }
+            metricSource.incrementNumSlowPreWALRestoreCalls();
+        }
+        metricSource.updatePreWALRestoreTime(duration);
+    }
   }
 
   /**
