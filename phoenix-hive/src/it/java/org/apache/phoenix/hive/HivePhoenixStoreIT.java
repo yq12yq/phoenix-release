@@ -289,7 +289,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         sb.append("INSERT INTO TABLE joinTable4 VALUES (5, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
         sb.append("INSERT INTO TABLE joinTable4 VALUES (10, \"part2\",\"foodesc\",200,2.0,-1);" + HiveTestUtil.CRLF);
 
-        sb.append("SELECT A.ID, a.db, B.ID2 from joinTable3 A join joinTable4 B on A.ID = B.ID WHERE A.ID=10;" +
+        sb.append("SELECT A.ID, a.db, B.ID2 from joinTable3 A join joinTable4 B on A.ID = B.ID WHERE A.ID=10 AND B.ID2='part2';" +
                 HiveTestUtil.CRLF);
 
         String fullPath = new Path(hbaseTestUtil.getDataTestDir(), testName).toString();

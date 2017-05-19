@@ -303,6 +303,8 @@ public class HiveTestUtil {
             dfs = shims.getMiniDfs(conf, numberOfDataNodes, true, null);
             FileSystem fs = dfs.getFileSystem();
             String uriString = WindowsPathUtil.getHdfsUriString(fs.getUri().toString());
+            conf.setBoolean("datanucleus.schema.autoCreateTables", true);
+            conf.setBoolean("hive.metastore.schema.verification", false);
             if (clusterType == MiniClusterType.tez) {
                 conf.set("hive.execution.engine", "tez");
                 mr = shims.getMiniTezCluster(conf, 1, uriString, 1);

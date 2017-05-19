@@ -352,18 +352,12 @@ public class IndexPredicateAnalyzer {
     private ExprNodeDesc analyzeExpr(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
             searchConditions, Object... nodeOutputs) throws SemanticException {
         if (FunctionRegistry.isOpAnd(expr)) {
-            assert (nodeOutputs.length == 2);
-            ExprNodeDesc residual1 = (ExprNodeDesc) nodeOutputs[0];
-            ExprNodeDesc residual2 = (ExprNodeDesc) nodeOutputs[1];
-            if (residual1 == null) {
-                return residual2;
-            }
-            if (residual2 == null) {
-                return residual1;
-            }
             List<ExprNodeDesc> residuals = new ArrayList<ExprNodeDesc>();
-            residuals.add(residual1);
-            residuals.add(residual2);
+            for(Object obj : nodeOutputs) {
+                if(obj!=null) {
+                    residuals.add((ExprNodeDesc) obj);
+                }
+            }
             return new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry
                     .getGenericUDFForAnd(), residuals);
         }
