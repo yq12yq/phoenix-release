@@ -156,7 +156,9 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
            
             //run the index MR job.
             final IndexTool indexingTool = new IndexTool();
-            indexingTool.setConf(new Configuration(getUtility().getConfiguration()));
+            Configuration configuration = new Configuration(getUtility().getConfiguration());
+            configuration.set(QueryServices.TRANSACTIONS_ENABLED, "true");
+            indexingTool.setConf(configuration);
             
             final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable, directApi);
             int status = indexingTool.run(cmdArgs);
