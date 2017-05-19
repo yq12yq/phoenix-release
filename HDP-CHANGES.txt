@@ -61,6 +61,7 @@ f2c2d4f PHOENIX-3241 Support both DATE and TIMESTAMP in CONVERT_TZ()
 73f0018 PHOENIX-86 UDF testing in phoenix is failing with NoSuchMethodError
 82ba256 PHOENIX-3236 Problem with shading apache commons on Azure.
 a261ee8 PHOENIX-3223 Add `hadoop classpath` to PQS classpath when available
+201ac2c BUG-80929 Few Phoenix UT fails to load fsimage
 ------------
 e857af8 PHOENIX-3015 Any metadata changes may cause unpredictable result when local indexes are using
 8a87fb9 PHOENIX-2845 Timestamp ignores nanos in literal expressions
