@@ -33,7 +33,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -47,7 +47,6 @@ import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -605,13 +604,10 @@ public class UpsertCompiler {
                         public MutationState execute() throws SQLException {
                             ImmutableBytesWritable ptr = context.getTempPtr();
                             tableRef.getTable().getIndexMaintainers(ptr, context.getConnection());
-                            ServerCache cache = null;
-                            try {
-                                if (ptr.getLength() > 0) {
-                                    IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                                    cache = client.addIndexMetadataCache(context.getScanRanges(), ptr);
-                                    byte[] uuidValue = cache.getId();
+                            if (ptr.getLength() > 0) {
+                                    byte[] uuidValue = ServerCacheClient.generateId();
                                     scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+                                    scan.setAttribute(PhoenixIndexCodec.INDEX_MD, ptr.get());
                                 }
                                 ResultIterator iterator = aggPlan.iterator();
                                 try {
@@ -626,11 +622,6 @@ public class UpsertCompiler {
                                 } finally {
                                     iterator.close();
                                 }
-                            } finally {
-                                if (cache != null) {
-                                    cache.close();
-                                }
-                            }
                         }
     
                         @Override

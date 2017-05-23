@@ -125,7 +125,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID) throws IOException {
+    private static void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr) throws IOException {
+        if (indexMaintainersPtr != null) {
+            mutations.get(0).setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+        }
       if (indexUUID != null) {
           for (Mutation m : mutations) {
               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
@@ -272,6 +275,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
+        byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         region.startRegionOperation();
         try {
             synchronized (innerScanner) {
@@ -402,13 +406,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!mutations.isEmpty() && batchSize > 0 &&
                                     mutations.size() % batchSize == 0) {
-                                commitBatch(region, mutations, indexUUID);
+                                commitBatch(region, mutations, indexUUID, indexMaintainersPtr);
                                 mutations.clear();
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!indexMutations.isEmpty() && batchSize > 0 &&
                                     indexMutations.size() % batchSize == 0) {
-                            	commitBatch(region, indexMutations, null);
+                            	commitBatch(region, indexMutations, null, null);
                             	indexMutations.clear();
                             }
                         } catch (ConstraintViolationException e) {
@@ -447,11 +451,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver{
         }
 
         if (!mutations.isEmpty()) {
-            commitBatch(region,mutations, indexUUID);
+            commitBatch(region,mutations, indexUUID, indexMaintainersPtr);
         }
 
         if (!indexMutations.isEmpty()) {
-        	commitBatch(region, indexMutations, null);
+        	commitBatch(region, indexMutations, null, null);
         }
 
         final boolean hadAny = hasAny;
