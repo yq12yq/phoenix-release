@@ -310,7 +310,7 @@ public class TestUtil {
     }
 
     public static MultiKeyValueComparisonFilter multiKVFilter(Expression e) {
-        return  new MultiCQKeyValueComparisonFilter(e);
+        return  new MultiCQKeyValueComparisonFilter(e, false, ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
     public static Expression and(Expression... expressions) {
