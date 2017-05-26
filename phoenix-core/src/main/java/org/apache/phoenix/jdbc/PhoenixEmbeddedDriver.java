@@ -37,7 +37,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.SecurityUtil;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -198,6 +200,13 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     public static class ConnectionInfo {
         private static final org.slf4j.Logger logger = LoggerFactory.getLogger(ConnectionInfo.class);
         private static final Object KERBEROS_LOGIN_LOCK = new Object();
+<<<<<<< HEAD
+||||||| parent of ea8f52e... PHOENIX-3891 Compare current user to JDBC url principal with optional realm
+        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
+=======
+        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
+        private static final String REALM_EQUIVALENCY_WARNING_MSG = "Provided principal does not contan a realm and the default realm cannot be determined. Ignoring realm equivalency check.";
+>>>>>>> ea8f52e... PHOENIX-3891 Compare current user to JDBC url principal with optional realm
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -349,12 +358,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     try {
                         // Check if we need to authenticate with kerberos so that we cache the correct ConnectionInfo
                         UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
-                        if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                        if (!currentUser.hasKerberosCredentials() || !isSameName(currentUser.getUserName(), principal)) {
                             synchronized (KERBEROS_LOGIN_LOCK) {
                                 // Double check the current user, might have changed since we checked last. Don't want
                                 // to re-login if it's the same user.
                                 currentUser = UserGroupInformation.getCurrentUser();
-                                if (!currentUser.hasKerberosCredentials() || !isSameName(currentUser.getUserName(), principal)) {
+                                if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
                                     final Configuration config = getConfiguration(props, info, principal, keytab);
                                     logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
                                             config.get(QueryServices.HBASE_CLIENT_KEYTAB));
@@ -381,14 +390,53 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
         // Visible for testing
         static boolean isSameName(String currentName, String newName) throws IOException {
-            return isSameName(currentName, newName, null);
+            return isSameName(currentName, newName, null, getDefaultKerberosRealm());
+        }
+
+        /**
+         * Computes the default kerberos realm if one is available. If one cannot be computed, null
+         * is returned.
+         *
+         * @return The default kerberos realm, or null.
+         */
+        static String getDefaultKerberosRealm() {
+            try {
+                return KerberosUtil.getDefaultRealm();
+            } catch (Exception e) {
+                if (LOG.isDebugEnabled()) {
+                    // Include the stacktrace at DEBUG
+                    LOG.debug(REALM_EQUIVALENCY_WARNING_MSG, e);
+                } else {
+                    // Limit the content at WARN
+                    LOG.warn(REALM_EQUIVALENCY_WARNING_MSG);
+                }
+            }
+            return null;
         }
 
         static boolean isSameName(String currentName, String newName, String hostname) throws IOException {
+            return isSameName(currentName, newName, hostname, getDefaultKerberosRealm());
+        }
+
+        static boolean isSameName(String currentName, String newName, String hostname, String defaultRealm) throws IOException {
+            final boolean newNameContainsRealm = newName.indexOf('@') != -1;
             // Make sure to replace "_HOST" if it exists before comparing the principals.
             if (newName.contains(org.apache.hadoop.security.SecurityUtil.HOSTNAME_PATTERN)) {
                 newName = org.apache.hadoop.security.SecurityUtil.getServerPrincipal(newName, hostname);
+                if (newNameContainsRealm) {
+                    newName = org.apache.hadoop.security.SecurityUtil.getServerPrincipal(newName, hostname);
+                } else {
+                    // If the principal ends with "/_HOST", replace "_HOST" with the hostname.
+                    if (newName.endsWith("/_HOST")) {
+                        newName = newName.substring(0, newName.length() - 5) + hostname;
+                    }
+                }
             }
+            // The new name doesn't contain a realm and we could compute a default realm
+            if (!newNameContainsRealm && defaultRealm != null) {
+                return currentName.equals(newName + "@" + defaultRealm);
+            }
+            // We expect both names to contain a realm, so we can do a simple equality check
             return currentName.equals(newName);
         }
 
