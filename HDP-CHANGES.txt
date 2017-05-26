@@ -116,3 +116,4 @@ daac75d PHOENIX-3756 Handle users lacking ADMIN for the SYSTEM namespace
 2221499 PHOENIX-3759 Dropping all local index causes NPE during compaction
 68f56a6 PHOENIX-3842 Turn off all BloomFilter for Phoenix tables (Lars Hofhansl)
 ef9a1fb PHOENIX-3800 NPE when doing UPSERT SELECT into salted tables
+3cc7ee3 PHOENIX-3891 Compare current user to JDBC url principal with optional realm
