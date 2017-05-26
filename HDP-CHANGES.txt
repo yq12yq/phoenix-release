@@ -72,3 +72,6 @@ a317541 PHOENIX-3386 PhoenixStorageHandler throws NPE if local tasks executed vi
 3ae5ed9 PHOENIX-3608 KeyRange interset should return EMPTY_RANGE when one of it is NULL_RANGE(Rajeshbabu)
 81fba99 PHOENIX-3652 User requires all Create privilege on 'default' namespace (Ankit Singhal)
 707760f PHOENIX-3686 Allow client-authentication to be disabled for PQS
+589adfa PHOENIX-3189 Perform Kerberos login before ConnectionInfo is constructed
+789dbb8 PHOENIX-3684 Handle _HOST in principal specified in JDBC url
+312c47c PHOENIX-3891 Compare current user to JDBC url principal with optional realm
