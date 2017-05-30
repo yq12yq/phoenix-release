@@ -192,15 +192,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         Scan scan = new Scan();
         scan.setMaxVersions(store.getFamily().getMaxVersions());
         if (!store.hasReferences()) {
-            InternalScanner repairScanner = null;
-            if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
-                repairScanner = getRepairScanner(c.getEnvironment(), store);
-            }
-            if (repairScanner != null) {
-                return repairScanner;
-            } else {
-                return s;
-            }
+            return s;
         }
         List<StoreFileScanner> newScanners = new ArrayList<StoreFileScanner>(scanners.size());
         boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
