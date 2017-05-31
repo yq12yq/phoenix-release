@@ -195,7 +195,7 @@ public class ScanPlan extends BaseQueryPlan {
         splits = iterators.getSplits();
         scans = iterators.getScans();
         if (isOrdered) {
-            scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
+            scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions(),context);
         } else {
             if ((isSalted || table.getIndexType() == IndexType.LOCAL) && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
                 /*
@@ -204,7 +204,7 @@ public class ScanPlan extends BaseQueryPlan {
                  * 2) Or if the query has an order by that wants to sort
                  * the results by the row key (forward or reverse ordering)
                  */
-                scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY);
+                scanner = new MergeSortRowKeyResultIterator(iterators, isSalted ? SaltingUtil.NUM_SALTING_BYTES : 0, orderBy == OrderBy.REV_ROW_KEY_ORDER_BY,context);
             } else if (useRoundRobinIterator()) {
                 /*
                  * For any kind of tables, round robin is possible if there is

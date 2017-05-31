@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -39,9 +40,11 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     private final List<OrderByExpression> orderByColumns;
     private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
     private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
-    
     public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, List<OrderByExpression> orderByColumns) {
-        super(iterators);
+        this(iterators,limit,orderByColumns,null);
+    }
+    public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, List<OrderByExpression> orderByColumns,StatementContext context) {
+        super(iterators,context);
         this.limit = limit == null ? -1 : limit;
         this.orderByColumns = orderByColumns;
     }
@@ -92,10 +95,14 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
         planSteps.add("CLIENT MERGE SORT");
     }
 
-	@Override
-	public String toString() {
-		return "MergeSortTopNResultIterator [limit=" + limit + ", count="
-				+ count + ", orderByColumns=" + orderByColumns + ", ptr1="
-				+ ptr1 + ", ptr2=" + ptr2 + "]";
-	}
+    @Override
+    public String toString() {
+        return "MergeSortTopNResultIterator [limit=" + limit + ", count="
+                + count + ", orderByColumns=" + orderByColumns + ", ptr1="
+                + ptr1 + ", ptr2=" + ptr2 + "]";
+    }
+    @Override
+    public int getNumberOfThreads() {
+        return 0;
+    }
 }

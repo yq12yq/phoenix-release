@@ -19,6 +19,7 @@ package org.apache.phoenix.iterate;
 
 import java.util.List;
 
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.TupleUtil;
 
@@ -35,17 +36,22 @@ import org.apache.phoenix.util.TupleUtil;
 public class MergeSortRowKeyResultIterator extends MergeSortResultIterator {
     private final int keyOffset;
     private final int factor;
-    
+    private final int numOfIterators;
+
     public MergeSortRowKeyResultIterator(ResultIterators iterators) {
-        this(iterators, 0, false);
+        this(iterators, 0, false,null);
     }
-    
-    public MergeSortRowKeyResultIterator(ResultIterators iterators, int keyOffset, boolean isReverse) {
-        super(iterators);
+    public MergeSortRowKeyResultIterator(ResultIterators iterators,StatementContext context) {
+        this(iterators, 0, false,context);
+    }
+
+    public MergeSortRowKeyResultIterator(ResultIterators iterators, int keyOffset, boolean isReverse,StatementContext context) {
+        super(iterators,context);
         this.keyOffset = keyOffset;
         this.factor = isReverse ? -1 : 1;
+        this.numOfIterators=iterators!=null?iterators.size():0;
     }
-   
+
     @Override
     protected int compare(Tuple t1, Tuple t2) {
         return factor * TupleUtil.compare(t1, t2, tempPtr, keyOffset);
@@ -57,9 +63,13 @@ public class MergeSortRowKeyResultIterator extends MergeSortResultIterator {
         planSteps.add("CLIENT MERGE SORT");
     }
 
-	@Override
-	public String toString() {
-		return "MergeSortRowKeyResultIterator [keyOffset=" + keyOffset
-				+ ", factor=" + factor + "]";
-	}
+    @Override
+    public String toString() {
+        return "MergeSortRowKeyResultIterator [keyOffset=" + keyOffset
+                + ", factor=" + factor + "]";
+    }
+    @Override
+    public int getNumberOfThreads() {
+        return Math.min((int)Math.ceil(Math.log(numOfIterators)/Math.log(2)),Runtime.getRuntime().availableProcessors()); 
+    }
 }
