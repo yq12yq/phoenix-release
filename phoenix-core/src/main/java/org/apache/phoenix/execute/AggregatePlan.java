@@ -191,7 +191,7 @@ public class AggregatePlan extends BaseQueryPlan {
         if (groupBy.isEmpty()) {
             aggResultIterator = new UngroupedAggregatingResultIterator(new ConcatResultIterator(parallelIterators), aggregators);
         } else {
-            aggResultIterator = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(parallelIterators,context), aggregators);
+            aggResultIterator = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(parallelIterators), aggregators);
         }
 
         if (having != null) {

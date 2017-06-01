@@ -45,12 +45,12 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.AssertResults;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -60,52 +60,32 @@ import org.junit.Test;
 public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
     private final static byte[] A = Bytes.toBytes("a");
     private final static byte[] B = Bytes.toBytes("b");
-    private final static byte[] C = Bytes.toBytes("c");
 
     @Test
     public void testAggregatingMergeSort() throws Throwable {
         Tuple[] results1 = new Tuple[] {
                 new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-        };
+            };
         Tuple[] results2 = new Tuple[] {
                 new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L)))
-        };
+            };
         Tuple[] results3 = new Tuple[] {
                 new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
                 new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-        };
+            };
         Tuple[] results4 = new Tuple[] {
                 new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-        };
-        Tuple[] results5 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-        };
-        Tuple[] results6 = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(C, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(1L))),
-        };
+            };
         final List<PeekingResultIterator>results = new ArrayList<PeekingResultIterator>(Arrays.asList(new PeekingResultIterator[] {
                 new MaterializedResultIterator(Arrays.asList(results1)), 
-                new MaterializedResultIterator(Arrays.asList(results2)),
+                new MaterializedResultIterator(Arrays.asList(results2)), 
                 new MaterializedResultIterator(Arrays.asList(results3)), 
                 new MaterializedResultIterator(Arrays.asList(results4))}));
-
-        final List<PeekingResultIterator>reverseResults = new ArrayList<PeekingResultIterator>(Arrays.asList(new PeekingResultIterator[] {
-                new MaterializedResultIterator(Arrays.asList(results5)), 
-                new MaterializedResultIterator(Arrays.asList(results6)),
-                new MaterializedResultIterator(Arrays.asList(results6)),
-                new MaterializedResultIterator(Arrays.asList(results6))}));
 
         Tuple[] expectedResults = new Tuple[] {
                 new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(3L))),
                 new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(2L))),
-        };
-        Tuple[] reverseExpectedResults = new Tuple[] {
-                new SingleKeyValueTuple(new KeyValue(C, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(3L))),
-                new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(2L))),
-                new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, PLong.INSTANCE.toBytes(2L))),
-        };
+            };
 
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixStatement statement = new PhoenixStatement(pconn);
@@ -124,27 +104,27 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             public int getPosition() {
                 return 0;
             }
-
+            
             @Override
             public SortOrder getSortOrder() {
-                return SortOrder.getDefault();
+            	return SortOrder.getDefault();
             }
-
+            
             @Override
             public Integer getArraySize() {
                 return 0;
             }
-
+            
             @Override
             public byte[] getViewConstant() {
                 return null;
             }
-
+            
             @Override
             public boolean isViewReferenced() {
                 return false;
             }
-
+            
             @Override
             public String getExpressionStr() {
                 return null;
@@ -171,59 +151,22 @@ public class AggregateResultScannerTest extends BaseConnectionlessQueryTest {
             public void explain(List<String> planSteps) {
             }
 
-            @Override
-            public List<KeyRange> getSplits() {
-                return Collections.emptyList();
-            }
+			@Override
+			public List<KeyRange> getSplits() {
+				return Collections.emptyList();
+			}
 
-            @Override
-            public List<List<Scan>> getScans() {
-                return Collections.emptyList();
-            }
+			@Override
+			public List<List<Scan>> getScans() {
+				return Collections.emptyList();
+			}
 
             @Override
             public void close() throws SQLException {
-
             }
-
+            
         };
-        ResultIterator scanner = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(iterators,context), aggregationManager.getAggregators());
+        ResultIterator scanner = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(iterators), aggregationManager.getAggregators());
         AssertResults.assertResults(scanner, expectedResults);
-
-        ResultIterators reverseIterators = new ResultIterators() {
-
-            @Override
-            public List<PeekingResultIterator> getIterators() throws SQLException {
-                return reverseResults;
-            }
-
-            @Override
-            public int size() {
-                return reverseResults.size();
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-
-            @Override
-            public List<KeyRange> getSplits() {
-                return Collections.emptyList();
-            }
-
-            @Override
-            public List<List<Scan>> getScans() {
-                return Collections.emptyList();
-            }
-
-            @Override
-            public void close() throws SQLException {
-
-            }
-
-        };
-
-        ResultIterator reverseScanner = new GroupedAggregatingResultIterator(new MergeSortRowKeyResultIterator(reverseIterators,0,true,context), aggregationManager.getAggregators());
-        AssertResults.assertResults(reverseScanner, reverseExpectedResults);
     }
 }
