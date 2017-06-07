@@ -119,9 +119,6 @@ public class SpoolingResultIterator implements PeekingResultIterator {
                 NUM_SPOOL_FILE.increment();
                 SPOOL_FILE_SIZE.update(spoolTo.getFile().length());
                 spoolFrom = new OnDiskResultIterator(spoolTo.getFile());
-                if (spoolTo.getFile() != null) {
-                    spoolTo.getFile().deleteOnExit();
-                }
             }
             success = true;
         } catch (IOException e) {
