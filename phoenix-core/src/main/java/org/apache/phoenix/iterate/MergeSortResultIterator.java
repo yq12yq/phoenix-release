@@ -24,8 +24,6 @@ import java.util.PriorityQueue;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.SQLCloseables;
-import org.apache.phoenix.util.ServerUtil;
 
 /**
  * Base class for a ResultIterator that does a merge sort on the list of iterators provided.
@@ -34,8 +32,6 @@ import org.apache.phoenix.util.ServerUtil;
 public abstract class MergeSortResultIterator implements PeekingResultIterator {
     protected final ResultIterators resultIterators;
     protected final ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
-
-    private List<PeekingResultIterator> iterators;
     private PriorityQueue<MaterializedComparableResultIterator> minHeap;
     private final IteratorComparator itrComparator = new IteratorComparator();
 
@@ -43,39 +39,9 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
         this.resultIterators = iterators;
     }
 
-    private List<PeekingResultIterator> getIterators() throws SQLException {
-        if (iterators == null) {
-            iterators = resultIterators.getIterators();
-        }
-        return iterators;
-    }
-
     @Override
     public void close() throws SQLException {
-        SQLException toThrow = null;
-        try {
-            if (resultIterators != null) {
-                resultIterators.close();
-            }
-        } catch (Exception e) {
-            toThrow = ServerUtil.parseServerException(e);
-        } finally {
-            try {
-                if (iterators != null) {
-                    SQLCloseables.closeAll(iterators);
-                }
-            } catch (Exception e) {
-                if (toThrow == null) {
-                    toThrow = ServerUtil.parseServerException(e);
-                } else {
-                    toThrow.setNextException(ServerUtil.parseServerException(e));
-                }
-            } finally {
-                if (toThrow != null) {
-                    throw toThrow;
-                }
-            }
-        }
+        resultIterators.close();
     }
 
     abstract protected int compare(Tuple t1, Tuple t2);
@@ -90,9 +56,7 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
     @Override
     public Tuple next() throws SQLException {
         MaterializedComparableResultIterator iterator = minIterator();
-        if (iterator == null) {
-            return null;
-        }
+        if (iterator == null) { return null; }
         Tuple next = iterator.next();
         minHeap.poll();
         if (iterator.peek() != null) {
@@ -105,7 +69,7 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
 
     private PriorityQueue<MaterializedComparableResultIterator> getMinHeap() throws SQLException {
         if (minHeap == null) {
-            List<PeekingResultIterator> iterators = getIterators();
+            List<PeekingResultIterator> iterators = resultIterators.getIterators();
             minHeap = new PriorityQueue<MaterializedComparableResultIterator>(iterators.size());
             for (PeekingResultIterator itr : iterators) {
                 if (itr.peek() == null) {
@@ -119,6 +83,7 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
     }
 
     private class IteratorComparator implements Comparator<Tuple> {
+        @Override
         public int compare(Tuple c1, Tuple c2) {
             return MergeSortResultIterator.this.compare(c1, c2);
         }
