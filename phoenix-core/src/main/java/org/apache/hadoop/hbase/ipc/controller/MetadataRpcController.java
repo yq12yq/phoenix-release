@@ -27,7 +27,12 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.RpcController;
 
+/**
+ * {@link RpcController} that sets the appropriate priority of RPC calls destined for Phoenix SYSTEM
+ * tables
+ */
 class MetadataRpcController extends DelegatingPayloadCarryingRpcController {
 
 	private int priority;

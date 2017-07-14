@@ -30,6 +30,9 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Result;
+
+import org.apache.hadoop.hbase.NotServingRegionException;
+
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -48,6 +51,9 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
+import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
+import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
+import org.apache.phoenix.iterate.RegionScannerFactory;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -58,7 +64,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.ImmutableList;
-
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
@@ -96,13 +101,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
-    protected Configuration rawConf;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
-        this.rawConf =
-                ((RegionCoprocessorEnvironment) e).getRegionServerServices().getConfiguration();
     }
 
     /**
