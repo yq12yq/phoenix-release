@@ -66,6 +66,7 @@ import com.google.common.collect.ImmutableList;
 import co.cask.tephra.Transaction;
 
 
+
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     public static final String AGGREGATORS = "_Aggs";
@@ -115,13 +116,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
-    protected Configuration rawConf;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
         super.start(e);
-        this.rawConf =
-                ((RegionCoprocessorEnvironment) e).getRegionServerServices().getConfiguration();
     }
 
     /**
