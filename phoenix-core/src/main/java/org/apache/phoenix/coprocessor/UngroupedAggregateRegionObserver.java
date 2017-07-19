@@ -60,6 +60,7 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -113,6 +114,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -173,6 +175,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private boolean isRegionClosing = false;
     private static final Logger logger = LoggerFactory.getLogger(UngroupedAggregateRegionObserver.class);
     private KeyValueBuilder kvBuilder;
+    private Configuration upsertSelectConfig;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -184,6 +187,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // Can't use ClientKeyValueBuilder on server-side because the memstore expects to
         // be able to get a single backing buffer for a KeyValue.
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
+        /*
+         * We need to create a copy of region's configuration since we don't want any side effect of
+         * setting the RpcControllerFactory.
+         */
+        upsertSelectConfig = PropertiesUtil.cloneConfig(e.getConfiguration());
+        /*
+         * Till PHOENIX-3995 is fixed, we need to use the
+         * InterRegionServerIndexRpcControllerFactory. Although this would cause remote RPCs to use
+         * index handlers on the destination region servers, it is better than using the regular
+         * priority handlers which could result in a deadlock.
+         */
+        upsertSelectConfig.setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
+                InterRegionServerIndexRpcControllerFactory.class, RpcControllerFactory.class);
+
         isRegionClosing = false;
         scansReferenceCount = 0;
     }
@@ -319,7 +336,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             ScanUtil.setRowKeyOffset(scan, offsetToBe);
         }
         final int offset = offsetToBe;
-        Configuration conf = c.getEnvironment().getConfiguration();
+        Configuration conf = env.getConfiguration();
         long flushSize = region.getTableDesc().getMemStoreFlushSize();
 
         if (flushSize <= 0) {
@@ -370,7 +387,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
-            targetHTable = new HTable(env.getConfiguration(), projectedTable.getPhysicalName().getBytes());
+            targetHTable = new HTable(upsertSelectConfig, projectedTable.getPhysicalName().getBytes());
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
             areMutationInSameRegion = Bytes.compareTo(targetHTable.getTableName(),
@@ -417,7 +434,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             batchSize = env.getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
         }
         Aggregators aggregators = ServerAggregators.deserialize(
-                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), env.getConfiguration());
+                scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), conf);
         Aggregator[] rowAggregators = aggregators.getAggregators();
         boolean hasMore;
         boolean hasAny = false;
