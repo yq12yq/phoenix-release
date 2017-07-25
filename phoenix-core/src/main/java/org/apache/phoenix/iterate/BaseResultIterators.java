@@ -62,7 +62,6 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -70,7 +69,6 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -78,6 +76,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -714,8 +713,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         List<PeekingResultIterator> iterators = new ArrayList<PeekingResultIterator>(numScans);
         ScanWrapper previousScan = new ScanWrapper(null);
         return getIterators(scans, services, isLocalIndex, allIterators, iterators, isReverse, maxQueryEndTime,
-                splits.size(), previousScan, context.getConnection().getQueryServices().getProps()
-                        .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES));
+                splits.size(), previousScan);
     }
 
     class ScanWrapper {
@@ -737,12 +735,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     private List<PeekingResultIterator> getIterators(List<List<Scan>> scan, ConnectionQueryServices services,
             boolean isLocalIndex, Queue<PeekingResultIterator> allIterators, List<PeekingResultIterator> iterators,
-            boolean isReverse, long maxQueryEndTime, int splitSize, ScanWrapper previousScan, int retryCount) throws SQLException {
+            boolean isReverse, long maxQueryEndTime, int splitSize, ScanWrapper previousScan) throws SQLException {
         boolean success = false;
         final List<List<Pair<Scan,Future<PeekingResultIterator>>>> futures = Lists.newArrayListWithExpectedSize(splitSize);
         allFutures.add(futures);
         SQLException toThrow = null;
-        final HashCacheClient hashCacheClient = new HashCacheClient(context.getConnection());
         int queryTimeOut = context.getStatement().getQueryTimeoutInMillis();
         try {
             submitWork(scan, futures, allIterators, splitSize, this.scanGrouper);
@@ -773,32 +770,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     } catch (ExecutionException e) {
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
-                        } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2)
-                        {
-                            try {
-                                scanPairItr.remove();
-                            } catch (UnsupportedOperationException uOE) {// can be ignored
-                            }
+                        } catch (StaleRegionBoundaryCacheException e2) {
+                            scanPairItr.remove();
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
                                 services.clearTableRegionCache(physicalTableName);
                                 context.getOverallQueryMetrics().cacheRefreshedDueToSplits();
                             }
-                            
                             // Resubmit just this portion of work again
                             Scan oldScan = scanPair.getFirst();
                             byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
                             byte[] endKey = oldScan.getStopRow();
-                            if(e2 instanceof HashJoinCacheNotFoundException){
-                                logger.debug(
-                                        "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
-                                if(retryCount<=0){
-                                    throw e2;
-                                }
-                                retryCount--;
-                                Long cacheId = ((HashJoinCacheNotFoundException)e2).getCacheId();
-                                if (!hashCacheClient.addHashCacheToServer(startKey, cacheId)) { throw e2; }
-                            }
                             
                             List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
                             // Add any concatIterators that were successful so far
@@ -806,7 +788,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             addIterator(iterators, concatIterators);
                             concatIterators = Lists.newArrayList();
                             getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
-                                    maxQueryEndTime, newNestedScans.size(), previousScan, retryCount);
+                                    maxQueryEndTime, newNestedScans.size(), previousScan);
                         }
                     }
                 }

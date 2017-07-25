@@ -58,9 +58,6 @@ import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.RemoveServer
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachingService;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
-import org.apache.phoenix.join.HashCacheClient;
-import org.apache.phoenix.join.HashCacheClient.HashJoinCache;
-import org.apache.phoenix.join.HashCacheFactory;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -69,7 +66,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -90,7 +86,7 @@ public class ServerCacheClient {
     private static final Log LOG = LogFactory.getLog(ServerCacheClient.class);
     private static final Random RANDOM = new Random();
     private final PhoenixConnection connection;
-    private static final Map<Integer, TableRef> cacheUsingTableRefMap = new ConcurrentHashMap<Integer, TableRef>();
+    private final Map<Integer, TableRef> cacheUsingTableRefMap = new ConcurrentHashMap<Integer, TableRef>();
 
     /**
      * Construct client used to create a serialized cached snapshot of a table and send it to each region server
@@ -190,7 +186,53 @@ public class ServerCacheClient {
                         
                         @Override
                         public Boolean call() throws Exception {
-                            return addServerCache(htable, key, cacheUsingTable, cacheId, cachePtr, cacheFactory, txState);
+                            final Map<byte[], AddServerCacheResponse> results;
+                            try {
+                                results = htable.coprocessorService(ServerCachingService.class, key, key, 
+                                            new Batch.Call<ServerCachingService, AddServerCacheResponse>() {
+                                                @Override
+                                                public AddServerCacheResponse call(ServerCachingService instance) throws IOException {
+                                                    ServerRpcController controller = new ServerRpcController();
+                                                    BlockingRpcCallback<AddServerCacheResponse> rpcCallback =
+                                                            new BlockingRpcCallback<AddServerCacheResponse>();
+                                                    AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
+                                                    final byte[] tenantIdBytes;
+                                                    if(cacheUsingTable.isMultiTenant()) {
+                                                        try {
+                                                            tenantIdBytes = connection.getTenantId() == null ? null :
+                                                                    ScanUtil.getTenantIdBytes(
+                                                                            cacheUsingTable.getRowKeySchema(),
+                                                                            cacheUsingTable.getBucketNum() != null,
+                                                                            connection.getTenantId(), cacheUsingTable.getViewIndexId() != null);
+                                                        } catch (SQLException e) {
+                                                            throw new IOException(e);
+                                                        }
+                                                    } else {
+                                                        tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+                                                    }
+                                                    if (tenantIdBytes != null) {
+                                                        builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                                    }
+                                                    builder.setCacheId(ByteStringer.wrap(cacheId));
+                                                    builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
+                                                    ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory.newBuilder();
+                                                    svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
+                                                    builder.setCacheFactory(svrCacheFactoryBuider.build());
+                                                    builder.setTxState(ByteStringer.wrap(txState));
+                                                    instance.addServerCache(controller, builder.build(), rpcCallback);
+                                                    if(controller.getFailedOn() != null) {
+                                                        throw controller.getFailedOn();
+                                                    }
+                                                    return rpcCallback.get(); 
+                                                }
+                                              });
+                            } catch (Throwable t) {
+                                throw new Exception(t);
+                            }
+                            if(results != null && results.size() == 1){
+                                return results.values().iterator().next().getReturn();
+                            }
+                            return false;
                         }
 
                         /**
@@ -260,89 +302,72 @@ public class ServerCacheClient {
      * @throws IllegalStateException if hashed table cannot be removed on any region server on which it was added
      */
     private void removeServerCache(final byte[] cacheId, Set<HRegionLocation> servers) throws SQLException {
-        HTableInterface iterateOverTable = null;
-
-        try {
-            List<byte[]> keys = null;
-            HashJoinCache hashJoinCache = HashCacheClient.getCache(Bytes.toLong(cacheId));
-            if (hashJoinCache != null) {
-                keys = hashJoinCache.getKeys();
-            }
-            
-            ConnectionQueryServices services = connection.getQueryServices();
-            Throwable lastThrowable = null;
-            TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
-            final PTable cacheUsingTable = cacheUsingTableRef.getTable();
-            byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
-            iterateOverTable = services.getTable(tableName);
-
-            List<HRegionLocation> locations = services.getAllTableRegions(tableName);
-            Set<HRegionLocation> remainingOnServers = new HashSet<HRegionLocation>(servers);
-            /**
-             * Allow for the possibility that the region we based where to send our cache has split and been relocated
-             * to another region server *after* we sent it, but before we removed it. To accommodate this, we iterate
-             * through the current metadata boundaries and remove the cache once for each server that we originally sent
-             * to.
-             */
-            if (LOG.isDebugEnabled()) {
-                LOG.debug(addCustomAnnotations("Removing Cache " + cacheId + " from servers.", connection));
-            }
-            for (HRegionLocation entry : locations) {
-             // Call once per server
-                if (remainingOnServers.contains(entry)
-                        || (keys != null && ByteUtil.contains(keys,entry.getRegionInfo().getStartKey()))) { 
-                    try {
+    	ConnectionQueryServices services = connection.getQueryServices();
+    	Throwable lastThrowable = null;
+    	TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
+    	final PTable cacheUsingTable = cacheUsingTableRef.getTable();
+    	byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
+    	HTableInterface iterateOverTable = services.getTable(tableName);
+    	try {
+    		List<HRegionLocation> locations = services.getAllTableRegions(tableName);
+    		Set<HRegionLocation> remainingOnServers = new HashSet<HRegionLocation>(servers);
+    		/**
+    		 * Allow for the possibility that the region we based where to send our cache has split and been
+    		 * relocated to another region server *after* we sent it, but before we removed it. To accommodate
+    		 * this, we iterate through the current metadata boundaries and remove the cache once for each
+    		 * server that we originally sent to.
+    		 */
+    		if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Removing Cache " + cacheId + " from servers.", connection));}
+    		for (HRegionLocation entry : locations) {
+    			if (remainingOnServers.contains(entry)) {  // Call once per server
+    				try {
                         byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
-                        iterateOverTable.coprocessorService(ServerCachingService.class, key, key,
-                                new Batch.Call<ServerCachingService, RemoveServerCacheResponse>() {
-                                    @Override
-                                    public RemoveServerCacheResponse call(ServerCachingService instance)
-                                            throws IOException {
-                                        ServerRpcController controller = new ServerRpcController();
-                                        BlockingRpcCallback<RemoveServerCacheResponse> rpcCallback = new BlockingRpcCallback<RemoveServerCacheResponse>();
-                                        RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest
-                                                .newBuilder();
-                                        final byte[] tenantIdBytes;
-                                        if (cacheUsingTable.isMultiTenant()) {
-                                            try {
-                                                tenantIdBytes = connection.getTenantId() == null ? null
-                                                        : ScanUtil.getTenantIdBytes(cacheUsingTable.getRowKeySchema(),
-                                                                cacheUsingTable.getBucketNum() != null,
-                                                                connection.getTenantId(),
-                                                                cacheUsingTable.getViewIndexId() != null);
-                                            } catch (SQLException e) {
-                                                throw new IOException(e);
-                                            }
-                                        } else {
-                                            tenantIdBytes = connection.getTenantId() == null ? null
-                                                    : connection.getTenantId().getBytes();
-                                        }
-                                        if (tenantIdBytes != null) {
-                                            builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
-                                        }
-                                        builder.setCacheId(ByteStringer.wrap(cacheId));
-                                        instance.removeServerCache(controller, builder.build(), rpcCallback);
-                                        if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
-                                        return rpcCallback.get();
+    					iterateOverTable.coprocessorService(ServerCachingService.class, key, key, 
+    							new Batch.Call<ServerCachingService, RemoveServerCacheResponse>() {
+    						@Override
+    						public RemoveServerCacheResponse call(ServerCachingService instance) throws IOException {
+    							ServerRpcController controller = new ServerRpcController();
+    							BlockingRpcCallback<RemoveServerCacheResponse> rpcCallback =
+    									new BlockingRpcCallback<RemoveServerCacheResponse>();
+    							RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest.newBuilder();
+                                final byte[] tenantIdBytes;
+                                if(cacheUsingTable.isMultiTenant()) {
+                                    try {
+                                        tenantIdBytes = connection.getTenantId() == null ? null :
+                                                ScanUtil.getTenantIdBytes(
+                                                        cacheUsingTable.getRowKeySchema(),
+                                                        cacheUsingTable.getBucketNum() != null,
+                                                        connection.getTenantId(), cacheUsingTable.getViewIndexId() != null);
+                                    } catch (SQLException e) {
+                                        throw new IOException(e);
                                     }
-                                });
-                        remainingOnServers.remove(entry);
-                    } catch (Throwable t) {
-                        lastThrowable = t;
-                        LOG.error(addCustomAnnotations("Error trying to remove hash cache for " + entry, connection),
-                                t);
-                    }
-                }
-            }
-            if (!remainingOnServers.isEmpty()) {
-                LOG.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, connection),
-                        lastThrowable);
-            }
-        } finally {
-            cacheUsingTableRefMap.remove(cacheId);
-            HashCacheClient.removeCacheIfPresent(Bytes.toLong(cacheId));
-            Closeables.closeQuietly(iterateOverTable);
-        }
+                                } else {
+                                    tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+                                }
+                                if (tenantIdBytes != null) {
+                                    builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                }
+                                builder.setCacheId(ByteStringer.wrap(cacheId));
+    							instance.removeServerCache(controller, builder.build(), rpcCallback);
+    							if(controller.getFailedOn() != null) {
+    								throw controller.getFailedOn();
+    							}
+    							return rpcCallback.get(); 
+    						}
+    					});
+    					remainingOnServers.remove(entry);
+    				} catch (Throwable t) {
+    					lastThrowable = t;
+    					LOG.error(addCustomAnnotations("Error trying to remove hash cache for " + entry, connection), t);
+    				}
+    			}
+    		}
+    		if (!remainingOnServers.isEmpty()) {
+    			LOG.warn(addCustomAnnotations("Unable to remove hash cache for " + remainingOnServers, connection), lastThrowable);
+    		}
+    	} finally {
+    		Closeables.closeQuietly(iterateOverTable);
+    	}
     }
 
     /**
@@ -366,74 +391,5 @@ public class ServerCacheClient {
             return KEY_IN_FIRST_REGION;
         }
         return regionStartKey;
-    }
-
-    public boolean addServerCache(byte[] startkeyOfRegion, ImmutableBytesWritable ptr, HashCacheFactory cacheFactory,
-            byte[] cacheId, byte[] txState) throws Exception {
-        HTableInterface table = null;
-        try {
-            ConnectionQueryServices services = connection.getQueryServices();
-            TableRef cacheUsingTableRef = cacheUsingTableRefMap.get(Bytes.mapKey(cacheId));
-            if (cacheUsingTableRef == null) {
-                // returning without adding a cache if we didn't find cacheUsingTableRef
-                return false;
-            }
-            final PTable cacheUsingTable = cacheUsingTableRef.getTable();
-            byte[] tableName = cacheUsingTableRef.getTable().getPhysicalName().getBytes();
-            table = services.getTable(tableName);
-            return addServerCache(table, startkeyOfRegion, cacheUsingTable, cacheId, ptr, cacheFactory, txState);
-        } finally {
-            Closeables.closeQuietly(table);
-        }
-    }
-    
-    public boolean addServerCache(HTableInterface htable, byte[] key, final PTable cacheUsingTable, final byte[] cacheId,
-            final ImmutableBytesWritable cachePtr, final ServerCacheFactory cacheFactory, final byte[] txState)
-            throws Exception {
-        byte[] keyInRegion = getKeyInRegion(key);
-        final Map<byte[], AddServerCacheResponse> results;
-        try {
-            results = htable.coprocessorService(ServerCachingService.class, keyInRegion, keyInRegion,
-                    new Batch.Call<ServerCachingService, AddServerCacheResponse>() {
-                        @Override
-                        public AddServerCacheResponse call(ServerCachingService instance) throws IOException {
-                            ServerRpcController controller = new ServerRpcController();
-                            BlockingRpcCallback<AddServerCacheResponse> rpcCallback = new BlockingRpcCallback<AddServerCacheResponse>();
-                            AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
-                            final byte[] tenantIdBytes;
-                            if (cacheUsingTable.isMultiTenant()) {
-                                try {
-                                    tenantIdBytes = connection.getTenantId() == null ? null
-                                            : ScanUtil.getTenantIdBytes(cacheUsingTable.getRowKeySchema(),
-                                                    cacheUsingTable.getBucketNum() != null, connection.getTenantId(),
-                                                    cacheUsingTable.getViewIndexId() != null);
-                                } catch (SQLException e) {
-                                    throw new IOException(e);
-                                }
-                            } else {
-                                tenantIdBytes = connection.getTenantId() == null ? null
-                                        : connection.getTenantId().getBytes();
-                            }
-                            if (tenantIdBytes != null) {
-                                builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
-                            }
-                            builder.setCacheId(ByteStringer.wrap(cacheId));
-                            builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
-                            ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory
-                                    .newBuilder();
-                            svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
-                            builder.setCacheFactory(svrCacheFactoryBuider.build());
-                            builder.setTxState(ByteStringer.wrap(txState));
-                            instance.addServerCache(controller, builder.build(), rpcCallback);
-                            if (controller.getFailedOn() != null) { throw controller.getFailedOn(); }
-                            return rpcCallback.get();
-                        }
-                    });
-        } catch (Throwable t) {
-            throw new Exception(t);
-        }
-        if (results != null && results.size() == 1) { return results.values().iterator().next().getReturn(); }
-        return false;
-
     }
 }

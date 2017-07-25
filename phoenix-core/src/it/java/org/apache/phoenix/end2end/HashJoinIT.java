@@ -34,7 +34,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -45,28 +44,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.phoenix.cache.GlobalCache;
-import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -87,16 +73,10 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     private SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private String[] indexDDL;
     private String[] plans;
-    public static boolean hashTableTest = false;
     
     public HashJoinIT(String[] indexDDL, String[] plans) {
         this.indexDDL = indexDDL;
         this.plans = plans;
-        if (indexDDL == null || indexDDL.length == 0) {
-            hashTableTest = true;
-        } else {
-            hashTableTest = false;
-        }
     }
     
     @After
@@ -114,18 +94,11 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(10);
-        serverProps.put("hbase.coprocessor.region.classes", InvalidateHashCacheRandomly.class.getName());
-        serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
-        serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
-        serverProps.put("hbase.client.pause", "5000");
-        serverProps.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used
-        clientProps.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
-        NUM_SLAVES_BASE = 4;
-        
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
+        // Must update config before starting server
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
     @Before
@@ -1307,9 +1280,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testInnerJoin() throws Exception {
-        boolean washashTableTest = hashTableTest;
-        // it involves sequences which may be incremented on re-try when hash cache is removed so this test may flap sometimes
-        hashTableTest = false;
         String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for my.seq FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1357,7 +1327,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
-        hashTableTest = washashTableTest;
     }
             
     @Test
@@ -3528,29 +3497,6 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
-    }
-    
-    public static class InvalidateHashCacheRandomly extends SimpleRegionObserver {
-        public static Random rand= new Random();
-        public static List<ImmutableBytesPtr> lastRemovedJoinIds=new ArrayList<ImmutableBytesPtr>();
-        @Override
-        public RegionScanner preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
-                final RegionScanner s) throws IOException {
-            final HashJoinInfo joinInfo = HashJoinInfo.deserializeHashJoinFromScan(scan);
-            if (joinInfo != null) {
-                TenantCache cache = GlobalCache.getTenantCache(c.getEnvironment(), null);
-                int count = joinInfo.getJoinIds().length;
-                for (int i = 0; i < count; i++) {
-                    ImmutableBytesPtr joinId = joinInfo.getJoinIds()[i];
-                    if (rand.nextInt(2) == 1 && !ByteUtil.contains(lastRemovedJoinIds,joinId)  && hashTableTest) {
-                        lastRemovedJoinIds.add(joinId);
-                        cache.removeServerCache(joinId);
-                    }
-                }
-            }
-            return s;
-        }
-        
     }
 }
 
