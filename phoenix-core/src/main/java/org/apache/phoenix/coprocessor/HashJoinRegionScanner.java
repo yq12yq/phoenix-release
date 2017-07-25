@@ -275,11 +275,11 @@ public class HashJoinRegionScanner implements RegionScanner {
             throws IOException {
         try {
             while (shouldAdvance()) {
-                hasMore = scanner.nextRaw(result, scannerContext);
+                hasMore = scanner.nextRaw(result);
                 processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
-            
+
             return nextInQueue(result);
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
@@ -305,7 +305,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                 processResults(result, false);
                 result.clear();
             }
-            
+
             return nextInQueue(result);
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
@@ -317,7 +317,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
         try {
             while (shouldAdvance()) {
-                hasMore = scanner.next(result, scannerContext);
+                hasMore = scanner.next(result);
                 processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
