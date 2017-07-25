@@ -395,7 +395,8 @@ public enum SQLExceptionCode {
                     "Cannot create schema because config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                             + " for enabling name space mapping isn't enabled."), INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES(
                                     726, "43M10", " Inconsistent namespace mapping properites.."), ASYNC_NOT_ALLOWED(
-                                    727, "43M11", " ASYNC option is not allowed.. ");
+                                    727, "43M11", " ASYNC option is not allowed.. "),
+    HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found");
 
     private final int errorCode;
     private final String sqlState;

@@ -20,7 +20,9 @@ package org.apache.phoenix.join;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -40,11 +42,21 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 import org.apache.phoenix.util.TupleUtil;
 import org.iq80.snappy.Snappy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalCause;
+import com.google.common.cache.RemovalListener;
+import com.google.common.cache.RemovalNotification;
+import com.google.common.cache.Weigher;
 import com.google.common.collect.Lists;
 
 /**
@@ -56,6 +68,11 @@ import com.google.common.collect.Lists;
  */
 public class HashCacheClient  {
     private final ServerCacheClient serverCache;
+
+    
+    public static Cache<Long, HashJoinCache> joinCache ;
+    private static final Logger logger = LoggerFactory.getLogger(HashCacheClient.class);
+
     /**
      * Construct client used to create a serialized cached snapshot of a table and send it to each region server
      * for caching during hash join processing.
@@ -63,6 +80,72 @@ public class HashCacheClient  {
      */
     public HashCacheClient(PhoenixConnection connection) {
         serverCache = new ServerCacheClient(connection);
+        ReadOnlyProps config=connection.getQueryServices().getProps();
+        long maxTTL = config.getLong(
+                "hash.join.cache.client.ttl",120000); //2 minutes
+        long maxSize = Runtime.getRuntime().maxMemory() * 
+                config.getInt("hash.join.cache.client.maxMemoryPercentage", 40) / 100;// 40% of client memory
+        if (joinCache == null) {
+            synchronized (HashCacheClient.class) {
+                if (joinCache == null) {
+                    joinCache = CacheBuilder.newBuilder().maximumWeight(maxSize)
+                            .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
+                            .removalListener(new RemovalListener<Long, HashJoinCache>(){
+                                @Override
+                                public void onRemoval(RemovalNotification notification) {
+                                    if(notification.getCause()==RemovalCause.EXPIRED){
+                                        logger.debug("It seems join caches at client are expiring:"
+                                                + notification.getKey()
+                                                + " if you are seeing Hash join cache not found "
+                                                + "try increasing 'hash.join.cache.client.maxMemoryPercentage' "
+                                                + "or 'hash.join.cache.client.ttl'");
+                                    }
+                                }})
+                            .weigher(new Weigher<Long, HashJoinCache>() {
+                                @Override
+                                public int weigh(Long cacheId, HashJoinCache cache) {
+                                    return Long.SIZE + cache.getEstimatedSize();
+                                }
+                            }).build();
+                }
+            }
+        }
+    }
+    
+    public class HashJoinCache {
+        private byte[] cacheId;
+        private ImmutableBytesWritable cachePtr;
+        private List<byte[]> keys;
+
+        public HashJoinCache(byte[] cacheId, ImmutableBytesWritable cachePtr) {
+            this.cacheId = cacheId;
+            this.cachePtr = cachePtr;
+        }
+
+        public int getEstimatedSize() {
+            return Integer.SIZE + (cachePtr != null ? SizedUtil.IMMUTABLE_BYTES_PTR_SIZE + cachePtr.getLength() : 0);
+        }
+
+        public ImmutableBytesWritable getCachePtr() {
+            return cachePtr;
+        }
+
+        public byte[] getCacheId() {
+            return cacheId;
+        }
+
+        public void addKey(byte[] key) {
+            if (keys == null) {
+                keys = new ArrayList<byte[]>();
+            }
+            keys.add(key);
+        }
+        /**
+         * @return can return null
+         */
+        public List<byte[]> getKeys(){
+            return keys;
+        }
     }
 
     /**
@@ -81,7 +164,32 @@ public class HashCacheClient  {
          */
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         serialize(ptr, iterator, estimatedSize, onExpressions, singleValueOnly, keyRangeRhsExpression, keyRangeRhsValues);
-        return serverCache.addServerCache(keyRanges, ptr, ByteUtil.EMPTY_BYTE_ARRAY, new HashCacheFactory(), cacheUsingTableRef);
+        ServerCache cache = serverCache.addServerCache(keyRanges, ptr, ByteUtil.EMPTY_BYTE_ARRAY, new HashCacheFactory(), cacheUsingTableRef);
+        /*
+         * Tracking hash table caches, as we may need to send them again if regionserver serving query doesn't have it
+         * because of region movement or split
+         */
+        if (joinCache != null) {
+            joinCache.put(Bytes.toLong(cache.getId()), new HashJoinCache(cache.getId(), ptr));
+        }
+        return cache;
+    }
+    
+    /**
+     * Should only be used to resend the hash table cache to the regionserver.
+     *  
+     * @param startkeyOfRegion start key of any region hosted on a regionserver which needs hash cache
+     * @param cacheId Id of the cache which needs to be sent
+     * @param txState
+     * @return
+     * @throws Exception
+     */
+    public boolean addHashCacheToServer(byte[] startkeyOfRegion,Long cacheId) throws Exception{
+        HashJoinCache cache = getCache(cacheId);
+        if (cache == null) { return false; }
+        //track keys so that we can remove the hash table cache from the new regionservers when the query is completed.
+        cache.addKey(startkeyOfRegion);
+        return serverCache.addServerCache(startkeyOfRegion, cache.getCachePtr(), new HashCacheFactory(), cache.getCacheId(), ByteUtil.EMPTY_BYTE_ARRAY);
     }
     
     private void serialize(ImmutableBytesWritable ptr, ResultIterator iterator, long estimatedSize, List<Expression> onExpressions, boolean singleValueOnly, Expression keyRangeRhsExpression, List<Expression> keyRangeRhsValues) throws SQLException {
@@ -178,5 +286,19 @@ public class HashCacheClient  {
         // The early evaluation of this constant expression is not necessary, for it
         // might be coerced later.
         return new RowValueConstructorExpression(values, false);
+    }
+    
+    public static void removeCacheIfPresent(Long cacheId){
+        if(joinCache==null){
+            return;
+        }
+        joinCache.invalidate(cacheId);
+    }
+
+    public static HashJoinCache getCache(Long mapKey) {
+        if(joinCache==null){
+            return null;
+        }
+        return joinCache.getIfPresent(mapKey);
     }
 }
