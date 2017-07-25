@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.HashCache;
@@ -275,12 +276,14 @@ public class HashJoinRegionScanner implements RegionScanner {
             throws IOException {
         try {
             while (shouldAdvance()) {
-                hasMore = scanner.nextRaw(result, scannerContext);
+                hasMore = scanner.nextRaw(result);
                 processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
-            
-            return nextInQueue(result);
+
+            boolean res = nextInQueue(result);
+            ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+            return res;
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
             return false; // impossible
@@ -317,12 +320,14 @@ public class HashJoinRegionScanner implements RegionScanner {
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
         try {
             while (shouldAdvance()) {
-                hasMore = scanner.next(result, scannerContext);
+                hasMore = scanner.next(result);
                 processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
             
-            return nextInQueue(result);
+            boolean res = nextInQueue(result);
+            ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+            return res;
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
             return false; // impossible
