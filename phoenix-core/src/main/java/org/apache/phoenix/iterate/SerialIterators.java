@@ -29,6 +29,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
@@ -55,9 +56,9 @@ public class SerialIterators extends BaseResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, Integer offset,
-            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan)
+            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, List<ServerCache> caches)
             throws SQLException {
-        super(plan, perScanLimit, offset, scanGrouper, scan);
+        super(plan, perScanLimit, offset, scanGrouper, scan, caches);
         // must be a offset or a limit specified or a SERIAL hint
         Preconditions.checkArgument(
                 offset != null || perScanLimit != null || plan.getStatement().getHint().hasHint(HintNode.Hint.SERIAL));
@@ -90,7 +91,9 @@ public class SerialIterators extends BaseResultIterators {
                     PeekingResultIterator previousIterator = null;
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
-                	    TableResultIterator scanner = new TableResultIterator(mutationState, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, previousIterator, plan, scanGrouper);
+                                TableResultIterator scanner = new TableResultIterator(mutationState, scan,
+                                        context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName),
+                                        renewLeaseThreshold, previousIterator, plan, scanGrouper, caches);
                 	    conn.addIterator(scanner);
                 	    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan, tableName, plan);
                 	    concatIterators.add(iterator);
