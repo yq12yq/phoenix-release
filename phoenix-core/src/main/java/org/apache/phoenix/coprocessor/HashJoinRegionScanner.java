@@ -279,7 +279,6 @@ public class HashJoinRegionScanner implements RegionScanner {
                 processResults(result, false); // TODO detect if limit used here
                 result.clear();
             }
-
             return nextInQueue(result);
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
