@@ -90,6 +90,7 @@ public class ServerCacheClient {
     private static final Random RANDOM = new Random();
     private final PhoenixConnection connection;
     private final Map<Integer, TableRef> cacheUsingTableRefMap = new ConcurrentHashMap<Integer, TableRef>();
+    public static final String HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER = "hash.join.server.cache.resend.per.server";
 
     /**
      * Construct client used to create a serialized cached snapshot of a table and send it to each region server
@@ -416,7 +417,7 @@ public class ServerCacheClient {
             byte[] tableName = pTable.getPhysicalName().getBytes();
             table = services.getTable(tableName);
             HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, startkeyOfRegion);
-            if (cache.addServer(tableRegionLocation)) {
+            if (cache.addServer(tableRegionLocation) || services.getProps().getBoolean(HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER,false)) {
                 success = addServerCache(table, startkeyOfRegion, pTable, cacheId, cache.getCachePtr(), cacheFactory,
                         txState);
             }

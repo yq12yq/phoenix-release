@@ -59,6 +59,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.cache.GlobalCache;
+import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -93,7 +94,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         this.indexDDL = indexDDL;
         this.plans = plans;
         if (indexDDL == null || indexDDL.length == 0) {
-            hashTableTest = false;
+            hashTableTest = true;
         } else {
             hashTableTest = false;
         }
@@ -110,6 +111,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
         Map<String,String> clientProps = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used
         clientProps.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
+        clientProps.put(ServerCacheClient.HASH_JOIN_SERVER_CACHE_RESEND_PER_SERVER, "true");
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
