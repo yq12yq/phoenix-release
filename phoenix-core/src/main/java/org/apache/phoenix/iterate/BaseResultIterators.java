@@ -810,7 +810,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             addIterator(iterators, concatIterators);
                             concatIterators = Lists.newArrayList();
                             getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
-                                    maxQueryEndTime, newNestedScans.size(), previousScan, retryCount);
+                                    maxQueryEndTime, newNestedScans.size(), previousScan, retryCount - 1);
                         }
                     }
                 }

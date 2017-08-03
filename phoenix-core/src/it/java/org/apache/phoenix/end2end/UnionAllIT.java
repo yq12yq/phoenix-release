@@ -612,7 +612,7 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
                     "UNION ALL OVER 2 QUERIES\n" +
                     "    CLIENT PARALLEL 1-WAY FULL SCAN OVER TEST_TABLE\n" + 
                     "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
-                    "    CLIENT MERGE SORT\n" +
+                    "    CLIENT MERGE SORT\n" + 
                     "    CLIENT LIMIT 1\n" +
                     "    CLIENT PARALLEL 1-WAY FULL SCAN OVER B_TABLE\n" + 
                     "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
