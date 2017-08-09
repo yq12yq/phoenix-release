@@ -117,3 +117,18 @@ daac75d PHOENIX-3756 Handle users lacking ADMIN for the SYSTEM namespace
 68f56a6 PHOENIX-3842 Turn off all BloomFilter for Phoenix tables (Lars Hofhansl)
 ef9a1fb PHOENIX-3800 NPE when doing UPSERT SELECT into salted tables
 3cc7ee3 PHOENIX-3891 Compare current user to JDBC url principal with optional realm
+
+b375c1f84 PHOENIX-4010 Hash Join cache may not be send to all regionservers when we have stale HBase meta cache(tests addendum)
+4d162cf51 PHOENIX-3481 Phoenix initialization fails for HBase 0.98.21 and beyond
+b4ec53eec PHOENIX-3342 ORDER BY and LIMIT+OFFSET doesnt work on second column from compound key
+3c4bac452 PHOENIX-4018 HashJoin may produce nulls for LHS table columns(Sergey Soldatov)
+29b912944 PHOENIX-3960 PhoenixStorageHandler for Hive doesn't work from Spark jobs
+f1061d557 PHOENIX-4010 Hash Join cache may not be send to all regionservers when we have stale HBase meta cache
+b41b6bf1c PHOENIX-3333 Support Spark 2.0
+b9890d0cd PHOENIX-4042 Add hadoop metrics2-based Indexer coproc metrics
+0ebaed78a PHOENIX-3598 Implement HTTP parameter impersonation for PQS
+533aec7f8 PHOENIX-3994 Index RPC priority still depends on the controller factory property in hbase-site.xml (Samarth Jain <samarth@apache.org>)
+562af6677 PHOENIX-3633 null pointer exception when subsquery for not exists returns empty result set (Jerry He)
+e356f2795 BUG-80747 Sundry improvements around server-side secondary indexing
+d091ecf7d PHOENIX-3895 Upgrade to Apache Avatica 1.10.0
+3dee97b73 PHOENIX-3797 Address issue with compacting local index stores
