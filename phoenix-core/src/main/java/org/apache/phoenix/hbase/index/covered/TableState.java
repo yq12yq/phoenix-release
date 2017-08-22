@@ -63,7 +63,7 @@ public interface TableState {
    *        table, but not to the index table.
    */
   Pair<ValueGetter, IndexUpdate> getIndexUpdateState(
-      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations) throws IOException;
+      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, IndexMetaData indexMetaData) throws IOException;
 
   /**
    * @return the row key for the current row for which we are building an index update.

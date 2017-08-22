@@ -43,6 +43,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     private final Map<String, byte[]> attributes;
     private final IndexMetaDataCache indexMetaDataCache;
     private final boolean ignoreNewerMutations;
+    private final boolean isImmutable;
     
     private static IndexMetaDataCache getIndexMetaData(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
         if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
@@ -88,6 +89,11 @@ public class PhoenixIndexMetaData implements IndexMetaData {
 
     public PhoenixIndexMetaData(RegionCoprocessorEnvironment env, Map<String,byte[]> attributes) throws IOException {
         this.indexMetaDataCache = getIndexMetaData(env, attributes);
+        boolean isImmutable = true;
+        for (IndexMaintainer maintainer : indexMetaDataCache.getIndexMaintainers()) {
+            isImmutable &= maintainer.isImmutableRows();
+        }
+        this.isImmutable = isImmutable;
         this.attributes = attributes;
         this.ignoreNewerMutations = attributes.get(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
     }
@@ -106,5 +112,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     
     public boolean ignoreNewerMutations() {
         return ignoreNewerMutations;
+    }
+
+    @Override
+    public boolean isImmutableRows() {
+        return isImmutable;
     }
 }

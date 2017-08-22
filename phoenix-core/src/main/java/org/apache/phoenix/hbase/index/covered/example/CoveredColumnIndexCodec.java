@@ -60,10 +60,10 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context) {
+    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData indexMetaData) {
         List<IndexUpdate> updates = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
-            IndexUpdate update = getIndexUpdateForGroup(group, state);
+            IndexUpdate update = getIndexUpdateForGroup(group, state, indexMetaData);
             updates.add(update);
         }
         return updates;
@@ -74,10 +74,10 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
      * @param state
      * @return the update that should be made to the table
      */
-    private IndexUpdate getIndexUpdateForGroup(ColumnGroup group, TableState state) {
+    private IndexUpdate getIndexUpdateForGroup(ColumnGroup group, TableState state, IndexMetaData indexMetaData) {
         List<CoveredColumn> refs = group.getColumns();
         try {
-            Pair<Scanner, IndexUpdate> stateInfo = ((LocalTableState)state).getIndexedColumnsTableState(refs, false);
+            Pair<Scanner, IndexUpdate> stateInfo = ((LocalTableState)state).getIndexedColumnsTableState(refs, false, indexMetaData);
             Scanner kvs = stateInfo.getFirst();
             Pair<Integer, List<ColumnEntry>> columns = getNextEntries(refs, kvs, state.getCurrentRowKey());
             // make sure we close the scanner
@@ -114,10 +114,10 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     }
 
     @Override
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context) {
+    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData indexMetaData) {
         List<IndexUpdate> deletes = new ArrayList<IndexUpdate>(groups.size());
         for (ColumnGroup group : groups) {
-            deletes.add(getDeleteForGroup(group, state));
+            deletes.add(getDeleteForGroup(group, state, indexMetaData));
         }
         return deletes;
     }
@@ -129,10 +129,10 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
      *            index information
      * @return the cleanup for the given index, or <tt>null</tt> if no cleanup is necessary
      */
-    private IndexUpdate getDeleteForGroup(ColumnGroup group, TableState state) {
+    private IndexUpdate getDeleteForGroup(ColumnGroup group, TableState state, IndexMetaData indexMetaData) {
         List<CoveredColumn> refs = group.getColumns();
         try {
-            Pair<Scanner, IndexUpdate> kvs = ((LocalTableState)state).getIndexedColumnsTableState(refs, false);
+            Pair<Scanner, IndexUpdate> kvs = ((LocalTableState)state).getIndexedColumnsTableState(refs, false, indexMetaData);
             Pair<Integer, List<ColumnEntry>> columns = getNextEntries(refs, kvs.getFirst(), state.getCurrentRowKey());
             // make sure we close the scanner reference
             kvs.getFirst().close();
