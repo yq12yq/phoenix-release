@@ -125,6 +125,7 @@ import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
+import org.apache.phoenix.expression.function.DistinctCountHyperLogLogAggregateFunction;
 
 import com.google.common.collect.Maps;
 
@@ -281,8 +282,8 @@ public enum ExpressionType {
     FloorYearExpression(FloorYearExpression.class),
     CeilWeekExpression(CeilWeekExpression.class),
     CeilMonthExpression(CeilMonthExpression.class),
-    CeilYearExpression(CeilYearExpression.class);
-    ;
+    CeilYearExpression(CeilYearExpression.class),
+    DistinctCountHyperLogLogAggregateFunction(DistinctCountHyperLogLogAggregateFunction.class);
 
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
