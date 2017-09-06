@@ -21,7 +21,7 @@ package org.apache.phoenix.util.repairtool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.*;
-import org.apache.hadoop.hbase.protobuf.generated.SnapshotProtos;
+import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.repairtool.modules.SystemCatalogCheck;
@@ -103,12 +103,12 @@ public class RepairTool {
             conf = HBaseConfiguration.create();
             admin = new HBaseAdmin(conf);
             Pattern snapshotPattern = Pattern.compile(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + ".*");
-            List<SnapshotProtos.SnapshotDescription> snapshots = admin.listSnapshots(snapshotPattern);
+            List<HBaseProtos.SnapshotDescription> snapshots = admin.listSnapshots(snapshotPattern);
             if(snapshots.size() > 0) {
                 // If we found previously stored snapshot(s), we offer : restore | delete all | continue without deleting | Exit
                 List<String> snapshotNames = new ArrayList<String>(snapshots.size());
                 ConsoleUI.infoMessage("\nPreviously stored snapshots has been found : \n");
-                for(SnapshotProtos.SnapshotDescription snapshot : snapshots) {
+                for(HBaseProtos.SnapshotDescription snapshot : snapshots) {
                     ConsoleUI.infoMessage(snapshot.getName());
                     snapshotNames.add(snapshot.getName());
                 }
