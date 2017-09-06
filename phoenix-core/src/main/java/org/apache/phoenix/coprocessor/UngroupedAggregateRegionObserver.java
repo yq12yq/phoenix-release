@@ -46,10 +46,12 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
@@ -91,6 +93,7 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
@@ -427,6 +430,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         List<Mutation> mutations = Collections.emptyList();
         boolean needToWrite = false;
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
+        if(buildLocalIndex) {
+            checkForLocalIndexColumnFamilies(region, indexMaintainers);
+        }
         if (isDescRowKeyOrderUpgrade || isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             needToWrite = true;
             // TODO: size better
@@ -756,6 +762,31 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         };
         return scanner;
 
+    }
+
+    private void checkForLocalIndexColumnFamilies(Region region,
+            List<IndexMaintainer> indexMaintainers) throws IOException {
+        HTableDescriptor tableDesc = region.getTableDesc();
+        for (IndexMaintainer indexMaintainer : indexMaintainers) {
+            indexMaintainer.getCoveredColumns();
+            Set<ColumnReference> coveredColumns = indexMaintainer.getCoveredColumns();
+            if(coveredColumns.isEmpty()) {
+                byte[] localIndexCf = indexMaintainer.getEmptyKeyValueFamily().get();
+                // When covered columns empty we store index data in default column family so check for it.
+                if (tableDesc.getFamily(localIndexCf) == null) {
+                    ServerUtil.throwIOException("Column Family Not Found",
+                        new ColumnFamilyNotFoundException(Bytes.toString(localIndexCf)));
+                }
+            }
+            for (ColumnReference reference : coveredColumns) {
+                byte[] cf = IndexUtil.getLocalIndexColumnFamily(reference.getFamily());
+                HColumnDescriptor family = region.getTableDesc().getFamily(cf);
+                if (family == null) {
+                    ServerUtil.throwIOException("Column Family Not Found",
+                        new ColumnFamilyNotFoundException(Bytes.toString(cf)));
+                }
+            }
+        }
     }
 
     private void commit(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemstoreSize,

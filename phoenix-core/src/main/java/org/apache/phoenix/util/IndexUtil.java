@@ -184,6 +184,11 @@ public class IndexUtil {
         return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
     }
 
+    public static byte[] getLocalIndexColumnFamily(byte[] dataColumnFamilyBytes) {
+        String dataCF = Bytes.toString(dataColumnFamilyBytes);
+        return getLocalIndexColumnFamily(dataCF).getBytes();
+    }
+    
     public static String getLocalIndexColumnFamily(String dataColumnFamilyName) {
         return dataColumnFamilyName == null ? null
                 : QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + dataColumnFamilyName;

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
@@ -80,6 +81,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -776,8 +778,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     } catch (ExecutionException e) {
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
-                        } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2)
-                         {
+                        } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2) {
                             try{
                             scanPairItr.remove();
                             }catch(UnsupportedOperationException uoe){
@@ -792,7 +793,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Resubmit just this portion of work again
                             Scan oldScan = scanPair.getFirst();
                             byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
-                            byte[] endKey = oldScan.getStopRow();
                             if(e2 instanceof HashJoinCacheNotFoundException){
                                 logger.debug(
                                         "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
@@ -803,14 +803,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                 if (!hashCacheClient.addHashCacheToServer(startKey,
                                         ServerCacheClient.getCacheForId(caches, cacheId), plan.getTableRef().getTable())) { throw e2; }
                             }
-                            
-                            List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
-                            // Add any concatIterators that were successful so far
-                            // as we need these to be in order
-                            addIterator(iterators, concatIterators);
-                            concatIterators = Lists.newArrayList();
-                            getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
-                                    maxQueryEndTime, newNestedScans.size(), previousScan, retryCount - 1);
+                            concatIterators =
+                                    recreateIterators(services, isLocalIndex, allIterators,
+                                        iterators, isReverse, maxQueryEndTime, previousScan,
+                                        clearedCache, concatIterators, scanPairItr, scanPair, retryCount);
+                        } catch(ColumnFamilyNotFoundException cfnfe) {
+                            if (scanPair.getFirst().getAttribute(LOCAL_INDEX_BUILD) != null) {
+                                Thread.sleep(1000);
+                                concatIterators =
+                                        recreateIterators(services, isLocalIndex, allIterators,
+                                            iterators, isReverse, maxQueryEndTime, previousScan,
+                                            clearedCache, concatIterators, scanPairItr, scanPair, retryCount);
+                            }
                         }
                     }
                 }
@@ -863,7 +867,28 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return null; // Not reachable
     }
     
+    private List<PeekingResultIterator> recreateIterators(ConnectionQueryServices services,
+            boolean isLocalIndex, Queue<PeekingResultIterator> allIterators,
+            List<PeekingResultIterator> iterators, boolean isReverse, long maxQueryEndTime,
+            ScanWrapper previousScan, boolean clearedCache,
+            List<PeekingResultIterator> concatIterators,
+            Iterator<Pair<Scan, Future<PeekingResultIterator>>> scanPairItr,
+            Pair<Scan, Future<PeekingResultIterator>> scanPair, int retryCount) throws SQLException {
+        // Resubmit just this portion of work again
+        Scan oldScan = scanPair.getFirst();
+        byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
+        byte[] endKey = oldScan.getStopRow();
 
+        List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
+        // Add any concatIterators that were successful so far
+        // as we need these to be in order
+        addIterator(iterators, concatIterators);
+        concatIterators = Lists.newArrayList();
+        getIterators(newNestedScans, services, isLocalIndex, allIterators, iterators, isReverse,
+                maxQueryEndTime, newNestedScans.size(), previousScan, retryCount);
+        return concatIterators;
+    }
+    
     @Override
     public void close() throws SQLException {
        

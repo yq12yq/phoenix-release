@@ -844,7 +844,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
         int i = 0;
-        for (ColumnReference ref : this.getCoverededColumns()) {
+        for (ColumnReference ref : this.getCoveredColumns()) {
             ImmutableBytesPtr cq = this.indexQualifiers.get(i++);
             ImmutableBytesWritable value = valueGetter.getLatestValue(ref);
             byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey);
@@ -947,7 +947,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Delete delete = new Delete(indexRowKey);
             // If table delete was single version, then index delete should be as well
             if (deleteType == DeleteType.SINGLE_VERSION) {
-                for (ColumnReference ref : getCoverededColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
+                for (ColumnReference ref : getCoveredColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
                     if(this.isLocalIndex) {
 						ref = this.coveredColumnsMap.get(ref);
                     }
@@ -955,7 +955,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 delete.deleteFamilyVersion(emptyCF, ts);
             } else {
-                for (ColumnReference ref : getCoverededColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
+                for (ColumnReference ref : getCoveredColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
                     if(this.isLocalIndex) {
 						ref = this.coveredColumnsMap.get(ref);
                     }
@@ -996,7 +996,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return indexTableName;
     }
     
-    public Set<ColumnReference> getCoverededColumns() {
+    public Set<ColumnReference> getCoveredColumns() {
         return coveredColumns;
     }
 

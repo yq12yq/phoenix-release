@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -40,13 +41,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
-import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
@@ -189,14 +188,14 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     // used to create an index while a batch of rows are being written
     public static class CreateIndexRegionObserver extends SimpleRegionObserver {
         @Override
-        public void postPut(ObserverContext<RegionCoprocessorEnvironment> c,
-                Put put, WALEdit edit, final Durability durability)
-                        throws HBaseIOException {
-            String tableName = c.getEnvironment().getRegion().getRegionInfo()
+        public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> ctx,
+                MiniBatchOperationInProgress<Mutation> miniBatchOp, boolean success)
+                throws IOException {
+            String tableName = ctx.getEnvironment().getRegion().getRegionInfo()
                     .getTable().getNameAsString();
             if (tableName.equalsIgnoreCase(TABLE_NAME)
                     // create the index after the second batch  
-                    && Bytes.startsWith(put.getRow(), Bytes.toBytes("varchar200_upsert_select"))) {
+                    && Bytes.startsWith(miniBatchOp.getOperation(0).getRow(), Bytes.toBytes("varchar200_upsert_select"))) {
                 try {
                     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
                     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
