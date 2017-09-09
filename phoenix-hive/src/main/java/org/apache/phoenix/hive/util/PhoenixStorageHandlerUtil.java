@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.DNS;
+import org.apache.phoenix.hive.PrimaryKeyData;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -47,6 +48,8 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -246,16 +249,13 @@ public class PhoenixStorageHandlerUtil {
     }
 
     public static Map<?, ?> toMap(byte[] serialized) {
-        Map<?, ?> resultMap = null;
         ByteArrayInputStream bais = new ByteArrayInputStream(serialized);
 
-        try (ObjectInputStream ois = new ObjectInputStream(bais)) {
-            resultMap = (Map<?, ?>) ois.readObject();
+        try {
+            return PrimaryKeyData.deserialize(bais).getData();
         } catch (ClassNotFoundException | IOException e) {
             throw new RuntimeException(e);
         }
-
-        return resultMap;
     }
 
     public static String getOptionsValue(Options options) {
