@@ -207,21 +207,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         scansReferenceCount = 0;
     }
 
-    private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
-            long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState) throws IOException {
+    private void commitBatch(Region region, List<Mutation> mutations, long blockingMemstoreSize) throws IOException {
 
         if (mutations.isEmpty()) { return; }
-        for (Mutation m : mutations) {
-            if (indexMaintainersPtr != null) {
-                m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-            }
-            if (indexUUID != null) {
-                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-            }
-            if (txState != null) {
-                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-            }
-        }
         Mutation[] mutationArray = new Mutation[mutations.size()];
         // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
         // flush happen which decrease the memstore size and then writes allowed on the region.
@@ -234,6 +222,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 throw new IOException(e);
             }
         }
+        logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
         region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
@@ -253,35 +242,27 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
     
-    private void commitBatchWithHTable(HTable table, Region region, List<Mutation> mutations, byte[] indexUUID,
-            long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState) throws IOException {
-        if (mutations.isEmpty()) { return; }
+    private void setIndexAndTransactionProperties(List<Mutation> mutations, byte[] indexUUID, byte[] indexMaintainersPtr, byte[] txState) {
         for (Mutation m : mutations) {
-            if (indexMaintainersPtr != null) {
-                m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-            }
-            if (txState != null) {
-                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-            }
-            if (indexUUID != null) {
-               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-             }
-         }
-        // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
-        // flush happen which decrease the memstore size and then writes allowed on the region.
-        for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
-            try {
-                checkForRegionClosing(region.getRegionInfo());
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IOException(e);
-            }
+           if (indexMaintainersPtr != null) {
+               m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+           }
+           if (indexUUID != null) {
+             m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+           }
+           if (txState != null) {
+               m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+           }
         }
+    }
+    
+    private void commitBatchWithHTable(HTable table, List<Mutation> mutations) throws IOException {
+        if (mutations.isEmpty()) { return; }
         logger.debug("Committing batch of " + mutations.size() + " mutations for " + table);
         try {
             table.batch(mutations);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         }
     }
@@ -382,7 +363,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] deleteCF = null;
         byte[] emptyCF = null;
         HTable targetHTable = null;
-        boolean areMutationInSameRegion = true;
+        boolean isPKChanging = false;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (upsertSelectTable != null) {
             isUpsert = true;
@@ -390,10 +371,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             targetHTable = new HTable(upsertSelectConfig, projectedTable.getPhysicalName().getBytes());
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
-            areMutationInSameRegion = Bytes.compareTo(targetHTable.getTableName(),
-                    region.getTableDesc().getTableName().getName()) == 0 && projectedTable.getRowTimestampColPos() == -1
-                    && !isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
-            
+            isPKChanging = isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
         } else {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
             isDelete = isDeleteAgg != null && Bytes.compareTo(PDataType.TRUE_BYTES, isDeleteAgg) == 0;
@@ -678,12 +656,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (ServerUtil.readyToCommit(mutations, batchSize)) {
                                 commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
-                                        areMutationInSameRegion, targetHTable);
+                                        targetHTable, isPKChanging);
                                 mutations.clear();
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (ServerUtil.readyToCommit(indexMutations, batchSize)) {
-                                commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState);
+                                setIndexAndTransactionProperties(indexMutations, indexUUID, indexMaintainersPtr, txState);
+                                commitBatch(region, indexMutations, blockingMemStoreSize);
                                 indexMutations.clear();
                             }
                         } catch (ConstraintViolationException e) {
@@ -700,12 +679,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
                     commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
-                            areMutationInSameRegion, targetHTable);
+                            targetHTable, isPKChanging);
                     mutations.clear();
                 }
 
                 if (!indexMutations.isEmpty()) {
-                    commitBatch(region,indexMutations, null, blockingMemStoreSize, null, txState);
+                    setIndexAndTransactionProperties(indexMutations, indexUUID, indexMaintainersPtr, txState);
+                    commitBatch(region, indexMutations, blockingMemStoreSize);
                     indexMutations.clear();
                 }
             }
@@ -786,17 +766,42 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private void commit(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemstoreSize,
-            byte[] indexMaintainersPtr, byte[] txState, boolean areMutationsForSameRegion, HTable hTable)
+    private void commit(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemStoreSize,
+            byte[] indexMaintainersPtr, byte[] txState, HTable targetHTable,
+                        boolean isPKChanging)
             throws IOException {
-        if (!areMutationsForSameRegion) {
-            assert hTable != null;// table cannot be null
-            commitBatchWithHTable(hTable, region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr,
-                    txState);
-        } else {
-            commitBatch(region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr, txState);
-        }
+        List<Mutation> localRegionMutations = Lists.newArrayList();
+        List<Mutation> remoteRegionMutations = Lists.newArrayList();
+        setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState);
+        separateLocalAndRemoteMutations(targetHTable, region, mutations, localRegionMutations, remoteRegionMutations,
+            isPKChanging);
+        commitBatch(region, localRegionMutations, blockingMemStoreSize);
+        commitBatchWithHTable(targetHTable, remoteRegionMutations);
+        localRegionMutations.clear();
+        remoteRegionMutations.clear();
     }
+
+    private void separateLocalAndRemoteMutations(HTable targetHTable, Region region, List<Mutation> mutations,
+                                                 List<Mutation> localRegionMutations, List<Mutation> remoteRegionMutations,
+                                                 boolean isPKChanging){
+        boolean areMutationsInSameTable = areMutationsInSameTable(targetHTable, region);
+        //if we're writing to the same table, but the PK can change, that means that some
+        //mutations might be in our current region, and others in a different one.
+        if (areMutationsInSameTable && isPKChanging) {
+            HRegionInfo regionInfo = region.getRegionInfo();
+            for (Mutation mutation : mutations){
+                if (regionInfo.containsRow(mutation.getRow())){
+                    localRegionMutations.add(mutation);
+                } else {
+                    remoteRegionMutations.add(mutation);
+                }
+            }
+        } else if (areMutationsInSameTable && !isPKChanging) {
+            localRegionMutations.addAll(mutations);
+        } else {
+            remoteRegionMutations.addAll(mutations);
+         }
+     }
 
     private boolean isPkPositionChanging(TableRef tableRef, List<Expression> projectedExpressions) {
         // If the row ends up living in a different region, we'll get an error otherwise.
@@ -807,6 +812,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return true; }
         }
         return false;
+    }
+    
+    private boolean areMutationsInSameTable(HTable targetHTable, Region region) {
+        return (targetHTable == null
+                || Bytes.compareTo(targetHTable.getTableName(), region.getTableDesc().getTableName().getName()) == 0);
     }
     
     @Override
