@@ -19,8 +19,15 @@ package org.apache.hadoop.hbase.regionserver;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
@@ -59,9 +66,10 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.RepairUtil;
-import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     private static final Logger logger = LoggerFactory.getLogger(IndexHalfStoreFileReaderGenerator.class);
@@ -192,7 +200,21 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         Scan scan = new Scan();
         scan.setMaxVersions(store.getFamily().getMaxVersions());
         if (!store.hasReferences()) {
-            return s;
+            InternalScanner repairScanner = null;
+            if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
+                LOG.info("we have found inconsistent data for local index for region:"
+                        + c.getEnvironment().getRegion().getRegionInfo());
+                if (c.getEnvironment().getConfiguration().getBoolean(LOCAL_INDEX_AUTOMATIC_REPAIR, true)) {
+                    LOG.info("Starting automatic repair of local Index for region:"
+                            + c.getEnvironment().getRegion().getRegionInfo());
+                    repairScanner = getRepairScanner(c.getEnvironment(), store);
+                }
+            }
+            if (repairScanner != null) {
+                return repairScanner;
+            } else {
+                return s;
+            }
         }
         List<StoreFileScanner> newScanners = new ArrayList<StoreFileScanner>(scanners.size());
         boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
@@ -272,7 +294,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
             }
             return new DataTableLocalIndexRegionScanner(env.getRegion().getScanner(scan), env.getRegion(),
-                    maintainers, store.getFamily().getName());
+                    maintainers, store.getFamily().getName(),env.getConfiguration());
             
 
         } catch (ClassNotFoundException | SQLException e) {
@@ -281,6 +303,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         }
     }
     
+    private static final String LOCAL_INDEX_AUTOMATIC_REPAIR = "local.index.automatic.repair";
+    public static final Log LOG = LogFactory.getLog(IndexHalfStoreFileReaderGenerator.class);
+
     @Override
     public KeyValueScanner preStoreScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Store store, final Scan scan, final NavigableSet<byte[]> targetCols,
