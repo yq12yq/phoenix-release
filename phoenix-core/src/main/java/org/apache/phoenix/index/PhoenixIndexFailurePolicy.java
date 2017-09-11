@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
@@ -226,6 +227,8 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                                         mutation.getRow().length - offset));
                 String indexTableName = localIndexNames.get(new ImmutableBytesWritable(viewId));
                 if (indexTableName == null) {
+                    LOG.error("Unable to find local index on " + ref.getTableName() + " with viewID of " + Bytes.toStringBinary(viewId));
+                } else {
                     indexTableNames.add(indexTableName);
                 }
             }
