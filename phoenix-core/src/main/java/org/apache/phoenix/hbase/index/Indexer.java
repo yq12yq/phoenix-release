@@ -82,7 +82,6 @@ import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -654,7 +653,7 @@ public class Indexer extends BaseRegionObserver {
            * hopes they come up before the primary table finishes.
            */
           Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-          recoveryWriter.write(indexUpdates, true);
+          recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true);
       } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           if (duration >= slowPreWALRestoreThreshold) {
