@@ -63,6 +63,16 @@ public class IndexWriterUtils {
   private static final String INDEX_WRITER_PER_TABLE_THREADS_CONF_KEY =
       "index.writer.threads.pertable.max";
   private static final int DEFAULT_NUM_PER_TABLE_THREADS = Integer.MAX_VALUE;
+  public static final String INDEX_WRITER_RPC_RETRIES_NUMBER = "phoenix.index.writes.rpc.retries.number";
+  /**
+   * Based on the logic in HBase's AsyncProcess, a default of 11 retries with a pause of 100ms
+   * approximates 48 sec total retry time (factoring in backoffs).  The total time should be less
+   * than HBase's rpc timeout (default of 60 sec) or else the client will retry before receiving
+   * the response
+   */
+  public static final int DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER = 11;
+  public static final String INDEX_WRITER_RPC_PAUSE = "phoenix.index.writes.rpc.pause";
+  public static final int DEFAULT_INDEX_WRITER_RPC_PAUSE = 100;
 
   /** Configuration key that HBase uses to set the max number of threads for an HTable */
   public static final String HTABLE_THREAD_KEY = "hbase.htable.threads.max";
