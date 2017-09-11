@@ -51,7 +51,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
@@ -92,8 +91,8 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
@@ -211,17 +210,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
             long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState) throws IOException {
 
-        if (indexMaintainersPtr != null) {
-            mutations.get(0).setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-        }
-
-        if (txState != null) {
-            mutations.get(0).setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-        }
-        
-        if (indexUUID != null) {
-            for (Mutation m : mutations) {
+        if (mutations.isEmpty()) { return; }
+        for (Mutation m : mutations) {
+            if (indexMaintainersPtr != null) {
+                m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+            }
+            if (indexUUID != null) {
                 m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+            }
+            if (txState != null) {
+                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
             }
         }
         Mutation[] mutationArray = new Mutation[mutations.size()];
@@ -257,19 +255,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     
     private void commitBatchWithHTable(HTable table, Region region, List<Mutation> mutations, byte[] indexUUID,
             long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState) throws IOException {
-
-        if (indexUUID != null) {
-            // Need to add indexMaintainers for each mutation as table.batch can be distributed across servers
-            for (Mutation m : mutations) {
-                if (indexMaintainersPtr != null) {
-                    m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-                }
-                if (txState != null) {
-                    m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-                }
-                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+        if (mutations.isEmpty()) { return; }
+        for (Mutation m : mutations) {
+            if (indexMaintainersPtr != null) {
+                m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
             }
-        }
+            if (txState != null) {
+                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+            }
+            if (indexUUID != null) {
+               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+             }
+         }
         // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
         // flush happen which decrease the memstore size and then writes allowed on the region.
         for (int i = 0; region.getMemstoreSize() > blockingMemstoreSize && i < 30; i++) {
@@ -679,13 +676,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                            if (readyToCommit(mutations, batchSize)) {
+                            if (ServerUtil.readyToCommit(mutations, batchSize)) {
                                 commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                         areMutationInSameRegion, targetHTable);
                                 mutations.clear();
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                            if (readyToCommit(indexMutations, batchSize)) {
+                            if (ServerUtil.readyToCommit(indexMutations, batchSize)) {
                                 commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState);
                                 indexMutations.clear();
                             }
@@ -811,11 +808,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         return false;
     }
-
-    private boolean readyToCommit(List<Mutation> mutations,int batchSize){
-        return !mutations.isEmpty() && batchSize > 0 &&
-        mutations.size() > batchSize;
-    }
+    
     @Override
     public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final InternalScanner scanner, final ScanType scanType) throws IOException {

@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,6 +30,7 @@ import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
@@ -182,5 +184,10 @@ public class ServerUtil {
             return env.getTable(TableName.valueOf(tableName));
         }
         return getTableFromSingletonPool(env, tableName);
+    }
+    
+    public static boolean readyToCommit(List<Mutation> mutations,int batchSize){
+        return !mutations.isEmpty() && batchSize > 0 &&
+        mutations.size() >= batchSize;
     }
 }
