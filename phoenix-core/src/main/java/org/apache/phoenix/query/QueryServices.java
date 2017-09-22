@@ -231,6 +231,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB = "phoenix.client.localIndexUpgrade";
     // currently BASE64 and ASCII is supported
     public static final String UPLOAD_BINARY_DATA_TYPE_ENCODING = "phoenix.upload.binaryDataType.encoding";
+    // Toggle for server-written updates to SYSTEM.CATALOG
+    public static final String PHOENIX_ACLS_ENABLED = "phoenix.acls.enabled";
+    public static final String PHOENIX_AUTOMATIC_GRANT_ENABLED = "phoenix.security.automatic.grant.enabled";
+    public static final String PHOENIX_SECURITY_PERMISSION_STRICT_MODE_ENABLED = "phoenix.security.strict.mode.enabled";
 
     /**
      * Get executor service used for parallel scans

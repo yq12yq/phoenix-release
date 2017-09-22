@@ -726,7 +726,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create table t1 (id bigint not null primary key, v varchar)");
         conn.createStatement().execute("create table t2 (k varchar primary key)");
-        conn.createStatement().execute("create sequence s");
+        conn.createStatement().execute("create sequence s1");
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
@@ -738,7 +738,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("upsert into t1 select next value for s, k from t2");
+        conn.createStatement().execute("upsert into t1 select next value for s1, k from t2");
         conn.commit();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
@@ -777,7 +777,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
                 "CREATE TABLE DUMMY_SEQ_TEST_DATA "
                         + "(ORGANIZATION_ID CHAR(15) NOT NULL, k1 integer NOT NULL, v1 integer NOT NULL "
                         + "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, k1, v1) ) VERSIONS=1, SALT_BUCKETS = 4");
-        conn.createStatement().execute("create sequence s cache " + Integer.MAX_VALUE);
+        conn.createStatement().execute("create sequence s1 cache " + Integer.MAX_VALUE);
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
@@ -793,7 +793,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute(
-                    "UPSERT INTO DUMMY_CURSOR_STORAGE SELECT '00Dxx0000001gEH', 'MyQueryId', NEXT VALUE FOR S, k1, v1  FROM DUMMY_SEQ_TEST_DATA ORDER BY K1, V1");
+                    "UPSERT INTO DUMMY_CURSOR_STORAGE SELECT '00Dxx0000001gEH', 'MyQueryId', NEXT VALUE FOR S1, k1, v1  FROM DUMMY_SEQ_TEST_DATA ORDER BY K1, V1");
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
