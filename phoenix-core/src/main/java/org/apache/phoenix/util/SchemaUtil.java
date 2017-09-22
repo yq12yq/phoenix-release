@@ -20,9 +20,11 @@ package org.apache.phoenix.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -42,8 +44,10 @@ import java.util.TreeSet;
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -73,6 +77,7 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -956,8 +961,17 @@ public class SchemaUtil {
         return SchemaUtil.getTableKey(null, schemaName, MetaDataClient.EMPTY_TABLE);
     }
 
+    public static PName getPhysicalHBaseTableName(PName schemaName, PName tableName, boolean isNamespaceMapped) {
+        return getPhysicalHBaseTableName(
+            schemaName == null ? null : schemaName.toString(), tableName.toString(), isNamespaceMapped);
+    }
+
     public static PName getPhysicalHBaseTableName(PName pName, boolean isNamespaceMapped, PTableType type) {
         return getPhysicalHBaseTableName(pName.toString(), isNamespaceMapped, type);
+    }
+
+    public static PName getPhysicalHBaseTableName(byte[] schemaName, byte[] tableName, boolean isNamespaceMapped) {
+        return getPhysicalHBaseTableName(Bytes.toString(schemaName), Bytes.toString(tableName), isNamespaceMapped);
     }
 
     public static PName getPhysicalHBaseTableName(byte[] tableName, boolean isNamespaceMapped, PTableType type) {
@@ -990,6 +1004,12 @@ public class SchemaUtil {
         if (!isNamespaceMapped) { return PNameFactory.newName(tableName); }
         return PNameFactory
                 .newName(tableName.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
+    }
+
+    public static PName getPhysicalHBaseTableName(String schemaName, String tableName, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) { return PNameFactory.newName(getTableNameAsBytes(schemaName, tableName)); }
+        if (schemaName == null || schemaName.isEmpty()) { return PNameFactory.newName(tableName); }
+        return PNameFactory.newName(schemaName + QueryConstants.NAMESPACE_SEPARATOR + tableName);
     }
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
@@ -1041,4 +1061,10 @@ public class SchemaUtil {
             return normalizeIdentifier(tableName);
         }
     }
+
+    public static boolean isNamespaceMapped(Result currentResult) {
+        Cell isNamespaceMappedCell = currentResult.getColumnLatestCell(TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
+        return isNamespaceMappedCell!=null && (boolean) PBoolean.INSTANCE.toObject(isNamespaceMappedCell.getValue());
+    }
+
 }
