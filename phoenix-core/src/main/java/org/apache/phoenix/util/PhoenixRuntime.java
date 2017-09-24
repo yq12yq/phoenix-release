@@ -85,22 +85,14 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.CSVCommonsLoader;
-import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TransactionUtil;
-import org.apache.phoenix.util.UpgradeUtil;
-
 import org.apache.phoenix.util.repairtool.RepairTool;
-import co.cask.tephra.util.TxUtils;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+
+import co.cask.tephra.util.TxUtils;
 /**
  *
  * Collection of non JDBC compliant utility methods

@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -346,5 +347,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public void invalidateStats(ImmutableBytesPtr tableName) {
         getDelegate().invalidateStats(tableName);
+    }
+
+    @Override
+    public Configuration getConfiguration() {
+        return getDelegate().getConfiguration();
     }
 }

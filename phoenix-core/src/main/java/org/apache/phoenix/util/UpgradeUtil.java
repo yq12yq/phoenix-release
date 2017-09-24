@@ -29,7 +29,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -62,9 +61,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.TimeoutException;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -128,6 +127,7 @@ public class UpgradeUtil {
     private static final Logger logger = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
     public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
+    private static final String DO_NOT_UPGRADE = "DoNotUpgrade";
     
     public static String UPSERT_BASE_COLUMN_COUNT_IN_HEADER_ROW = "UPSERT "
             + "INTO SYSTEM.CATALOG "
@@ -1886,6 +1886,14 @@ public class UpgradeUtil {
         if (passedConn != conn) {
             conn.close();
         }
+    }
+    
+    public static boolean isNoUpgradeSet(Properties props) {
+        return Boolean.compare(true, Boolean.valueOf(props.getProperty(DO_NOT_UPGRADE))) == 0;
+    }
+    
+    public static void doNotUpgradeOnFirstConnection(Properties props) {
+        props.setProperty(DO_NOT_UPGRADE, String.valueOf(true));
     }
 
 }

@@ -25,7 +25,6 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -37,10 +36,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.util.Addressing;
-import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -264,6 +262,18 @@ public final class QueryUtil {
         return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     }
+    
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, int port, String znodeParent, String principal) {
+        return getUrlInternal(zkQuorum, port, znodeParent, principal);
+    }
+
+    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent, String principal) {
+        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent, principal, null).toUrl()
+                + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+    }
 
     public static String getExplainPlan(ResultSet rs) throws SQLException {
         StringBuilder buf = new StringBuilder();
@@ -295,59 +305,88 @@ public final class QueryUtil {
             SQLException {
         return getConnection(new Properties(), conf);
     }
+    
+    /**
+     * @return {@link PhoenixConnection} with {@value UpgradeUtil#DO_NOT_UPGRADE} set so that we don't initiate metadata upgrade.
+     */
+    public static Connection getConnectionOnServer(Properties props, Configuration conf)
+            throws ClassNotFoundException,
+            SQLException {
+        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
+        return getConnection(props, conf);
+    }
+    
+    public static Connection getConnectionOnServerWithCustomUrl(Properties props, String principal)
+            throws SQLException, ClassNotFoundException {
+        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
+        String url = getConnectionUrl(props, null, principal);
+        LOG.info("Creating connection with the jdbc url: " + url);
+        return DriverManager.getConnection(url, props);
+    }
 
     public static Connection getConnection(Properties props, Configuration conf)
             throws ClassNotFoundException,
             SQLException {
         String url = getConnectionUrl(props, conf);
         LOG.info("Creating connection with the jdbc url: " + url);
-        PropertiesUtil.extractProperties(props, conf);
+        props = PropertiesUtil.combineProperties(props, conf);
         return DriverManager.getConnection(url, props);
     }
+    
+    public static String getConnectionUrl(Properties props, Configuration conf) throws ClassNotFoundException, SQLException{
+        return getConnectionUrl(props, conf, null);
+    }
 
-    public static String getConnectionUrl(Properties props, Configuration conf)
+    /**
+     * @return connection url using the various properties set in props and conf. This method is an
+     *         alternative to {@link #getConnectionUrlUsingProps(Properties, String)} when all the
+     *         relevant connection properties are passed in both {@link Properties} and {@link Configuration}
+     */
+    public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws ClassNotFoundException, SQLException {
-        // TODO: props is ignored!
         // read the hbase properties from the configuration
-        String server = ZKConfig.getZKQuorumServersString(conf);
-        // could be a comma-separated list
-        String[] rawServers = server.split(",");
-        List<String> servers = new ArrayList<String>(rawServers.length);
-        int port = -1;
-        for (String serverPort : rawServers) {
-            try {
-                server = Addressing.parseHostname(serverPort);
-                int specifiedPort = Addressing.parsePort(serverPort);
-                // there was a previously specified port and it doesn't match this server
-                if (port > 0 && specifiedPort != port) {
-                    throw new IllegalStateException("Phoenix/HBase only supports connecting to a " +
-                            "single zookeeper client port. Specify servers only as host names in " +
-                            "HBase configuration");
-                }
-                // set the port to the specified port
-                port = specifiedPort;
-                servers.add(server);
-            } catch (IllegalArgumentException e) {
-            }
+        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, props, conf);
+        // Build the ZK quorum server string with "server:clientport" list, separated by ','
+        final String server = getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
+        String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);
+        String url = getUrl(server, port, znodeParent, principal);
+        if (url.endsWith(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + "")) {
+            url = url.substring(0, url.length() - 1);
         }
-        // port wasn't set, shouldn't ever happen from HBase, but just in case
-        if (port == -1) {
-            port = conf.getInt(QueryServices.ZOOKEEPER_PORT_ATTRIB, -1);
-            if (port == -1) {
-                // TODO: fall back to the default in HConstants#DEFAULT_ZOOKEPER_CLIENT_PORT
-                throw new RuntimeException("Client zk port was not set!");
-            }
-        }
-        server = Joiner.on(',').join(servers);
-        String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
-                HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-        String url = getUrl(server, port, znodeParent);
         // Mainly for testing to tack on the test=true part to ensure driver is found on server
-        String extraArgs = conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        String defaultExtraArgs =
+                conf != null
+                        ? conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS)
+                        : QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS;
+        // If props doesn't have a default for extra args then use the extra args in conf as default
+        String extraArgs =
+                props.getProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, defaultExtraArgs);
         if (extraArgs.length() > 0) {
-            url += extraArgs + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+            url +=
+                    PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + extraArgs
+                            + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+        } else {
+            url += PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+         }
+         return url;
+     }
+    
+
+    private static int getInt(String key, int defaultValue, Properties props, Configuration conf) {
+        if (conf == null) {
+            Preconditions.checkNotNull(props);
+            return Integer.parseInt(props.getProperty(key, String.valueOf(defaultValue)));
         }
-        return url;
+        return conf.getInt(key, defaultValue);
+    }
+
+    private static String getString(String key, String defaultValue, Properties props, Configuration conf) {
+        if (conf == null) {
+            Preconditions.checkNotNull(props);
+            return props.getProperty(key, defaultValue);
+        }
+        return conf.get(key, defaultValue);
     }
     
     public static String getViewStatement(String schemaName, String tableName, String where) {

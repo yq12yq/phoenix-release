@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -139,4 +140,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * @param tableName The table to remove stats for
      */
     void invalidateStats(ImmutableBytesPtr tableName);
+
+    Configuration getConfiguration();
 }
