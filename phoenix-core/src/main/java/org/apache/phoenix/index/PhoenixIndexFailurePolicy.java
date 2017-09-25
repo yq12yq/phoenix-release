@@ -225,7 +225,9 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                                 new ImmutableBytesWritable(mutation.getRow(), offset,
                                         mutation.getRow().length - offset));
                 String indexTableName = localIndexNames.get(new ImmutableBytesWritable(viewId));
-                indexTableNames.add(indexTableName);
+                if (indexTableName == null) {
+                    indexTableNames.add(indexTableName);
+                }
             }
         } catch (ClassNotFoundException e) {
             throw new IOException(e);

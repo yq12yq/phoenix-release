@@ -57,6 +57,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -102,7 +103,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
-    public static final String IGNORE_NEWER_MUTATIONS = "_IGNORE_NEWER_MUTATIONS";
+    public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
     public static final String SCAN_START_ROW_SUFFIX = "_ScanStartRowSuffix";
     public static final String SCAN_STOP_ROW_SUFFIX = "_ScanStopRowSuffix";
@@ -116,6 +117,27 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
     /** Exposed for testing */
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
+
+    public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
+    public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
+
+    public enum ReplayWrite {
+        TABLE_AND_INDEX,
+        INDEX_ONLY;
+
+        public static ReplayWrite fromBytes(byte[] replayWriteBytes) {
+            if (replayWriteBytes == null) {
+                return null;
+            }
+            if (Bytes.compareTo(REPLAY_TABLE_AND_INDEX_WRITES, replayWriteBytes) == 0) {
+                return TABLE_AND_INDEX;
+            }
+            if (Bytes.compareTo(REPLAY_ONLY_INDEX_WRITES, replayWriteBytes) == 0) {
+                return INDEX_ONLY;
+            }
+            throw new IllegalArgumentException("Unknown ReplayWrite code of " + Bytes.toStringBinary(replayWriteBytes));
+        }
+    };
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {

@@ -39,6 +39,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
@@ -53,6 +54,7 @@ import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControlle
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.OperationStatus;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
@@ -63,6 +65,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
@@ -104,7 +107,8 @@ import com.google.common.collect.Multimap;
 public class Indexer extends BaseRegionObserver {
 
   private static final Log LOG = LogFactory.getLog(Indexer.class);
-
+  private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
+  
   protected IndexWriter writer;
   protected IndexBuildManager builder;
   private RegionCoprocessorEnvironment environment;
@@ -305,6 +309,9 @@ public class Indexer extends BaseRegionObserver {
                   Durability.SYNC_WAL : defaultDurability;
       }
       Durability durability = Durability.SKIP_WAL;
+      Mutation firstMutation = miniBatchOp.getOperation(0);
+      ReplayWrite replayWrite = this.builder.getReplayWrite(firstMutation);
+
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
           // skip this mutation if we aren't enabling indexing
@@ -319,6 +326,12 @@ public class Indexer extends BaseRegionObserver {
                   defaultDurability : m.getDurability();
           if (effectiveDurablity.ordinal() > durability.ordinal()) {
               durability = effectiveDurablity;
+          }
+
+          // No need to write the table mutations when we're rebuilding
+          // the index as they're already written and just being replayed.
+          if (replayWrite == ReplayWrite.INDEX_ONLY) {
+              miniBatchOp.setOperationStatus(i, NOWRITE);
           }
 
           // add the mutation to the batch set

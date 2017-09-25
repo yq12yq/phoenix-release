@@ -29,6 +29,7 @@ import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -42,8 +43,8 @@ import co.cask.tephra.Transaction;
 public class PhoenixIndexMetaData implements IndexMetaData {
     private final Map<String, byte[]> attributes;
     private final IndexMetaDataCache indexMetaDataCache;
-    private final boolean ignoreNewerMutations;
     private final boolean isImmutable;
+    private final ReplayWrite replayWrite;
     
     private static IndexMetaDataCache getIndexMetaData(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
         if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
@@ -95,7 +96,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         }
         this.isImmutable = isImmutable;
         this.attributes = attributes;
-        this.ignoreNewerMutations = attributes.get(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
+        this.replayWrite = getReplayWrite(attributes);
     }
     
     public Transaction getTransaction() {
@@ -110,12 +111,17 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         return attributes;
     }
     
-    public boolean ignoreNewerMutations() {
-        return ignoreNewerMutations;
-    }
-
     @Override
     public boolean isImmutableRows() {
         return isImmutable;
+    }
+
+    public static ReplayWrite getReplayWrite(Map<String,byte[]> attributes) {
+        return ReplayWrite.fromBytes(attributes.get(BaseScannerRegionObserver.REPLAY_WRITES));
+    }
+
+    @Override
+    public ReplayWrite getReplayWrite() {
+        return replayWrite;
     }
 }

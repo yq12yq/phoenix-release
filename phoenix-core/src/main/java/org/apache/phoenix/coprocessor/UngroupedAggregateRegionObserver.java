@@ -884,8 +884,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     put = new Put(CellUtil.cloneRow(cell));
                                     put.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    put.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
-                                            PDataType.TRUE_BYTES);
+                                    put.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
                                     mutations.add(put);
                                 }
                                 put.add(cell);
@@ -894,8 +893,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     del = new Delete(CellUtil.cloneRow(cell));
                                     del.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMetaData);
                                     del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                    del.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
-                                            PDataType.TRUE_BYTES);
+                                    del.setAttribute(REPLAY_WRITES, REPLAY_ONLY_INDEX_WRITES);
                                     mutations.add(del);
                                 }
                                 del.addDeleteMarker(cell);

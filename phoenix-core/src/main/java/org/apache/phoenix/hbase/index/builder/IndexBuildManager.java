@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
@@ -165,5 +166,9 @@ public class IndexBuildManager implements Stoppable {
 
   public IndexBuilder getBuilderForTesting() {
     return this.delegate;
+  }
+
+  public ReplayWrite getReplayWrite(Mutation m) throws IOException {
+      return this.delegate.getReplayWrite(m);
   }
 }

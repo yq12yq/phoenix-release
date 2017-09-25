@@ -88,8 +88,11 @@ public class AutomaticRebuildIT extends BaseOwnClusterIT {
 		serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
 		serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
 		serverProps.put("hbase.client.pause", "5000");
-		serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, "1000");
-		serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE, "5");
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, "20000");
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME_ATTRIB,
+            Long.toString(1000));
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD,
+            Long.toString(System.currentTimeMillis()));
 		Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
 		setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
 				new ReadOnlyProps(clientProps.entrySet().iterator()));
@@ -161,7 +164,7 @@ public class AutomaticRebuildIT extends BaseOwnClusterIT {
 								+ PhoenixDatabaseMetaData.TABLE_SCHEM + "='" + schemaName + "' and "
 								+ PhoenixDatabaseMetaData.TABLE_NAME + "='" + indxTable + "'"));
 				rs.next();
-				if (PIndexState.INACTIVE.getSerializedValue().equals(rs.getString(1)) && rs.getLong(2) > 3000) {
+				if (PIndexState.INACTIVE.getSerializedValue().equals(rs.getString(1))) {
 					isInactive = true;
 					break;
 				}

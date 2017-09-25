@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
@@ -53,5 +54,10 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
 
     @Override
     public void batchStarted(MiniBatchOperationInProgress<Mutation> miniBatchOp, IndexMetaData context) throws IOException {
+    }
+
+    @Override
+    public ReplayWrite getReplayWrite(Mutation m) {
+        return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
 }

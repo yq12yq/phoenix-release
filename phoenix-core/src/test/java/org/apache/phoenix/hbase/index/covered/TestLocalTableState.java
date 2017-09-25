@@ -37,6 +37,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
@@ -136,8 +137,8 @@ public class TestLocalTableState {
          }
 
          @Override
-         public boolean ignoreNewerMutations() {
-             return false;
+         public ReplayWrite getReplayWrite() {
+             return null;
          }
 
      };

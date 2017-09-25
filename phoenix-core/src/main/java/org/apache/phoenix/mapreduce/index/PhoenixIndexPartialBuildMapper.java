@@ -114,7 +114,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
                         put = new Put(CellUtil.cloneRow(cell));
                         put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                         put.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
-                        put.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                        put.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES, PDataType.TRUE_BYTES);
                         mutations.add(put);
                     }
                     put.add(cell);
@@ -123,7 +123,7 @@ public class PhoenixIndexPartialBuildMapper extends TableMapper<ImmutableBytesWr
                         del = new Delete(CellUtil.cloneRow(cell));
                         del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                         del.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
-                        del.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                        del.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES, PDataType.TRUE_BYTES);
                         mutations.add(del);
                     }
                     del.addDeleteMarker(cell);

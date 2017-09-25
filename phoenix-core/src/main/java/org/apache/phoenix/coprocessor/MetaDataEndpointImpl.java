@@ -3104,7 +3104,28 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
                     long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
                             newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
-                    if(curTimeStampVal > 0 && curTimeStampVal < newDisableTimeStamp){
+                    // We never set the INDEX_DISABLE_TIMESTAMP to a positive value when we're setting the state to ACTIVE.
+                    // Instead, we're passing in what we expect the INDEX_DISABLE_TIMESTAMP to be currently. If it's
+                    // changed, it means that a data table row failed to write while we were partially rebuilding it
+                    // and we must rerun it.
+                    if (newState == PIndexState.ACTIVE && newDisableTimeStamp > 0) {
+                        // Don't allow setting to ACTIVE if the INDEX_DISABLE_TIMESTAMP doesn't match
+                        // what we expect.
+                        if (newDisableTimeStamp != Math.abs(curTimeStampVal)) {
+                            builder.setReturnCode(MetaDataProtos.MutationCode.UNALLOWED_TABLE_MUTATION);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            done.run(builder.build());
+                            return;
+                       }
+                        // Reset INDEX_DISABLE_TIMESTAMP_BYTES to zero as we're good to go.
+                        newKVs.set(disableTimeStampKVIndex,
+                                CellUtil.createCell(key, TABLE_FAMILY_BYTES, INDEX_DISABLE_TIMESTAMP_BYTES,
+                                        timeStamp, KeyValue.Type.Put.getCode(), PLong.INSTANCE.toBytes(0L)));
+                    }
+                    // We do legitimately move the INDEX_DISABLE_TIMESTAMP to be newer when we're rebuilding the
+                    // index in which case the state will be INACTIVE.
+                    if (curTimeStampVal != 0 && (newState == PIndexState.DISABLE)
+                            && curTimeStampVal < newDisableTimeStamp) {
                         // not reset disable timestamp
                         newKVs.remove(disableTimeStampKVIndex);
                         disableTimeStampKVIndex = -1;
