@@ -139,6 +139,7 @@ public interface QueryServices extends SQLCloseable {
         "phoenix.index.failure.handling.rebuild.interval";
     
     public static final String INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE = "phoenix.index.rebuild.batch.perTable";
+    // If index disable timestamp is older than this threshold, then index rebuild task won't attempt to rebuild it
 
     // A master switch if to block writes when index build failed
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
