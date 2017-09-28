@@ -71,19 +71,17 @@ public class TenantCacheTest {
         assertEquals(maxBytes, memoryManager.getAvailableMemory());
     }
 
-/*
-    PHOENIX-4225 tests, which depend on PHOENIX-1598 Encode column names to save space and...
-
     @Test
     public void testFreeMemoryOnAccess() throws Exception {
         int maxServerCacheTimeToLive = 10;
         long maxBytes = 1000;
-        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes);
+        int maxWaitMs = 1;
+        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes, maxWaitMs);
         ManualTicker ticker = new ManualTicker();
         TenantCacheImpl cache = new TenantCacheImpl(memoryManager, maxServerCacheTimeToLive, ticker);
         ImmutableBytesPtr cacheId1 = new ImmutableBytesPtr(Bytes.toBytes("a"));
         ImmutableBytesWritable cachePtr = new ImmutableBytesWritable(Bytes.toBytes("a"));
-        cache.addServerCache(cacheId1, cachePtr, ByteUtil.EMPTY_BYTE_ARRAY, cacheFactory, true);
+        cache.addServerCache(cacheId1, cachePtr, ByteUtil.EMPTY_BYTE_ARRAY, cacheFactory);
         assertEquals(maxBytes-1, memoryManager.getAvailableMemory());
         ticker.time += (maxServerCacheTimeToLive + 1) * 1000000;
         assertNull(cache.getServerCache(cacheId1));
@@ -94,19 +92,20 @@ public class TenantCacheTest {
     public void testExpiredCacheOnAddingNew() throws Exception {
         int maxServerCacheTimeToLive = 10;
         long maxBytes = 10;
-        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes);
+        int maxWaitMs = 1;
+        GlobalMemoryManager memoryManager = new GlobalMemoryManager(maxBytes, maxWaitMs);
         ManualTicker ticker = new ManualTicker();
         TenantCacheImpl cache = new TenantCacheImpl(memoryManager, maxServerCacheTimeToLive, ticker);
         ImmutableBytesPtr cacheId1 = new ImmutableBytesPtr(Bytes.toBytes("a"));
         ImmutableBytesPtr cacheId2 = new ImmutableBytesPtr(Bytes.toBytes("b"));
         ImmutableBytesWritable cachePtr = new ImmutableBytesWritable(Bytes.toBytes("12345678"));
-        cache.addServerCache(cacheId1, cachePtr, ByteUtil.EMPTY_BYTE_ARRAY, cacheFactory, true);
+        cache.addServerCache(cacheId1, cachePtr, ByteUtil.EMPTY_BYTE_ARRAY, cacheFactory);
         assertEquals(2, memoryManager.getAvailableMemory());
         ticker.time += (maxServerCacheTimeToLive + 1) * 1000000;
-        cache.addServerCache(cacheId1, cachePtr, ByteUtil.EMPTY_BYTE_ARRAY, cacheFactory, true);
+        cache.addServerCache(cacheId1, cachePtr, ByteUtil.EMPTY_BYTE_ARRAY, cacheFactory);
         assertEquals(2, memoryManager.getAvailableMemory());
     }
-*/
+
     public static class ManualTicker extends Ticker {
         public long time = 0;
         
