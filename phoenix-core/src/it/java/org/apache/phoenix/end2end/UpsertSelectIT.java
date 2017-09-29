@@ -1165,7 +1165,6 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             assertEquals("KV3", rs.getString("KV3"));
             assertEquals(new Date(upsertedTs), rs.getDate("PK2"));
             assertFalse(rs.next());
-
             // Query using the index on base table
             stmt = conn.prepareStatement("SELECT KV1 FROM  " + baseTable + " WHERE PK2 = ? AND KV3 = ?");
             stmt.setDate(1, new Date(upsertedTs));
