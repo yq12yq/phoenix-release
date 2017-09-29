@@ -135,7 +135,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Long estimatedSize;
     private boolean hasGuidePosts;
     private Scan scan;
-    protected List<ServerCache> caches;
+    protected Map<ImmutableBytesPtr,ServerCache> caches;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -340,7 +340,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
     }
     
-    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, List<ServerCache> caches) throws SQLException {
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
                 plan.getStatement().getHint(), QueryUtil.getOffsetLimit(plan.getLimit(), plan.getOffset()), offset);
         this.plan = plan;
@@ -779,9 +779,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2) {
-                            try{
-                            scanPairItr.remove();
-                            }catch(UnsupportedOperationException uoe){
+                            try {
+                                scanPairItr.remove();
+                            } catch (UnsupportedOperationException uoe) {
                                 //handled
                             }
                             // Catch only to try to recover from region boundary cache being out of date
@@ -801,12 +801,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                 }
                                 Long cacheId = ((HashJoinCacheNotFoundException)e2).getCacheId();
                                 if (!hashCacheClient.addHashCacheToServer(startKey,
-                                        ServerCacheClient.getCacheForId(caches, cacheId), plan.getTableRef().getTable())) { throw e2; }
+                                        caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId))), plan.getTableRef().getTable())) { throw e2; }
                             }
                             concatIterators =
                                     recreateIterators(services, isLocalIndex, allIterators,
                                         iterators, isReverse, maxQueryEndTime, previousScan,
-                                        clearedCache, concatIterators, scanPairItr, scanPair, retryCount);
+                                        clearedCache, concatIterators, scanPairItr, scanPair, retryCount-1);
                         } catch(ColumnFamilyNotFoundException cfnfe) {
                             if (scanPair.getFirst().getAttribute(LOCAL_INDEX_BUILD) != null) {
                                 Thread.sleep(1000);
@@ -933,7 +933,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
         } finally {
-            SQLCloseables.closeAllQuietly(caches);
+            SQLCloseables.closeAllQuietly(caches.values());
             caches.clear();
             if (cancelledWork) {
                 context.getConnection().getQueryServices().getExecutor().purge();
