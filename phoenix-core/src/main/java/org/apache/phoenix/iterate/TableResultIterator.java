@@ -28,6 +28,7 @@ import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UN
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -35,6 +36,7 @@ import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
@@ -42,6 +44,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.query.QueryConstants;
@@ -89,7 +92,7 @@ public class TableResultIterator implements ResultIterator {
     private PeekingResultIterator previousIterator;
 
     private int retry;
-    private List<ServerCache> caches;
+    private Map<ImmutableBytesPtr,ServerCache> caches;
     private HashCacheClient hashCacheClient;
 
     @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
@@ -115,13 +118,13 @@ public class TableResultIterator implements ResultIterator {
     }
     
     public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics,
-			long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper, List<ServerCache> caches) throws SQLException {
+			long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
     	this(mutationState,scan,scanMetrics,renewLeaseThreshold,null, plan, scanGrouper, caches);
     }
     
     public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics,
             long renewLeaseThreshold, PeekingResultIterator previousIterator, QueryPlan plan,
-            ParallelScanGrouper scanGrouper,List<ServerCache> caches ) throws SQLException {
+            ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
         this.plan = plan;
@@ -190,8 +193,7 @@ public class TableResultIterator implements ResultIterator {
                         try {
                             Long cacheId = ((HashJoinCacheNotFoundException)e1).getCacheId();
                             if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(),
-                                    ServerCacheClient.getCacheForId(caches, cacheId),
-                                    plan.getTableRef().getTable())) { throw e1; }
+                                    caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId))), plan.getTableRef().getTable())) { throw e1; }
                             handledHashJoinCacheNotFoundException = true;
                         } catch (Exception e2) {
                             Closeables.closeQuietly(htable);

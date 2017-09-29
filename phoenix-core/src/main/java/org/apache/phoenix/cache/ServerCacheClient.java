@@ -218,7 +218,7 @@ public class ServerCacheClient {
             }
         }
     }
-    
+
     public ServerCache addServerCache(ScanRanges keyRanges, final ImmutableBytesWritable cachePtr, final byte[] txState,
             final ServerCacheFactory cacheFactory, final TableRef cacheUsingTableRef) throws SQLException {
         return addServerCache(keyRanges, cachePtr, txState, cacheFactory, cacheUsingTableRef, false);
@@ -331,7 +331,7 @@ public class ServerCacheClient {
      * @throws SQLException
      * @throws IllegalStateException if hashed table cannot be removed on any region server on which it was added
      */
-    private void removeServerCache(final ServerCache cache, Set<HRegionLocation> servers) throws SQLException {
+    private void removeServerCache(final ServerCache cache, Set<HRegionLocation> remainingOnServers) throws SQLException {
         HTableInterface iterateOverTable = null;
         final byte[] cacheId = cache.getId();
         try {
@@ -343,7 +343,6 @@ public class ServerCacheClient {
             iterateOverTable = services.getTable(tableName);
 
             List<HRegionLocation> locations = services.getAllTableRegions(tableName);
-            Set<HRegionLocation> remainingOnServers = new HashSet<HRegionLocation>(servers);
             /**
              * Allow for the possibility that the region we based where to send our cache has split and been relocated
              * to another region server *after* we sent it, but before we removed it. To accommodate this, we iterate
@@ -439,6 +438,7 @@ public class ServerCacheClient {
         byte[] cacheId = cache.getId();
         try {
             ConnectionQueryServices services = connection.getQueryServices();
+
             byte[] tableName = pTable.getPhysicalName().getBytes();
             table = services.getTable(tableName);
             HRegionLocation tableRegionLocation = services.getTableRegionLocation(tableName, startkeyOfRegion);
@@ -504,14 +504,5 @@ public class ServerCacheClient {
         return false;
 
     }
-    
-    public static ServerCache getCacheForId(List<ServerCache> caches, Long cacheId) {
-        if (caches == null) { return null; }
-        for(ServerCache cache: caches){
-            if(Bytes.toLong(cache.getId())==cacheId){
-                return cache;
-            }
-        }
-        return null;
-    }
+
 }

@@ -754,6 +754,7 @@ public abstract class BaseTest {
         conf.setInt("hbase.assignment.zkevent.workers", 5);
         conf.setInt("hbase.assignment.threads.max", 5);
         conf.setInt("hbase.catalogjanitor.interval", 5000);
+        conf.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 2);
         return conf;
     }
 
