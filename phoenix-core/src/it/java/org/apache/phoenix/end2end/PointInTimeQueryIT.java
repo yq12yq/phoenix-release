@@ -116,13 +116,13 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn;
         ResultSet rs;
-
+        String sequence="SEQ_TEST_POINT_IN_TIME";
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SEQUENCE s");
+        conn.createStatement().execute("CREATE SEQUENCE "+sequence);
         
         try {
-            conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+            conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
             fail();
         } catch (SequenceNotFoundException e) {
             conn.close();
@@ -130,22 +130,22 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
         conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+        rs = conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         conn.close();
         
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+7));
         conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+        rs = conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
         conn.close();
         
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+15));
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("DROP SEQUENCE s");
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+        conn.createStatement().execute("DROP SEQUENCE "+sequence+"");
+        rs = conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
         conn.close();
@@ -153,27 +153,30 @@ public class PointInTimeQueryIT extends BaseQueryIT {
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+20));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
-            rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+            rs = conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
             fail();
         } catch (SequenceNotFoundException e) {
             conn.close();            
         }
         
-        conn.createStatement().execute("CREATE SEQUENCE s");
+        conn.createStatement().execute("CREATE SEQUENCE "+sequence);
         conn.close();
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+25));
         conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+        rs = conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         conn.close();
 
         props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+6));
         conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT next value for s FROM ATABLE LIMIT 1");
+        rs = conn.createStatement().executeQuery("SELECT next value for "+sequence+" FROM ATABLE LIMIT 1");
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         conn.close();
+        props.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("DROP SEQUENCE "+sequence+"");
     }
     
 }
