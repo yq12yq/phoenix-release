@@ -132,3 +132,36 @@ b9890d0cd PHOENIX-4042 Add hadoop metrics2-based Indexer coproc metrics
 e356f2795 BUG-80747 Sundry improvements around server-side secondary indexing
 d091ecf7d PHOENIX-3895 Upgrade to Apache Avatica 1.10.0
 3dee97b73 PHOENIX-3797 Address issue with compacting local index stores
+
+** Changes in HDP-2.6.3
+
+PHOENIX-2236 Various phoenix-spark fixes (Kalyan Hadoop)
+PHOENIX-2290 Various phoenix-spark fixes (Kalyan Hadoop)
+PHOENIX-2547 Various phoenix-spark fixes (Kalyan Hadoop)
+PHOENIX-3101 Remove findbugs' annotations dependency as it is lgpl
+PHOENIX-3406 CSV BulkLoad MR job incorrectly handle ROW_TIMESTAMP
+PHOENIX-3427 phoenix-spark: Table undefined for tenant specific view (Nico Pappagianis)
+PHOENIX-3525 Follow-on improvements to automatic index rebuilds- It contains PHOENIX-3525,PHOENIX-4099(Rajeshbabu)
+PHOENIX-3532 Pass tenantId parameter to PhoenixRDD when reading (Nico Pappagianis)
+PHOENIX-3600 Core MapReduce classes don't provide location info
+PHOENIX-3601 PhoenixRDD doesn't expose the preferred node locations to Spark
+PHOENIX-3792 Provide way to skip normalization of column names in phoenix-spark integration
+PHOENIX-3797 Address issue with compacting local index stores
+PHOENIX-3832 Local Index - Empty resultset for multi-tenant tables
+PHOENIX-3858 Index maintenance not required for local indexes of table with immutable rows(Rajeshbabu)
+PHOENIX-3947 Increase scan time out for partial index rebuild and retry only once(Samarth Jain)
+PHOENIX-3948 Enable shorter time outs for server-side index writes(Vincent)
+PHOENIX-3964 Index.preWALRestore should handle index write failure (chenglei)
+PHOENIX-3986 UngroupedAggregateRegionObserver.commitBatch() should set the index metadata as an attribute on every mutation(Thomas)
+PHOENIX-3997 UngroupedAggregateRegionObserver.commitBatchWithHTable() should not check the memstore size and wait for flush. (Geoffrey Jacoby)
+PHOENIX-4027 Mark index as disabled during partial rebuild after configurable amount of time(Samarth Jain) Modification: we will never completely disable the index to avoid user to rebuild it from scratch.
+PHOENIX-4039 Increase default number of RPC retries for our index rebuild task(Samarth Jain)
+PHOENIX-4099 Follow-on improvements to automatic index rebuilds- It contains PHOENIX-3525,PHOENIX-4099(Rajeshbabu)
+PHOENIX-4188 Disable inline-DTDs in Pherf XML records
+PHOENIX-4189 Introduce a class that wraps the Map of primary key data
+PHOENIX-4191 Categorize uncategorized integration tests
+PHOENIX-4198 Remove need for users to have write permission to SYSTEM.CATALOG table
+PHOENIX-4224 Automatic resending cache for HashJoin doesn't work when cache has expired on server side
+PHOENIX-4225 Using Google cache may lead to lock up on RS side.
+PHOENIX-4261 Remove unused netty-all dependency
+
