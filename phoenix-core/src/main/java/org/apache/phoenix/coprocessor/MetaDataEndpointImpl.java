@@ -117,6 +117,8 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
+import org.apache.hadoop.hbase.ipc.RpcServer.Call;
+import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
@@ -1954,10 +1956,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
                 @Override
                 public Void run() throws Exception {
+                    final Call rpcContext = RpcUtil.getRpcContext();
                     try {
-                        mutateRowsWithLocksWithEndpoint(mutations);
+                        //Setting RPC context as null so that user can be resetted
+                        RpcUtil.setRpcContext(null);
+                        region.mutateRowsWithLocks(mutations, rowsToLock, nonceGroup, nonce);
                     } catch (Throwable e) {
                         throw new IOException(e);
+                    } finally {
+                        //Setting RPC context back to original context of the RPC
+                        RpcUtil.setRpcContext(rpcContext);
                     }
                     return null;
                 }
