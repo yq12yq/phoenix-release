@@ -170,6 +170,9 @@ public class QueryServicesOptions {
     // compression we're getting)
     public static final long DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES = 3* 100 * 1024 *1024;
     public static final boolean DEFAULT_STATS_USE_CURRENT_TIME = true;
+    
+    // Maximum size (in bytes) that cached table stats should take upm
+    public static final long DEFAULT_STATS_MAX_CACHE_SIZE = 256 * 1024 * 1024;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 

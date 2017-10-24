@@ -24,9 +24,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -48,6 +50,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -102,11 +105,15 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
+    private final TableStatsCache tableStatsCache;
     
     public ConnectionlessQueryServicesImpl(QueryServices queryServices, ConnectionInfo connInfo) {
         super(queryServices);
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+
         userName = connInfo.getPrincipal();
         metaData = newEmptyMetaData();
+        this.tableStatsCache = new TableStatsCache(this, config);
         
         // Use KeyValueBuilder that builds real KeyValues, as our test utils require this
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
@@ -476,7 +483,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) {
+      PTableStats stats = tableStatsCache.getCache().getIfPresent(physicalName);
+      if (null == stats) {
         return PTableStats.EMPTY_STATS;
+      }
+      return stats;
     }
 
     @Override
@@ -545,4 +556,22 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                        new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
                        SERVER_NAME, -1);
     }
+    
+    
+  /**
+   * Manually adds {@link PTableStats} for a table to the client-side cache. Not a
+   * {@link ConnectionQueryServices} method. Exposed for testing purposes.
+   *
+   * @param tableName Table name
+   * @param stats Stats instance
+   */
+  public void addTableStats(ImmutableBytesPtr tableName, PTableStats stats) {
+    this.tableStatsCache.put(Objects.requireNonNull(tableName), stats);
+  }
+
+  @Override
+  public void invalidateStats(ImmutableBytesPtr tableName) {
+    this.tableStatsCache.invalidate(Objects.requireNonNull(tableName));
+
+  }
 }
