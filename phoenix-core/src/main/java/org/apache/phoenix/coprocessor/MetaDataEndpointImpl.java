@@ -1310,13 +1310,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             final byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             final byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             final byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-            boolean isNamespaceMapped = MetaDataUtil.isNameSpaceMapped(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
+            boolean isNamespaceMapped = MetaDataUtil.isNameSpaceMapped(tableMetadata, GenericKeyValueBuilder.INSTANCE,
+                    new ImmutableBytesWritable());
             pSchemaName=schemaName;
             pTableName=tableName;
-
+            byte[] cPhysicalName=SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMapped).getBytes();
+            byte[] cParentPhysicalName=null;
             byte[] parentSchemaName = null;
             byte[] pParentTableName = null;
             final PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
+            final IndexType indexType = MetaDataUtil.getIndexType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
             byte[] pParentTableKey = null;
             Mutation pViewPhysicalTableRow = null;
             List<PTable> dataTableIndexes = null;
@@ -1335,6 +1338,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                     PTable loadTable = loadTable(env, pParentTableKey, new ImmutableBytesPtr(pParentTableKey), clientTimeStamp, clientTimeStamp);
                     dataTableIndexes = loadTable.getIndexes();
+                    cParentPhysicalName=loadTable.getPhysicalName().getBytes();
                 }
             } else if (tableType == PTableType.INDEX) {
                 parentSchemaName = schemaName;
@@ -1345,16 +1349,29 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                  */ 
                 pParentTableName = MetaDataUtil.getParentTableName(tableMetadata);
                 pParentTableKey = SchemaUtil.getTableKey(tenantIdBytes, parentSchemaName, pParentTableName);
+                if (indexType != null) {
+                    long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
+                    PTable parentTable = loadTable(env, pParentTableKey, new ImmutableBytesPtr(pParentTableKey),
+                            clientTimeStamp, clientTimeStamp);
+                    if (IndexType.LOCAL == indexType) {
+                        cPhysicalName = parentTable.getPhysicalName().getBytes();
+                    } else if (parentTable.getType()==PTableType.VIEW) {
+                        cPhysicalName = MetaDataUtil.getViewIndexPhysicalName(parentTable.getPhysicalName().getBytes());
+                        cParentPhysicalName = parentTable.getPhysicalName().getBytes();
+                    }
+                }
             }
 
             byte[] cSchemaName=schemaName;
             byte[] cTableName=tableName;
-            final byte[] cPhysicalName=SchemaUtil.getPhysicalHBaseTableName(cSchemaName, cTableName, isNamespaceMapped).getBytes();
             if(pParentTableName!=null){
                 cSchemaName=parentSchemaName;
                 cTableName=pParentTableName;
             }
-            final byte[] cParentPhysicalName=SchemaUtil.getPhysicalHBaseTableName(cSchemaName, cTableName, isNamespaceMapped).getBytes();
+            if (cParentPhysicalName == null) {
+                cParentPhysicalName = SchemaUtil.getPhysicalHBaseTableName(cSchemaName, cTableName, isNamespaceMapped)
+                        .getBytes();
+            }
             getCoprocessorHost().preCreateTable(Bytes.toString(tenantIdBytes),
                     SchemaUtil.getTableName(schemaName, tableName),
                     TableName.valueOf((tableType == PTableType.VIEW) ? cParentPhysicalName : cPhysicalName),
