@@ -63,7 +63,9 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.RpcCallback;
@@ -157,13 +159,20 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         }
 
         if (tableType == PTableType.VIEW) {
-
+            Set<String> physicalTablesChecked = new HashSet<String>();
             Action[] requiredActions = { Action.READ, Action.EXEC };
             for (PTable index : dataTableIndexes) {
+                if (index.getIndexType() == IndexType.LOCAL
+                        || !physicalTablesChecked.add(index.getPhysicalName().getString())) {
+                    // skip check for local index as we have already check the ACLs above
+                    // And for same physical table multiple times like view index table
+                    continue;
+                }
                 User user = getActiveUser();
                 List<UserPermission> permissionForUser = getPermissionForUser(
                         getUserPermissions(index.getPhysicalName().getString()), Bytes.toBytes(user.getShortName()));
                 Set<Action> requireAccess = new HashSet<>();
+                Set<Action> accessExists = new HashSet<>();
                 if (permissionForUser != null) {
                     for (UserPermission userPermission : permissionForUser) {
                         for (Action action : Arrays.asList(requiredActions)) {
@@ -174,7 +183,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     }
                     if (!requireAccess.isEmpty()) {
                         for (UserPermission userPermission : permissionForUser) {
-                            requireAccess.addAll(Arrays.asList(userPermission.getActions()));
+                            accessExists.addAll(Arrays.asList(userPermission.getActions()));
                         }
 
                     }
@@ -184,7 +193,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                 if (!requireAccess.isEmpty()) {
                     byte[] indexPhysicalTable = index.getPhysicalName().getBytes();
                     handleRequireAccessOnDependentTable("Create" + tableType, user.getName(),
-                            TableName.valueOf(indexPhysicalTable), tableName, requireAccess);
+                            TableName.valueOf(indexPhysicalTable), tableName, requireAccess, accessExists);
                 }
             }
 
@@ -198,15 +207,18 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             // new indexes.
             // TODO: confirm whether granting permission from coprocessor is a security leak.(currently it is done if
             // automatic grant is enabled explicitly by user in configuration
-            authorizeOrGrantAccessToUsers("Create" + tableType, parentPhysicalTableName,
-                    Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.EXEC, Action.ADMIN),
-                    physicalTableName);
+            if (physicalTableName != null && !physicalTableName.equals(parentPhysicalTableName)
+                    && !MetaDataUtil.isViewIndex(physicalTableName.getNameAsString())) {
+                authorizeOrGrantAccessToUsers("Create" + tableType, parentPhysicalTableName,
+                        Arrays.asList(Action.READ, Action.WRITE, Action.CREATE, Action.EXEC, Action.ADMIN),
+                        physicalTableName);
+            }
         }
     }
 
     
     public void handleRequireAccessOnDependentTable(String request, String userName, TableName dependentTable,
-            String requestTable, Set<Action> requireAccess) throws IOException {
+            String requestTable, Set<Action> requireAccess, Set<Action> accessExists) throws IOException {
 
         if (!isStrictMode) {
             AUDITLOG.warn("Strict mode is not enabled, so " + request + " is allowed but User:" + userName
@@ -215,9 +227,12 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             return;
         }
         if (isAutomaticGrantEnabled) {
+            Set<Action> unionSet = new HashSet<Action>();
+            unionSet.addAll(requireAccess);
+            unionSet.addAll(accessExists);
             AUDITLOG.info(request + ": Automatically granting access to index table during creation of view:"
                     + requestTable + authString(userName, dependentTable, requireAccess));
-            grantPermissions(userName, dependentTable.getName(), requireAccess.toArray(new Action[0]));
+            grantPermissions(userName, dependentTable.getName(), unionSet.toArray(new Action[0]));
         } else {
             throw new AccessDeniedException(
                     "Insufficient permissions " + authString(userName, dependentTable, requireAccess));
@@ -251,10 +266,11 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                     if (userPermissions != null) {
                         for (UserPermission userPermission : userPermissions) {
                             Set<Action> requireAccess = new HashSet<Action>();
-                            boolean haveAccess=false;
+                            Set<Action> accessExists = new HashSet<Action>();
                             List<UserPermission> permsToTable = getPermissionForUser(permissionsOnTheTable,
                                     userPermission.getUser());
                             for (Action action : requiredActionsOnTable) {
+                                boolean haveAccess=false;
                                 if (userPermission.implies(action)) {
                                     if (permsToTable == null) {
                                         requireAccess.add(action);
@@ -270,10 +286,10 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                                     }
                                 }
                             }
-                            if (!requireAccess.isEmpty() && permsToTable != null) {
+                            if (permsToTable != null) {
                                 // Append access to already existing access for the user
                                 for (UserPermission permToTable : permsToTable) {
-                                    requireAccess.addAll(Arrays.asList(permToTable.getActions()));
+                                    accessExists.addAll(Arrays.asList(permToTable.getActions()));
                                 }
                             }
                             if (!requireAccess.isEmpty()) {
@@ -285,7 +301,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
                                     continue;
                                 }
                                 handleRequireAccessOnDependentTable(request, Bytes.toString(userPermission.getUser()),
-                                        toTable, toTable.getNameAsString(), requireAccess);
+                                        toTable, toTable.getNameAsString(), requireAccess,accessExists);
                             }
                         }
                     }

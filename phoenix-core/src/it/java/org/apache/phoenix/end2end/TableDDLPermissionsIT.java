@@ -97,13 +97,17 @@ public class TableDDLPermissionsIT{
         this.isNamespaceMapped = isNamespaceMapped;
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+    }
+
+    private void startNewMiniCluster(Configuration overrideConf) throws Exception{
         if (null != testUtil) {
             testUtil.shutdownMiniCluster();
             testUtil = null;
-          }
+        }
         testUtil = new HBaseTestingUtility();
 
         Configuration config = testUtil.getConfiguration();
+        
         config.set("hbase.coprocessor.master.classes",
                 "org.apache.hadoop.hbase.security.access.AccessController");
         config.set("hbase.coprocessor.region.classes",
@@ -118,7 +122,14 @@ public class TableDDLPermissionsIT{
         config.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         // Avoid multiple clusters trying to bind the master's info port (16010)
         config.setInt(HConstants.MASTER_INFO_PORT, -1);
+        
+        if (overrideConf != null) {
+            config.addResource(overrideConf);
+        }
         testUtil.startMiniCluster(1);
+    }
+    
+    private void grantSystemTableAccess() throws Exception{
         try (Connection conn = getConnection()) {
             if (isNamespaceMapped) {
                 grantPermissions(regularUser.getShortUserName(), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES, Action.READ,
@@ -127,11 +138,21 @@ public class TableDDLPermissionsIT{
                         Action.READ, Action.EXEC);
                 grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES,
                         Action.READ, Action.EXEC);
+                // Local Index requires WRITE permission on SYSTEM.SEQUENCE TABLE.
+                grantPermissions(regularUser.getShortUserName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
+                        Action.READ, Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortUserName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
+                        Action.READ, Action.EXEC);
                 
             } else {
                 grantPermissions(regularUser.getShortUserName(), PHOENIX_SYSTEM_TABLES, Action.READ, Action.EXEC);
                 grantPermissions(unprivilegedUser.getShortUserName(), PHOENIX_SYSTEM_TABLES, Action.READ, Action.EXEC);
                 grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), PHOENIX_SYSTEM_TABLES, Action.READ, Action.EXEC);
+                // Local Index requires WRITE permission on SYSTEM.SEQUENCE TABLE.
+                grantPermissions(regularUser.getShortUserName(), Collections.singleton("SYSTEM.SEQUENCE"), Action.WRITE,
+                        Action.READ, Action.EXEC);
+                grantPermissions(unprivilegedUser.getShortUserName(), Collections.singleton("SYSTEM:SEQUENCE"), Action.WRITE,
+                        Action.READ, Action.EXEC);
             }
         } catch (Throwable e) {
             if (e instanceof Exception) {
@@ -164,159 +185,196 @@ public class TableDDLPermissionsIT{
     }
 
     @Test
-    public void testSchemaPermissions() throws Exception{
-        try{
-        if(!isNamespaceMapped){
-            return;
-        }
-        final String schemaName = "TEST_SCHEMA_PERMISSION";
-        superUser.doAs(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                try {
-                    AccessControlClient.grant(getUtility().getConnection(), regularUser.getShortUserName(), Action.ADMIN);
-                } catch (Throwable e) {
-                    if (e instanceof Exception) {
-                        throw (Exception)e;
-                    } else {
-                        throw new Exception(e);
+    public void testSchemaPermissions() throws Throwable{
+
+        if (!isNamespaceMapped) { return; }
+        try {
+            startNewMiniCluster(null);
+            grantSystemTableAccess();
+            final String schemaName = "TEST_SCHEMA_PERMISSION";
+            superUser.doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        AccessControlClient.grant(getUtility().getConnection(), regularUser.getShortUserName(),
+                                Action.ADMIN);
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
                     }
+                    return null;
                 }
-                return null;
-            }
-        });
+            });
             verifyAllowed(createSchema(schemaName), regularUser);
             // Unprivileged user cannot drop a schema
             verifyDenied(dropSchema(schemaName), unprivilegedUser);
             verifyDenied(createSchema(schemaName), unprivilegedUser);
 
             verifyAllowed(dropSchema(schemaName), regularUser);
-        }finally{
-            try {
-                AccessControlClient.revoke(getUtility().getConnection(), regularUser.getShortUserName(), Action.ADMIN);
-            } catch (Throwable e) {
-                e.printStackTrace();
-            }
+        } finally {
+            revokeAll();
         }
     }
 
     @Test
-    public void testIndexAndView() throws Throwable {
+    public void testAutomaticGrantDisabled() throws Throwable{
+        testIndexAndView(false);
+    }
+    
+    public void testIndexAndView(boolean isAutomaticGrant) throws Throwable {
+        Configuration conf = new Configuration();
+        conf.set(QueryServices.PHOENIX_AUTOMATIC_GRANT_ENABLED, Boolean.toString(isAutomaticGrant));
+        startNewMiniCluster(conf);
         final String schema = "TEST_INDEX_VIEW";
         final String tableName = "TABLE_DDL_PERMISSION_IT";
         final String phoenixTableName = schema + "." + tableName;
         final String indexName1 = tableName + "_IDX1";
         final String indexName2 = tableName + "_IDX2";
-        final String viewName1 = tableName + "_V1";
-        final String viewName2 = tableName + "_V2";
-        superUser.doAs(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                try {
-                    verifyAllowed(createSchema(schema),superUser);
-                    if (isNamespaceMapped) {
-                        grantPermissions(regularUser.getShortUserName(), schema, Action.CREATE);
-                        grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), schema, Action.CREATE);
-                        
-                    }else{
-                        grantPermissions(regularUser.getShortUserName(), NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Action.CREATE);
-                        grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Action.CREATE);
-                        
+        final String lIndexName1 = tableName + "_LIDX1";
+        final String viewName1 = schema+"."+tableName + "_V1";
+        final String viewName2 = schema+"."+tableName + "_V2";
+        final String viewIndexName1 = tableName + "_VIDX1";
+        final String viewIndexName2 = tableName + "_VIDX2";
+        grantSystemTableAccess();
+        try {
+            superUser.doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    try {
+                        verifyAllowed(createSchema(schema), superUser);
+                        if (isNamespaceMapped) {
+                            grantPermissions(regularUser.getShortUserName(), schema, Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS), schema, Action.CREATE);
+
+                        } else {
+                            grantPermissions(regularUser.getShortUserName(),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Action.CREATE);
+                            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
+                                    NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Action.CREATE);
+
+                        }
+                    } catch (Throwable e) {
+                        if (e instanceof Exception) {
+                            throw (Exception)e;
+                        } else {
+                            throw new Exception(e);
+                        }
                     }
-                } catch (Throwable e) {
-                    if (e instanceof Exception) {
-                        throw (Exception)e;
-                    } else {
-                        throw new Exception(e);
-                    }
+                    return null;
                 }
-                return null;
+            });
+
+            verifyAllowed(createTable(phoenixTableName), regularUser);
+            verifyAllowed(createIndex(indexName1, phoenixTableName), regularUser);
+            verifyAllowed(createView(viewName1, phoenixTableName), regularUser);
+            verifyAllowed(createLocalIndex(lIndexName1, phoenixTableName), regularUser);
+            verifyAllowed(createIndex(viewIndexName1, viewName1), regularUser);
+            verifyAllowed(createIndex(viewIndexName2, viewName1), regularUser);
+            verifyAllowed(readTable(phoenixTableName), regularUser);
+
+            verifyDenied(createIndex(indexName2, phoenixTableName), unprivilegedUser);
+            verifyDenied(createView(viewName2, phoenixTableName), unprivilegedUser);
+            verifyDenied(dropView(viewName1), unprivilegedUser);
+            
+            verifyDenied(dropIndex(indexName1, phoenixTableName), unprivilegedUser);
+            verifyDenied(dropTable(phoenixTableName), unprivilegedUser);
+            verifyDenied(rebuildIndex(indexName1, phoenixTableName), unprivilegedUser);
+            verifyDenied(addColumn(phoenixTableName, "val1"), unprivilegedUser);
+            verifyDenied(dropColumn(phoenixTableName, "val"), unprivilegedUser);
+            verifyDenied(addProperties(phoenixTableName, "GUIDE_POSTS_WIDTH", "100"), unprivilegedUser);
+
+            // Granting read permission to unprivileged user, now he should be able to create view but not index
+            grantPermissions(unprivilegedUser.getShortUserName(),
+                    Collections.singleton(
+                            SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceMapped).getString()),
+                    Action.READ, Action.EXEC);
+            grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
+                    Collections.singleton(
+                            SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceMapped).getString()),
+                    Action.READ, Action.EXEC);
+            verifyDenied(createIndex(indexName2, phoenixTableName), unprivilegedUser);
+            if (!isAutomaticGrant) {
+                // Automatic grant will read access for all indexes
+                verifyDenied(createView(viewName2, phoenixTableName), unprivilegedUser);
+
+                // Granting read permission to unprivileged user on index so that a new view can read a index as well,
+                // now
+                // he should be able to create view but not index
+                grantPermissions(unprivilegedUser.getShortUserName(),
+                        Collections.singleton(SchemaUtil
+                                .getPhysicalHBaseTableName(schema, indexName1, isNamespaceMapped).getString()),
+                        Action.READ, Action.EXEC);
             }
-        });
+            verifyAllowed(createView(viewName2, phoenixTableName), unprivilegedUser);
+            // Grant create permission in namespace
+            if (isNamespaceMapped) {
+                grantPermissions(unprivilegedUser.getShortUserName(), schema, Action.CREATE);
+            } else {
+                grantPermissions(unprivilegedUser.getShortUserName(), NamespaceDescriptor.DEFAULT_NAMESPACE.getName(),
+                        Action.CREATE);
+            }
+            if (!isAutomaticGrant) {
+                verifyDenied(createIndex(indexName2, phoenixTableName), unprivilegedUser);
+                // Give user of data table access to index table which will be created by unprivilegedUser
+                grantPermissions(regularUser.getShortUserName(),
+                        Collections.singleton(SchemaUtil
+                                .getPhysicalHBaseTableName(schema, indexName2, isNamespaceMapped).getString()),
+                        Action.WRITE);
+                verifyDenied(createIndex(indexName2, phoenixTableName), unprivilegedUser);
+                grantPermissions(regularUser.getShortUserName(),
+                        Collections.singleton(SchemaUtil
+                                .getPhysicalHBaseTableName(schema, indexName2, isNamespaceMapped).getString()),
+                        Action.WRITE, Action.READ, Action.CREATE, Action.EXEC, Action.ADMIN);
+            }
+            // we should be able to read the data from another index as well to which we have not given any access to
+            // this user
+            verifyAllowed(createIndex(indexName2, phoenixTableName), unprivilegedUser);
+            verifyAllowed(readTable(phoenixTableName, indexName1), unprivilegedUser);
+            verifyAllowed(readTable(phoenixTableName, indexName2), unprivilegedUser);
+            verifyAllowed(rebuildIndex(indexName2, phoenixTableName), unprivilegedUser);
 
-        verifyAllowed(createTable(phoenixTableName), regularUser);
-        verifyAllowed(createIndex(indexName1, phoenixTableName), regularUser);
-        verifyAllowed(createView(viewName1, phoenixTableName), regularUser);
-        verifyAllowed(readTable(phoenixTableName), regularUser);
+            // data table user should be able to read new index
+            verifyAllowed(rebuildIndex(indexName2, phoenixTableName), regularUser);
+            verifyAllowed(readTable(phoenixTableName, indexName2), regularUser);
 
-        verifyDenied(createIndex(indexName2,phoenixTableName), unprivilegedUser);
-        verifyDenied(createView(viewName2,phoenixTableName), unprivilegedUser);
-        verifyDenied(dropView(viewName1), unprivilegedUser);
-        verifyDenied(dropIndex(indexName1,phoenixTableName), unprivilegedUser);
-        verifyDenied(dropTable(phoenixTableName), unprivilegedUser);
-        verifyDenied(rebuildIndex(indexName1,phoenixTableName), unprivilegedUser);
-        verifyDenied(addColumn(phoenixTableName,"val1"), unprivilegedUser);
-        verifyDenied(dropColumn(phoenixTableName,"val"), unprivilegedUser);
-        verifyDenied(addProperties(phoenixTableName,"GUIDE_POSTS_WIDTH","100"), unprivilegedUser);
+            verifyAllowed(readTable(phoenixTableName), regularUser);
+            verifyAllowed(rebuildIndex(indexName1, phoenixTableName), regularUser);
+            verifyAllowed(addColumn(phoenixTableName, "val1"), regularUser);
+            verifyAllowed(addProperties(phoenixTableName, "GUIDE_POSTS_WIDTH", "100"), regularUser);
+            verifyAllowed(dropView(viewName1), regularUser);
+            verifyAllowed(dropView(viewName2), regularUser);
+            verifyAllowed(dropColumn(phoenixTableName, "val1"), regularUser);
+            verifyAllowed(dropIndex(indexName2, phoenixTableName), regularUser);
+            verifyAllowed(dropIndex(indexName1, phoenixTableName), regularUser);
+            verifyAllowed(dropTable(phoenixTableName), regularUser);
 
-        //Granting read permission to unprivileged user, now he should be able to create view but not index
-        grantPermissions(unprivilegedUser.getShortUserName(),
-                Collections.singleton(
-                        SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceMapped).getString()),
-                Action.READ,Action.EXEC);
-        grantPermissions(AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),
-                Collections.singleton(
-                        SchemaUtil.getPhysicalHBaseTableName(schema, tableName, isNamespaceMapped).getString()),
-                Action.READ,Action.EXEC);
-        verifyDenied(createIndex(indexName2,phoenixTableName), unprivilegedUser);
-        verifyDenied(createView(viewName2,phoenixTableName), unprivilegedUser);
+            // check again with super users
+            verifyAllowed(createTable(phoenixTableName), superUser2);
+            verifyAllowed(createIndex(indexName1, phoenixTableName), superUser2);
+            verifyAllowed(createView(viewName1, phoenixTableName), superUser2);
+            verifyAllowed(readTable(phoenixTableName), superUser2);
+            verifyAllowed(dropView(viewName1), superUser2);
+            verifyAllowed(dropTable(phoenixTableName), superUser2);
 
-        //Granting read permission to unprivileged user on index so that a new view can read a index as well, now he should be able to create view but not index
-        grantPermissions(unprivilegedUser.getShortUserName(),
-                Collections.singleton(
-                        SchemaUtil.getPhysicalHBaseTableName(schema, indexName1, isNamespaceMapped).getString()),
-                Action.READ,Action.EXEC);
-        verifyAllowed(createView(viewName2,phoenixTableName), unprivilegedUser);
-
-        //Grant create permission in namespace
-        if (isNamespaceMapped) {
-            grantPermissions(unprivilegedUser.getShortUserName(), schema, Action.CREATE);
-        }else{
-            grantPermissions(unprivilegedUser.getShortUserName(), NamespaceDescriptor.DEFAULT_NAMESPACE.getName(), Action.CREATE);
+        } finally {
+            revokeAll();
         }
+    }
+    
+    
+    @Test
+    public void testAutomaticGrantEnabled() throws Throwable{
+        testIndexAndView(true);
+    }
 
-        verifyDenied(createIndex(indexName2,phoenixTableName), unprivilegedUser);
-        //Give user of data table access to index table which will be created by unprivilegedUser
-        grantPermissions(regularUser.getShortUserName(),
-                Collections.singleton(
-                        SchemaUtil.getPhysicalHBaseTableName(schema, indexName2, isNamespaceMapped).getString()),
-                Action.WRITE);
-        verifyDenied(createIndex(indexName2,phoenixTableName), unprivilegedUser);
-        grantPermissions(regularUser.getShortUserName(),
-                Collections.singleton(
-                        SchemaUtil.getPhysicalHBaseTableName(schema, indexName2, isNamespaceMapped).getString()),
-                Action.WRITE,Action.READ,Action.CREATE);
-        //we should be able to read the data from another index as well to which we have not given any access to this user
-        verifyAllowed(createIndex(indexName2,phoenixTableName), unprivilegedUser);
-        verifyAllowed(readTable(phoenixTableName,indexName1), unprivilegedUser);
-        verifyAllowed(readTable(phoenixTableName,indexName2), unprivilegedUser);
-        verifyAllowed(rebuildIndex(indexName2,phoenixTableName), unprivilegedUser);
-
-        verifyAllowed(readTable(phoenixTableName), regularUser);
-        verifyAllowed(rebuildIndex(indexName1,phoenixTableName), regularUser);
-        verifyAllowed(addColumn(phoenixTableName,"val1"), regularUser);
-        verifyAllowed(addProperties(phoenixTableName,"GUIDE_POSTS_WIDTH","100"), regularUser);
-        verifyAllowed(dropView(viewName1), regularUser);
-        verifyAllowed(dropView(viewName2), regularUser);
-        verifyAllowed(dropColumn(phoenixTableName,"val1"), regularUser);
-        verifyAllowed(dropIndex(indexName2,phoenixTableName), regularUser);
-        verifyAllowed(dropIndex(indexName1,phoenixTableName), regularUser);
-        verifyAllowed(dropTable(phoenixTableName), regularUser);
-
-        //check again with super users
-        verifyAllowed(createTable(phoenixTableName), superUser2);
-        verifyAllowed(createIndex(indexName1, phoenixTableName), superUser2);
-        verifyAllowed(createView(viewName1, phoenixTableName), superUser2);
-        verifyAllowed(readTable(phoenixTableName), superUser2);
-        verifyAllowed(dropView(viewName1), superUser2);
-        verifyAllowed(dropTable(phoenixTableName), superUser2);
-
-        //Check for user in Group admin
-        verifyAllowed(createTable(phoenixTableName), groupUser);
-        verifyAllowed(createIndex(indexName1, phoenixTableName), groupUser);
-        verifyAllowed(createView(viewName1, phoenixTableName), groupUser);
-        verifyAllowed(dropView(viewName1), groupUser);
-        verifyAllowed(dropTable(phoenixTableName), groupUser);
+    private void revokeAll() throws IOException, Throwable {
+        AccessControlClient.revoke(getUtility().getConnection(), AuthUtil.toGroupEntry(GROUP_SYSTEM_ACCESS),Action.values() );
+        AccessControlClient.revoke(getUtility().getConnection(), regularUser.getShortUserName(),Action.values() );
+        AccessControlClient.revoke(getUtility().getConnection(), unprivilegedUser.getShortUserName(),Action.values() );
+        
     }
 
     protected void grantPermissions(String groupEntry, Action... actions) throws IOException, Throwable {
@@ -465,6 +523,19 @@ public class TableDDLPermissionsIT{
 
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute("CREATE INDEX " + indexName + " on " + dataTable + "(data)"));
+                }
+                return null;
+            }
+        };
+    }
+    
+    private AccessTestAction createLocalIndex(final String indexName, final String dataTable) throws SQLException {
+        return new AccessTestAction() {
+            @Override
+            public Object run() throws Exception {
+
+                try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
+                    assertFalse(stmt.execute("CREATE LOCAL INDEX " + indexName + " on " + dataTable + "(data)"));
                 }
                 return null;
             }
