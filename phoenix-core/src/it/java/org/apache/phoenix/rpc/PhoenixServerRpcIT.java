@@ -27,7 +27,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -66,7 +65,8 @@ public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
     	Map<String, String> serverProps = Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
         		TestPhoenixIndexRpcSchedulerFactory.class.getName());
         // use the standard rpc controller for client rpc, so that we can isolate server rpc and ensure they use the correct queue  
-        Map<String, String> clientProps = Collections.emptyMap();
+    	Map<String, String> clientProps = Collections.singletonMap(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, 
+    			RpcControllerFactory.class.getName());      
         NUM_SLAVES_BASE = 2;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
@@ -140,6 +140,9 @@ public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("k1", rs.getString(1));
             assertEquals("v2", rs.getString(2));
             assertFalse(rs.next());
+            
+            // verify that that index queue is used only once (for the first upsert)
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();
