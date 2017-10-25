@@ -55,6 +55,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
@@ -564,4 +565,12 @@ public class MetaDataUtil {
             return physicalName.startsWith(VIEW_INDEX_TABLE_PREFIX);
         }
     }
+
+    public static IndexType getIndexType(List<Mutation> tableMetaData, KeyValueBuilder builder,
+            ImmutableBytesWritable value) {
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData), PhoenixDatabaseMetaData.INDEX_TYPE_BYTES, builder,
+                value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
+        return null;
+    }
+    
 }
