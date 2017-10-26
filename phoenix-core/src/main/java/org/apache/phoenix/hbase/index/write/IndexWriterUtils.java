@@ -125,11 +125,5 @@ public class IndexWriterUtils {
                 LOG.error("Exception caught while trying to close the HConnection used by CoprocessorHConnectionTableFactory");
             }
         }
-
-        @Override
-        public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool)
-                throws IOException {
-            return getConnection(conf).getTable(tablename.copyBytesIfNecessary(), pool);
-        }
     }
 }
