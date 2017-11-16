@@ -647,8 +647,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int minLength = length - maxTrailingNulls;
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            while (length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
+            int index = dataRowKeySchema.getFieldCount() - 1;
+            while (index >= 0 && !dataRowKeySchema.getField(index).getDataType().isFixedWidth() && length > minLength && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
                 length--;
+                index--;
             }
             // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
             // we store this in nIndexSaltBuckets, as we only use this function for local indexes
