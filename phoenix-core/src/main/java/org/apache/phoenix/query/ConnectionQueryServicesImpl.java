@@ -798,7 +798,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                         ColumnFamilyDescriptorBuilder columnDescriptorBuilder = ColumnFamilyDescriptorBuilder.newBuilder(columnDescriptor);
                         modifyColumnFamilyDescriptor(columnDescriptorBuilder, family.getSecond());
-                        tableDescriptorBuilder.addColumnFamily(columnDescriptorBuilder.build());
+                        tableDescriptorBuilder.modifyColumnFamily(columnDescriptorBuilder.build());
                     }
                 }
             }
@@ -833,13 +833,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // The phoenix jar must be available on HBase classpath
         int priority = props.getInt(QueryServices.COPROCESSOR_PRIORITY_ATTRIB, QueryServicesOptions.DEFAULT_COPROCESSOR_PRIORITY);
         try {
+            TableDescriptor newDesc = builder.build();
+            if(!newDesc.hasCoprocessor(ScanRegionObserver.class.getName())) {
                 builder.addCoprocessor(ScanRegionObserver.class.getName(), null, priority, null);
-            
+            }
+            if(!newDesc.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(UngroupedAggregateRegionObserver.class.getName(), null, priority, null);
-            
+            }
+            if(!newDesc.hasCoprocessor(GroupedAggregateRegionObserver.class.getName())) {
                 builder.addCoprocessor(GroupedAggregateRegionObserver.class.getName(), null, priority, null);
-            
+            }
+            if(!newDesc.hasCoprocessor(ServerCachingEndpointImpl.class.getName())) {
                 builder.addCoprocessor(ServerCachingEndpointImpl.class.getName(), null, priority, null);
+            }
             boolean isTransactional =
                     Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) ||
                     Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA)); // For ALTER TABLE
@@ -851,20 +857,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
+                    if(!newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                         builder.addCoprocessor(PhoenixTransactionalIndexer.class.getName(), null, priority, null);
+                    }
                     // For alter table, remove non transactional index coprocessor
+                    if(newDesc.hasCoprocessor(Indexer.class.getName())) {
                         builder.removeCoprocessor(Indexer.class.getName());
+                    }
                 } else {
-                    if (!builder.build().hasCoprocessor(Indexer.class.getName())) {
+                    if (!newDesc.hasCoprocessor(Indexer.class.getName())) {
                         // If exception on alter table to transition back to non transactional
+                        if (newDesc.hasCoprocessor(PhoenixTransactionalIndexer.class.getName())) {
                             builder.removeCoprocessor(PhoenixTransactionalIndexer.class.getName());
+                        }
                         Map<String, String> opts = Maps.newHashMapWithExpectedSize(1);
                         opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, PhoenixIndexCodec.class.getName());
                         Indexer.enableIndexing(builder, PhoenixIndexBuilder.class, opts, priority);
                     }
                 }
             }
-            if (SchemaUtil.isStatsTable(tableName)) {
+            if ((SchemaUtil.isStatsTable(tableName) || SchemaUtil.isMetaTable(tableName))
+                    && !newDesc.hasCoprocessor(MultiRowMutationEndpoint.class.getName())) {
                 builder.addCoprocessor(MultiRowMutationEndpoint.class.getName(),
                         null, priority, null);
             }
@@ -872,28 +885,40 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Set<byte[]> familiesKeys = builder.build().getColumnFamilyNames();
             for(byte[] family: familiesKeys) {
                 if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                    if(!newDesc.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
                         builder.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
-                                null, priority, null);
+                            null, priority, null);
                         break;
+                    }
                 }
             }
 
             // Setup split policy on Phoenix metadata table to ensure that the key values of a Phoenix table
             // stay on the same region.
             if (SchemaUtil.isMetaTable(tableName) || SchemaUtil.isFunctionTable(tableName)) {
+                if (!newDesc.hasCoprocessor(MetaDataEndpointImpl.class.getName())) {
                     builder.addCoprocessor(MetaDataEndpointImpl.class.getName(), null, priority, null);
+                }
                 if(SchemaUtil.isMetaTable(tableName) ) {
+                    if (!newDesc.hasCoprocessor(MetaDataRegionObserver.class.getName())) {
                         builder.addCoprocessor(MetaDataRegionObserver.class.getName(), null, priority + 1, null);
+                    }
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
-                builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
+                if(!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
+                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
+                }
             }
 
             if (isTransactional) {
+                if(!newDesc.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
                     builder.addCoprocessor(PhoenixTransactionalProcessor.class.getName(), null, priority - 10, null);
+                }
             } else {
                 // If exception on alter table to transition back to non transactional
+                if(newDesc.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
                     builder.removeCoprocessor(PhoenixTransactionalProcessor.class.getName());
+                }
             }
         } catch (IOException e) {
             throw ServerUtil.parseServerException(e);
@@ -2185,7 +2210,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         }
-        return new Pair<>(origTableDescriptor, newTableDescriptorBuilder.build());
+        return new Pair<>(origTableDescriptor, newTableDescriptorBuilder == null ? null
+                : newTableDescriptorBuilder.build());
     }
 
     private void checkTransactionalVersionsValue(ColumnFamilyDescriptor colDescriptor) throws SQLException {
