@@ -268,7 +268,7 @@ public class PhoenixStorageHandlerUtil {
     public static String getOptionsValue(Options options) {
         StringBuilder content = new StringBuilder();
 
-        int bucket = options.getBucket();
+        int bucket = options.getBucketId();
         String inspectorInfo = options.getInspector().getCategory() + ":" + options.getInspector()
                 .getTypeName();
         long maxTxnId = options.getMaximumTransactionId();
