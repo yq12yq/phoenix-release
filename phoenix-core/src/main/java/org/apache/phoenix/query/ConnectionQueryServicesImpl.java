@@ -906,7 +906,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             } else if (SchemaUtil.isSequenceTable(tableName)) {
                 if(!newDesc.hasCoprocessor(SequenceRegionObserver.class.getName())) {
-                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority, null);
+                    // Just giving more priority to this coprocessor till HBASE-19384 get's fixed
+                    // because in HBase 2.0 the bypass is not working as old versions.
+                    builder.addCoprocessor(SequenceRegionObserver.class.getName(), null, priority + 1, null);
                 }
             }
 
@@ -1121,12 +1123,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     newDesc.removeValue(Bytes.toBytes(PhoenixTransactionContext.READ_NON_TX_DATA));
                 }
-                if (existingDesc.equals(newDesc)) {
+                TableDescriptor result = newDesc.build();
+                if (existingDesc.equals(result)) {
                     return null; // Indicate that no metadata was changed
                 }
 
-                modifyTable(physicalTableName, newDesc.build(), true);
-                return newDesc.build();
+                modifyTable(physicalTableName, result, true);
+                return result;
             }
 
         } catch (IOException e) {
@@ -3744,7 +3747,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return;
             }
             Table hTable = this.getTable(SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES,this.getProps()).getName());
-            Object[] resultObjects = null;
+            Object[] resultObjects = new Object[incrementBatch.size()];
             SQLException sqlE = null;
             try {
                 hTable.batch(incrementBatch, resultObjects);
