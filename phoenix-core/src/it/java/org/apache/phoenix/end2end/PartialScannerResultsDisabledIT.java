@@ -10,86 +10,58 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
-import java.util.Properties;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Before;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
-    public static final String TEST_TABLE_DDL =
-            "CREATE TABLE IF NOT EXISTS %s\n" + "(\n" + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"
-                    + "    FEED_ELEMENT_ID CHAR(15) NOT NULL,\n"
-                    + "    CONTAINER_ID CHAR(15) NOT NULL,\n"
-                    + "    FEED_TYPE VARCHAR(1) NOT NULL, \n"
-                    + "    NETWORK_ID CHAR(15) NOT NULL,\n" + "    USER_ID CHAR(15) NOT NULL,\n"
-                    + "    CREATED_TIME TIMESTAMP,\n" + "    LAST_UPDATE TIMESTAMP,\n"
-                    + "    RELEVANCE_SCORE DOUBLE,\n" + "    FEED_ITEM_TYPE VARCHAR(1),\n"
-                    + "    FEED_ELEMENT_TYPE VARCHAR(1),\n"
-                    + "    FEED_ELEMENT_IS_SYS_GEN BOOLEAN,\n"
-                    + "    FEED_ELEMENT_STATUS VARCHAR(1),\n"
-                    + "    FEED_ELEMENT_VISIBILITY VARCHAR(1),\n" + "    PARENT_ID CHAR(15),\n"
-                    + "    CREATED_BY CHAR(15),\n" + "    BEST_COMMENT_ID CHAR(15),\n"
-                    + "    COMMENT_COUNT INTEGER,\n" + "    CONSTRAINT PK PRIMARY KEY\n" + "    (\n"
-                    + "        ORGANIZATION_ID,\n" + "        FEED_ELEMENT_ID,\n"
-                    + "        CONTAINER_ID,\n" + "        FEED_TYPE,\n" + "        NETWORK_ID,\n"
-                    + "        USER_ID\n" + "    )\n" + ") COLUMN_ENCODED_BYTES = 0";
+import java.sql.*;
+import java.util.Properties;
+import java.util.UUID;
 
-    public static final String INDEX_1_DDL =
-            "CREATE INDEX IF NOT EXISTS %s\n" + "ON %s (\n" + "    NETWORK_ID,\n"
-                    + "    CONTAINER_ID,\n" + "    FEED_TYPE,\n" + "    USER_ID,\n"
-                    + "    CREATED_TIME DESC,\n" + "    FEED_ELEMENT_ID DESC,\n"
-                    + "    CREATED_BY\n" + ") "
-                    + "    INCLUDE (\n" + "    FEED_ITEM_TYPE,\n"
-                    + "    FEED_ELEMENT_TYPE,\n" + "    FEED_ELEMENT_IS_SYS_GEN,\n"
-                    + "    FEED_ELEMENT_STATUS,\n" + "    FEED_ELEMENT_VISIBILITY,\n"
-                    + "    PARENT_ID,\n" + "    BEST_COMMENT_ID,\n" + "    COMMENT_COUNT\n" + ")";
+import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
+import static org.junit.Assert.fail;
 
-    private static final String UPSERT_INTO_DATA_TABLE =
-            "UPSERT INTO %s\n" + "(\n" + "    ORGANIZATION_ID,\n" + "    FEED_ELEMENT_ID,\n"
-                    + "    CONTAINER_ID,\n" + "    FEED_TYPE,\n" + "    NETWORK_ID,\n"
-                    + "    USER_ID,\n" + "    CREATED_TIME,\n" + "    LAST_UPDATE,\n"
-                    + "    FEED_ITEM_TYPE,\n" + "    FEED_ELEMENT_TYPE,\n"
-                    + "    FEED_ELEMENT_IS_SYS_GEN,\n" + "    FEED_ELEMENT_STATUS,\n"
-                    + "    FEED_ELEMENT_VISIBILITY,\n" + "    PARENT_ID,\n" + "    CREATED_BY,\n"
-                    + "    BEST_COMMENT_ID,\n" + "    COMMENT_COUNT\n" + ")"
-                    + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
-
-    private String dataTableName;
-    private String indexTableName;
-    private String schemaName;
-    private String dataTableFullName;
-    private static String indexTableFullName;
-    private static final Logger logger = LoggerFactory.getLogger(PartialScannerResultsDisabledIT.class);
-    private static Random random = new Random(1);
-    // background writer threads
-    private static Random sourceOfRandomness = new Random(0);
-    private static AtomicInteger upsertIdCounter = new AtomicInteger(1);
+public class PartialScannerResultsDisabledIT {
+    private static HBaseTestingUtility hbaseTestUtil;
+    private static String zkQuorum;
+    private static String url;
 
     @Before
     public void setup() throws Exception {
-        // create the tables
-        generateUniqueTableNames();
-        createTestTable(getUrl(), String.format(TEST_TABLE_DDL, dataTableFullName));
-        createTestTable(getUrl(), String.format(INDEX_1_DDL, indexTableName, dataTableFullName));
+        Configuration conf = HBaseConfiguration.create();
+        hbaseTestUtil = new HBaseTestingUtility(conf);
+        setUpConfigForMiniCluster(conf);
+
+        hbaseTestUtil.startMiniCluster();
+        zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
+        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
     }
+    
+    /*
+            Can't really assert this on the patch branch since Scrutiny is a newer major feature
+            that customer didn't ask for.
+
+    @Test
+    public void testWithEnoughData() throws Exception {
+        try (Connection conn = DriverManager.getConnection(url)) {
+            // Write enough data to trigger partial scanner results
+            // TODO: it's likely that less data could be written if whatever
+            // config parameters decide this are lowered.
+            writeSingleBatch(conn, 100, 20, dataTableFullName);
+
+            logger.info("Running scrutiny");
+            // Scutunize index to see if partial results are silently returned
+            // In that case we'll get a false positive on the scrutiny run.
+            long rowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
+            assertEquals(2000,rowCount);
+        }
+    }
+    */
 
     /**
      * Simple select query with fetch size that exceed the result size. In that case scan would start to produce
@@ -98,13 +70,13 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void partialResultDuringSelect () throws SQLException {
-        String tableName = generateUniqueName();
+        String tableName = RandomStringUtils.randomAlphabetic(20).toUpperCase();
         Properties props = new Properties();
         props.setProperty(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, "5");
         int numRecords = 10;
         try (Connection conn = DriverManager.getConnection(url, props)) {
-            conn.createStatement().execute(
-                    "CREATE TABLE " + tableName + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE " + tableName +
+                    " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)");
             int i = 0;
             String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
@@ -121,22 +93,10 @@ public class PartialScannerResultsDisabledIT extends ParallelStatsDisabledIT {
             Statement s = conn.createStatement();
             s.setFetchSize(100);
             ResultSet rs = s.executeQuery(sql);
-            int count = 0;
             while (rs.next()) {
                 if (rs.getString(2) == null)
                     fail("Null value because of partial row scan");
             }
-            count++;
         }
-
     }
-    
-    private void generateUniqueTableNames() {
-        schemaName = generateUniqueName();
-        dataTableName = generateUniqueName() + "_DATA";
-        dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        indexTableName = generateUniqueName() + "_IDX";
-        indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-    }
-
 }
