@@ -17,38 +17,23 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.query.ConnectionQueryServices.Feature;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.AfterClass;
-import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.Properties;
+import java.sql.*;
 import java.util.Random;
 import java.util.UUID;
 
-import static org.apache.hadoop.hbase.HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
-import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.BaseTest.setUpConfigForMiniCluster;
-import static org.apache.phoenix.query.QueryServices.*;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -95,8 +80,8 @@ public class PartialResultServerConfigurationIT {
      */
     @Test
     public void testJoinScan() throws Exception {
-        String tableNameR = generateUniqueName();
-        String tableNameL = generateUniqueName();
+        String tableNameR = RandomStringUtils.randomAlphabetic(20).toUpperCase();
+        String tableNameL = RandomStringUtils.randomAlphabetic(20).toUpperCase();
 
         int numRecords = 1000;
         try (Connection conn = DriverManager.getConnection(url)) {
