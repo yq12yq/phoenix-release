@@ -25,11 +25,17 @@ import static org.mockito.Mockito.spy;
 
 import org.junit.Test;
 
+import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.TimeUnit;
+
+
 
 /**
  *
@@ -278,4 +284,64 @@ public class MemoryManagerTest {
         assertTrue(rmm3.getAvailableMemory() == rmm3.getMaxMemory());
         assertTrue(rmm4.getAvailableMemory() == rmm4.getMaxMemory());
     }
+
+    @Test
+    public void testConcurrentAllocation() throws Exception {
+        int THREADS = 100;
+
+        // each thread will attempt up to 100 allocations on average.
+        final GlobalMemoryManager gmm = new GlobalMemoryManager(THREADS * 1000, 1);
+        final AtomicInteger count = new AtomicInteger(0);
+        final CountDownLatch barrier = new CountDownLatch(THREADS);
+        final CountDownLatch barrier2 = new CountDownLatch(THREADS);
+        final CountDownLatch signal = new CountDownLatch(1);
+        /*
+         * each thread will allocate chunks of 10 bytes, until no more memory is available.
+         */
+        for (int i = 0; i < THREADS; i++) {
+            new Thread(new Runnable() {
+                List<MemoryChunk> chunks = new ArrayList<>();
+                @Override
+                public void run() {
+                    try {
+                        while(true) {
+                            Thread.sleep(1);
+                            chunks.add(gmm.allocate(10));
+                            count.incrementAndGet();
+                        }
+                    } catch (InsufficientMemoryException e) {
+                        barrier.countDown();
+                        // wait for the signal to go ahead
+                        try {signal.await();} catch (InterruptedException ix) {}
+                        for (MemoryChunk chunk : chunks) {
+                            chunk.close();
+                        }
+                        barrier2.countDown();
+                    } catch (InterruptedException ix) {}
+                }
+            }).start();
+        }
+        // wait until all threads failed an allocation
+        barrier.await();
+        // make sure all memory was used
+        assertTrue(gmm.getAvailableMemory() == 0);
+        // let the threads end, and free their memory
+        signal.countDown(); barrier2.await();
+        // make sure all memory is freed
+        assertTrue(gmm.getAvailableMemory() == gmm.getMaxMemory());
+    }
+
+    /**
+     * Test for SpillableGroupByCache which is using MemoryManager to allocate chunks for GroupBy execution
+     * @throws Exception
+     */
+    @Test
+    public void testCorrectnessOfChunkAllocation() throws Exception {
+        for(int i = 1000;i < Integer.MAX_VALUE;) {
+            i *=1.5f;
+            long result = GroupedAggregateRegionObserver.sizeOfUnorderedGroupByMap(i, 100);
+            assertTrue("Size for GroupByMap is negative" , result > 0);
+        }
+    }
+
 }
