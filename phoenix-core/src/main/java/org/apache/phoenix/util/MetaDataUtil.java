@@ -572,5 +572,4 @@ public class MetaDataUtil {
                 value)) { return IndexType.fromSerializedValue(value.get()[value.getOffset()]); }
         return null;
     }
-    
 }
