@@ -956,7 +956,20 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 @Override
                 public Void run() throws Exception {
                     String fullTableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
-                    clearTsOnDisabledIndexes(fullTableName);
+                    // PHOENIX-4537: When namespace mapping is enabled for the first time and the
+                    // system tables are not yet moved to the SYSTEM schema, we have the potential
+                    // to get into a deadlock. If a RS runs a compaction on a SYSTEM table before
+                    // the tables are moved to the SYSTEM schema, this method will trigger the
+                    // movement to the SYSTEM schema which will block, waiting for the compaction
+                    // which triggered this postCompact call to finish.
+                    //
+                    // Temporary workaround is to avoid calling this method on SYSTEM tables (while
+                    // we presently have no indexes on system tables), but a long-term fix would
+                    // be to implement a similar approach to avoid moving System tables into the
+                    // SYSTEM schema from server-side Phoenix connections.
+                    if (!SchemaUtil.isSystemTable(Bytes.toBytes(fullTableName))) {
+                      clearTsOnDisabledIndexes(fullTableName);
+                    }
                     return null;
                 }
             });
