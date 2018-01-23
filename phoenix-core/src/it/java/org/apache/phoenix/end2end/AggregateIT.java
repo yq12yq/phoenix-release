@@ -42,7 +42,7 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
-
+import org.apache.phoenix.util.TestUtil;
 
 public class AggregateIT extends BaseHBaseManagedTimeIT {
 
