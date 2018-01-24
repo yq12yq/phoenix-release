@@ -46,8 +46,11 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -310,7 +313,7 @@ public class TestUtil {
     }
 
     public static MultiKeyValueComparisonFilter multiKVFilter(Expression e) {
-        return  new MultiCQKeyValueComparisonFilter(e);
+        return  new MultiCQKeyValueComparisonFilter(e, false, ByteUtil.EMPTY_BYTE_ARRAY);
     }
 
     public static Expression and(Expression... expressions) {
@@ -624,5 +627,25 @@ public class TestUtil {
             tableNameBuilder.append(transactional ? "_TXN" : "_NON_TXN");
         return tableNameBuilder.toString();
     }
+    
+    public static void dumpTable(HTableInterface table) throws IOException {
+        System.out.println("************ dumping " + table + " **************");
+        Scan s = new Scan();
+        s.setRaw(true);;
+        s.setMaxVersions();
+        try (ResultScanner scanner = table.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                Cell current = null;
+                while (cellScanner.advance()) {
+                    current = cellScanner.current();
+                    System.out.println(current);
+                }
+            }
+        }
+        System.out.println("-----------------------------------------------");
+    }
+
 }
 
