@@ -606,10 +606,6 @@ public class ScanRanges {
     }
 
     public boolean hasEqualityConstraint(int pkPosition) {
-        if (isPointLookup) {
-            return true;
-        }
-        
         int pkOffset = 0;
         int nRanges = ranges.size();
 
