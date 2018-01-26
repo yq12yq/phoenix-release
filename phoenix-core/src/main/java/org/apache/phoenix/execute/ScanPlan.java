@@ -93,7 +93,9 @@ public class ScanPlan extends BaseQueryPlan {
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes, limit == null ? -1 : limit, orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
+            ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes,
+                    limit == null ? -1 : QueryUtil.getOffsetLimit(limit, offset), orderBy.getOrderByExpressions(),
+                    projector.getEstimatedRowByteSize());
         }
     }
 
@@ -205,10 +207,7 @@ public class ScanPlan extends BaseQueryPlan {
          */
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, offset, allowPageFilter);
-        Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
-        if (perScanLimit != null) {
-            perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);
-        }
+        Integer perScanLimit = !allowPageFilter || isOrdered ? null : QueryUtil.getOffsetLimit(limit, offset);
         BaseResultIterators iterators;
         boolean isOffsetOnServer = isOffsetPossibleOnServer(context, orderBy, offset, isSalted, table.getIndexType());
         if (isOffsetOnServer) {
