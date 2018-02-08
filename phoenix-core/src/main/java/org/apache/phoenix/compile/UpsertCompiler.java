@@ -501,9 +501,10 @@ public class UpsertCompiler {
                         // so we might be able to run it entirely on the server side.
                         // For a table with row timestamp column, we can't guarantee that the row key will reside in the
                         // region space managed by region servers. So we bail out on executing on server side.
+                        boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
                         runOnServer = isAutoCommit && !table.isTransactional()
                                 && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
-                                && !select.isJoin() && table.getRowTimestampColPos() == -1;
+                                && !select.isJoin() && !hasWhereSubquery && table.getRowTimestampColPos() == -1;
                     }
                     // If we may be able to run on the server, add a hint that favors using the data table
                     // if all else is equal.
