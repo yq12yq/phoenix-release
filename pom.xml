@@ -110,9 +110,11 @@
     <scala.binary.version>2.11</scala.binary.version>
     <stream.version>2.9.5</stream.version>
     <i18n-util.version>1.0.1</i18n-util.version>
+    <servlet.api.version>3.1.0</servlet.api.version>
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
+    <bouncycastle.version>1.46</bouncycastle.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
@@ -477,6 +479,9 @@
             <exclude>examples/pig/testdata</exclude>
             <!-- precommit? -->
             <exclude>**/patchprocess/**</exclude>
+            <!-- Argparse is bundled to work around system Python version
+                 issues, compatibile with ALv2 -->
+            <exclude>bin/argparse-1.4.0/argparse.py</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -502,7 +507,7 @@
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
         <version>${project.version}</version>
-        <classifier>tests</classifier>
+        <type>test-jar</type>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -682,6 +687,12 @@
         <artifactId>hadoop-minicluster</artifactId>
         <version>${hadoop.version}</version>
         <optional>true</optional>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-minicluster</artifactId>
+        <version>${hadoop.version}</version>
         <scope>test</scope>
       </dependency>
 
@@ -968,6 +979,17 @@
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-webapp</artifactId>
         <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>${servlet.api.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk16</artifactId>
+        <version>${bouncycastle.version}</version>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
