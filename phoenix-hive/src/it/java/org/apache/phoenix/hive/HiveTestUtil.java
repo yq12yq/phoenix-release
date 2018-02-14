@@ -467,14 +467,6 @@ public class HiveTestUtil {
                         continue;
                     }
                     db.dropTable(dbName, tblName);
-                } else {
-                    // this table is defined in srcTables, drop all indexes on it
-                    List<Index> indexes = db.getIndexes(dbName, tblName, (short) -1);
-                    if (indexes != null && indexes.size() > 0) {
-                        for (Index index : indexes) {
-                            db.dropIndex(dbName, tblName, index.getIndexName(), true, true);
-                        }
-                    }
                 }
             }
             if (!DEFAULT_DATABASE_NAME.equals(dbName)) {

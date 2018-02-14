@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.0.0.3.0.0.0-SNAPSHOT</version>
+  <version>5.0.0.3.0.0.2-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -48,6 +48,12 @@
       <id>hwx-public</id>
       <name>hwx</name>
       <url>http://nexus-private.hortonworks.com/nexus/content/groups/public/</url>
+			<releases>
+			  <enabled>true</enabled>
+			</releases>
+			<snapshots>
+			  <enabled>true</enabled>
+			</snapshots>
     </repository>
   </repositories>
 
@@ -71,12 +77,12 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>2.0.0.3.0.0.0-SNAPSHOT</hbase.version>
-    <hadoop.version>3.0.0.3.0.0.0-SNAPSHOT</hadoop.version>
+    <hbase.version>2.0.0.3.0.0.2-SNAPSHOT</hbase.version>
+    <hadoop.version>3.0.0.3.0.0.2-SNAPSHOT</hadoop.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
-    <hive.version>3.0.0.3.0.0.0-SNAPSHOT</hive.version>
+    <hive.version>3.0.0.3.0.0.2-SNAPSHOT</hive.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
@@ -102,7 +108,7 @@
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <avatica.version>1.10.0.3.0.0.0-SNAPSHOT</avatica.version>
+    <avatica.version>1.10.0.3.0.0.2-SNAPSHOT</avatica.version>
     <jetty.version>9.3.19.v20170502</jetty.version>
     <tephra.version>0.13.0-incubating</tephra.version>
     <spark.version>2.0.2</spark.version>
