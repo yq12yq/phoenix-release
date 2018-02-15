@@ -662,12 +662,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 currentKeyBytes = endKey;
                 regionIndex++;
             }
-            if (hasGuidePosts) {
-                this.estimatedRows = estimatedRows;
-                this.estimatedSize = estimatedSize;
-            } else if (scanRanges.isPointLookup()) {
+            if (scanRanges.isPointLookup()) {
                 this.estimatedRows = 1L;
                 this.estimatedSize = SchemaUtil.estimateRowSize(table);
+            } else if (hasGuidePosts) {
+                this.estimatedRows = estimatedRows;
+                this.estimatedSize = estimatedSize;
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
