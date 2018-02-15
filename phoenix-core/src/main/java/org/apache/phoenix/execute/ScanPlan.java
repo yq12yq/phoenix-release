@@ -60,9 +60,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -83,6 +80,8 @@ public class ScanPlan extends BaseQueryPlan {
     private List<KeyRange> splits;
     private List<List<Scan>> scans;
     private boolean allowPageFilter;
+    private boolean isSerial;
+    private boolean isDataToScanWithinThreshold;
     
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
         this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
@@ -93,70 +92,64 @@ public class ScanPlan extends BaseQueryPlan {
                 parallelIteratorFactory != null ? parallelIteratorFactory :
                         buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
-        if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
+        boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
+        if (isOrdered) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes,
                     limit == null ? -1 : QueryUtil.getOffsetLimit(limit, offset), orderBy.getOrderByExpressions(),
                     projector.getEstimatedRowByteSize());
         }
+        Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
+        perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);
+        this.isDataToScanWithinThreshold = isAmountOfDataToScanWithinThreshold(context, table.getTable(), perScanLimit);
+        this.isSerial = isSerial(context, statement, tableRef, orderBy, isDataToScanWithinThreshold);
     }
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
-            TableRef tableRef, OrderBy orderBy, Integer limit, Integer offset, boolean allowPageFilter) throws SQLException {
-        if (statement.getHint().hasHint(HintNode.Hint.SERIAL)) {
+            TableRef tableRef, OrderBy orderBy, boolean isDataWithinThreshold) throws SQLException {
+        if (isDataWithinThreshold) {
+            PTable table = tableRef.getTable();
+            boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
+            boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table, orderBy, context); 
+            if (!canBeExecutedSerially) { 
+                if (hasSerialHint) {
+                    logger.warn("This query cannot be executed serially. Ignoring the hint");
+                }
+                return false;
+            }
             return true;
         }
-        Scan scan = context.getScan();
-        /*
-         * If a limit is provided and we have no filter, run the scan serially when we estimate that
-         * the limit's worth of data is less than the threshold bytes provided in QueryServices.QUERY_PARALLEL_LIMIT_THRESHOLD
-         */
-        boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
-        Integer perScanLimit = !allowPageFilter || isOrdered ? null : QueryUtil.getOffsetLimit(limit, offset);
-        if (perScanLimit == null || scan.getFilter() != null) {
-            return false;
-        }
-        PTable table = tableRef.getTable();
-        long scn = context.getConnection().getSCN() == null ? Long.MAX_VALUE : context.getConnection().getSCN();
-        PTableStats tableStats = context.getConnection().getQueryServices().getTableStats(table.getName().getBytes(), scn);
-        GuidePostsInfo gpsInfo = tableStats.getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
-        ConnectionQueryServices services = context.getConnection().getQueryServices();
-        long estRowSize;
-        long estimatedParallelThresholdBytes;
-        if (gpsInfo == null) {
-            estRowSize = SchemaUtil.estimateRowSize(table);
-            estimatedParallelThresholdBytes = services.getProps().getLong(HConstants.HREGION_MAX_FILESIZE,
-                    HConstants.DEFAULT_MAX_FILE_SIZE);
-        } else {
-            long totByteSize = 0;
-            long totRowCount = 0;
-            for (long byteCount : gpsInfo.getByteCounts()) {
-                totByteSize += byteCount;
-            }
-            for (long rowCount : gpsInfo.getRowCounts()) {
-                totRowCount += rowCount;
-            }
-            estRowSize = totRowCount == 0 ? 0 : totByteSize / totRowCount;
-            estimatedParallelThresholdBytes = 2
-                    * services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
-        }
-        long limitThreshold = services.getProps().getLong(QueryServices.QUERY_PARALLEL_LIMIT_THRESHOLD,
-                estimatedParallelThresholdBytes);
-        boolean isSerial = (perScanLimit * estRowSize < limitThreshold);
-
-        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations(
-                "With LIMIT=" + perScanLimit + ", estimated row size=" + estRowSize + ", limitThreshold="
-                        + limitThreshold + ": " + (isSerial ? "SERIAL" : "PARALLEL") + " execution",
-                context.getConnection()));
-        return isSerial;
+        return false;
     }
     
+    private static boolean isAmountOfDataToScanWithinThreshold(StatementContext context, PTable table, Integer perScanLimit) throws SQLException {
+        Scan scan = context.getScan();
+        ConnectionQueryServices services = context.getConnection().getQueryServices();
+        long estRowSize = SchemaUtil.estimateRowSize(table);
+        long regionSize = services.getProps().getLong(HConstants.HREGION_MAX_FILESIZE,
+                HConstants.DEFAULT_MAX_FILE_SIZE);
+        if (perScanLimit == null || scan.getFilter() != null) {
+            /*
+             * If a limit is not provided or if we have a filter, then we are not able to decide whether
+             * the amount of data we need to scan is less than the threshold.
+             */
+            return false;
+        } 
+        float factor =
+            services.getProps().getFloat(QueryServices.LIMITED_QUERY_SERIAL_THRESHOLD,
+                QueryServicesOptions.DEFAULT_LIMITED_QUERY_SERIAL_THRESHOLD);
+        long threshold = (long)(factor * regionSize);
+        return (perScanLimit * estRowSize < threshold);
+    }
+    
+    @SuppressWarnings("deprecation")
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context, FilterableStatement statement,
-            TableRef table, OrderBy orderBy, Integer limit,Integer offset, boolean allowPageFilter) throws SQLException {
+            TableRef tableRef, OrderBy orderBy, Integer limit,Integer offset, boolean allowPageFilter) throws SQLException {
 
-        if ((isSerial(context, statement, table, orderBy, limit, offset, allowPageFilter)
+        boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
+        Integer perScanLimit = !allowPageFilter || isOrdered ? null : QueryUtil.getOffsetLimit(limit, offset);
+        if ((isSerial(context, statement, tableRef, orderBy, isAmountOfDataToScanWithinThreshold(context, tableRef.getTable(), perScanLimit))
                 || ScanUtil.isRoundRobinPossible(orderBy, context) || ScanUtil.isPacingScannersPossible(context))
                 && offset == null) { return ParallelIteratorFactory.NOOP_FACTORY; }
         ParallelIteratorFactory spoolingResultIteratorFactory =
@@ -170,7 +163,7 @@ public class ScanPlan extends BaseQueryPlan {
             return spoolingResultIteratorFactory;
         } else {
             return new ChunkedResultIterator.ChunkedResultIteratorFactory(
-                    spoolingResultIteratorFactory, context.getConnection().getMutationState(), table);
+                    spoolingResultIteratorFactory, context.getConnection().getMutationState(), tableRef);
         }
     }
 
@@ -209,19 +202,23 @@ public class ScanPlan extends BaseQueryPlan {
          * limit is provided, run query serially.
          */
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
-        boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, offset, allowPageFilter);
-        Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
-        if (perScanLimit != null) {
-            perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);
-        }
-        BaseResultIterators iterators;
+        Integer perScanLimit = QueryUtil.getOffsetLimit(!allowPageFilter || isOrdered ? null : limit, offset);
         boolean isOffsetOnServer = isOffsetPossibleOnServer(context, orderBy, offset, isSalted, table.getIndexType());
+        /*
+         * For queries that are doing a row key order by and are not possibly querying more than a
+         * threshold worth of data, then we only need to initialize scanners corresponding to the
+         * first (or last, if reverse) scan per region.
+         */
+        boolean initFirstScanOnly =
+                (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY)
+                        && isDataToScanWithinThreshold; 
+        BaseResultIterators iterators;
         if (isOffsetOnServer) {
             iterators = new SerialIterators(this, perScanLimit, offset, parallelIteratorFactory, scanGrouper, scan, caches);
         } else if (isSerial) {
             iterators = new SerialIterators(this, perScanLimit, null, parallelIteratorFactory, scanGrouper, scan, caches);
         } else {
-            iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper, scan, caches);
+            iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper, scan, caches, initFirstScanOnly);
         }
         splits = iterators.getSplits();
         scans = iterators.getScans();
@@ -270,5 +267,4 @@ public class ScanPlan extends BaseQueryPlan {
     public boolean useRoundRobinIterator() throws SQLException {
         return ScanUtil.isRoundRobinPossible(orderBy, context);
     }
-
 }
