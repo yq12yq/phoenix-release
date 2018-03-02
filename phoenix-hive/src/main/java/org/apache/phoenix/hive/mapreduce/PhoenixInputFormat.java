@@ -148,7 +148,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         setScanCacheSize(jobConf);
 
         // Adding Localization
-        HConnection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf));
+        try (org.apache.hadoop.hbase.client.Connection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf))) {
         RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
                 .getTableRef().getTable().getPhysicalName().toString()));
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
@@ -201,6 +201,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
                 psplits.add(inputSplit);
             }
         }
+		}
 
         return psplits;
     }
