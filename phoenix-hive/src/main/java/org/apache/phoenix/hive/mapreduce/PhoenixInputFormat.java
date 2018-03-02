@@ -151,68 +151,69 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         }
 
         // Adding Localization
-        HConnection connection = HConnectionManager.createConnection(jobConf);
-        RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
-                .getTableRef().getTable().getPhysicalName().toString()));
-        RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
-                .getAdmin());
+        try (HConnection connection = HConnectionManager.createConnection(jobConf)) {
+			RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
+					.getTableRef().getTable().getPhysicalName().toString()));
+			RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
+					.getAdmin());
 
-        for (List<Scan> scans : qplan.getScans()) {
-            PhoenixInputSplit inputSplit;
+			for (List<Scan> scans : qplan.getScans()) {
+				PhoenixInputSplit inputSplit;
 
-            HRegionLocation location = regionLocator.getRegionLocation(scans.get(0).getStartRow()
-                    , false);
-            long regionSize = sizeCalculator.getRegionSize(location.getRegionInfo().getRegionName
-                    ());
-            String regionLocation = PhoenixStorageHandlerUtil.getRegionLocation(location, LOG);
+				HRegionLocation location = regionLocator.getRegionLocation(scans.get(0).getStartRow()
+						, false);
+				long regionSize = sizeCalculator.getRegionSize(location.getRegionInfo().getRegionName
+						());
+				String regionLocation = PhoenixStorageHandlerUtil.getRegionLocation(location, LOG);
 
-            if (splitByStats) {
-                for (Scan aScan : scans) {
-                    if (scanCacheSize > 0) {
-                        aScan.setCaching(scanCacheSize);
-                    }
+				if (splitByStats) {
+					for (Scan aScan : scans) {
+						if (scanCacheSize > 0) {
+							aScan.setCaching(scanCacheSize);
+						}
 
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
-                                .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
-                                aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
-                                .getBatch() + "] and  regionLocation : " + regionLocation);
-                    }
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
+									.getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
+									aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
+									.getBatch() + "] and  regionLocation : " + regionLocation);
+						}
 
-                    inputSplit = new PhoenixInputSplit(Lists.newArrayList(aScan), tablePaths[0],
-                            regionLocation, regionSize);
-                    inputSplit.setQuery(query);
-                    psplits.add(inputSplit);
-                }
-            } else {
-                if (scanCacheSize > 0) {
-                    for (Scan aScan : scans) {
-                        aScan.setCaching(scanCacheSize);
-                    }
-                }
+						inputSplit = new PhoenixInputSplit(Lists.newArrayList(aScan), tablePaths[0],
+								regionLocation, regionSize);
+						inputSplit.setQuery(query);
+						psplits.add(inputSplit);
+					}
+				} else {
+					if (scanCacheSize > 0) {
+						for (Scan aScan : scans) {
+							aScan.setCaching(scanCacheSize);
+						}
+					}
 
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
-                            .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
-                            .size() - 1).getStopRow()));
-                    LOG.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
-                            .get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
-                            "[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
-                            + ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
-                            regionLocation);
+					if (LOG.isDebugEnabled()) {
+						LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
+								.get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
+								.size() - 1).getStopRow()));
+						LOG.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
+								.get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
+								"[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
+								+ ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
+								regionLocation);
 
-                    for (int i = 0, limit = scans.size(); i < limit; i++) {
-                        LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
-                                .toStringBinary(scans.get(i).getAttribute
-                                        (BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
-                    }
-                }
+						for (int i = 0, limit = scans.size(); i < limit; i++) {
+							LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
+									.toStringBinary(scans.get(i).getAttribute
+											(BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+						}
+					}
 
-                inputSplit = new PhoenixInputSplit(scans, tablePaths[0], regionLocation,
-                        regionSize);
-                inputSplit.setQuery(query);
-                psplits.add(inputSplit);
-            }
+					inputSplit = new PhoenixInputSplit(scans, tablePaths[0], regionLocation,
+							regionSize);
+					inputSplit.setQuery(query);
+					psplits.add(inputSplit);
+				}
+			}
         }
 
         return psplits;
