@@ -36,7 +36,6 @@ import org.apache.hadoop.hive.common.io.SortAndDigestPrintStream;
 import org.apache.hadoop.hive.common.io.SortPrintStream;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.metastore.api.Index;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -461,11 +460,6 @@ public class HiveTestUtil {
             for (String tblName : db.getAllTables()) {
                 if (!DEFAULT_DATABASE_NAME.equals(dbName)) {
                     Table tblObj = db.getTable(tblName);
-                    // dropping index table can not be dropped directly. Dropping the base
-                    // table will automatically drop all its index table
-                    if (tblObj.isIndexTable()) {
-                        continue;
-                    }
                     db.dropTable(dbName, tblName);
                 }
             }
