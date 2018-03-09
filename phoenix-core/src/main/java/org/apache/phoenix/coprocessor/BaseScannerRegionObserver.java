@@ -175,7 +175,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
         if(isLocalIndex) {
-            ScanUtil.setupLocalIndexScan(scan, lowerInclusiveRegionKey, upperExclusiveRegionKey);
+            ScanUtil.setupLocalIndexScan(scan);
         }
     }
 

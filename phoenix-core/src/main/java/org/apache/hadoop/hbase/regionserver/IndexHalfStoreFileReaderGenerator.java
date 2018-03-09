@@ -348,7 +348,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     private List<KeyValueScanner> getLocalIndexScanners(final
                                                 ObserverContext<RegionCoprocessorEnvironment> c,
                           final Store store, final Scan scan, final long readPt) throws IOException {
-
+        
         boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
         Collection<StoreFile> storeFiles = store.getStorefiles();
         List<StoreFile> nonReferenceStoreFiles = new ArrayList<>(store.getStorefiles().size());
@@ -356,6 +356,16 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 ());
         final List<KeyValueScanner> keyValueScanners = new ArrayList<>(store
                 .getStorefiles().size() + 1);
+        byte[] startKey = c.getEnvironment().getRegionInfo().getStartKey();
+        byte[] endKey = c.getEnvironment().getRegionInfo().getEndKey();
+        // If the region start key is not the prefix of the scan start row then we can return empty
+        // scanners. This is possible during merge where one of the child region scan should not return any
+        // results as we go through merged region.
+        if (Bytes.compareTo(scan.getStartRow(), 0, startKey.length == 0 ? endKey.length
+                : startKey.length, startKey.length == 0 ? new byte[endKey.length] : startKey, 0,
+            startKey.length == 0 ? endKey.length : startKey.length) != 0) {
+            return keyValueScanners;
+        }
         for (StoreFile storeFile : storeFiles) {
             if (storeFile.isReference()) {
                 referenceStoreFiles.add(storeFile);
