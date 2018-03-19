@@ -70,9 +70,7 @@ public class StatisticsScanner implements InternalScanner {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        boolean ret = delegate.next(result, scannerContext);
-        updateStats(result);
-        return ret;
+        return next(result);
     }
 
     /**
