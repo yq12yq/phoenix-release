@@ -2,6 +2,27 @@ HDP-2.6 is based on Apache Phoenix 4.7.0-HBase-1.1
 
 Following are the changes on top of Apache Phoenix 4.7.0-HBase-1.1
 
+
+f675b6d PHOENIX-1751: Perform aggregations, sorting, etc, in the preScannerNext instead of postScannerOpen
+daa7094 PHOENIX-2714: Correct byte estimate in BaseResultIterators and expose as interface
+6b0e065 PHOENIX-2724: Query with large number of guideposts is slower compared to no stats
+2dc1ac4 PHOENIX-2855: Workaround Increment TimeRange not being serialized for HBase 1.2
+8559862 PHOENIX-3023: Slow performance when limit queries are executed in parallel by default
+05f0d36 PHOENIX-3040: Don't use guideposts for executing queries serially
+4895ee5 PHOENIX-3112: Partial row scan not handled correctly
+6f263af PHOENIX-3240: ClassCastException from Pig loader
+9212906 PHOENIX-3452: NULLS FIRST/NULL LAST should not impact whether GROUP BY is order preserving
+c7e8ffe PHOENIX-3469: Incorrect sort order for DESC primary key for NULLS LAST/NULLS FIRST
+86786dc PHOENIX-3789: Execute cross region index maintenance calls in postBatchMutateIndispensably
+546c1d2 PHOENIX-3865: IS NULL does not return correct results when first column family not filtered against
+527b9f9 PHOENIX-4290: Full table scan performed for DELETE with table having immutable indexes
+4de6a6b PHOENIX-4373: Local index variable length key can have trailing nulls while upserting
+10fe363 PHOENIX-4466: java.lang.RuntimeException: response code 500 - Executing a spark job to connect to phoenix query server and load data
+7bec5ab PHOENIX-4489: HBase Connection leak in Phoenix MR Jobs
+9a05b39 PHOENIX-4525: Integer overflow in GroupBy execution
+518fd3f PHOENIX-4560: ORDER BY with GROUP BY doesn't work if there is WHERE on pk column
+2ec4426 PHOENIX-4586: UPSERT SELECT doesn't take in account comparison operators for subqueries.
+1254b8a PHOENIX-4588: Clone expression also if it's children have Determinism.PER_INVOCATION
 a40b07e PHOENIX-3708 Tests introduced in PHOENIX-3346 doesn't work well with failsafe plugin
 3148ef7 PHOENIX-3662 PhoenixStorageHandler throws ClassCastException (by Jeongdae Kim)
 ab48a0b PHOENIX-3346 Hive PhoenixStorageHandler doesn't work well with column
