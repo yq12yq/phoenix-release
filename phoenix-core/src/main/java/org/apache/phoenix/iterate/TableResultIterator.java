@@ -193,8 +193,10 @@ public class TableResultIterator implements ResultIterator {
                         retry--;
                         try {
                             Long cacheId = ((HashJoinCacheNotFoundException)e1).getCacheId();
+                            ServerCache cache = caches == null ? null :
+                                    caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId)));
                             if (!hashCacheClient.addHashCacheToServer(newScan.getStartRow(),
-                                    caches.get(new ImmutableBytesPtr(Bytes.toBytes(cacheId))), plan.getTableRef().getTable())) { throw e1; }
+                                    cache, plan.getTableRef().getTable())) { throw e1; }
                             handledHashJoinCacheNotFoundException = true;
                         } catch (Exception e2) {
                             Closeables.closeQuietly(htable);
