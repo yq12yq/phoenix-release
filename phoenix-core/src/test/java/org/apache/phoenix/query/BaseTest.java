@@ -115,6 +115,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
@@ -820,6 +821,25 @@ public abstract class BaseTest {
         String ddl = tableDDLMap.get(tableName);
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
+    private static final int MAX_SUFFIX_VALUE = 1000000;
+
+    /**
+     * Counter to track number of tables we have created. This isn't really accurate since this
+     * counter will be incremented when we call {@link #generateUniqueName()}for getting unique
+     * schema and sequence names too. But this will have to do.
+     */
+    private static final AtomicInteger TABLE_COUNTER = new AtomicInteger(0);
+
+    public static String generateUniqueName() {
+        int nextName = NAME_SUFFIX.incrementAndGet();
+        if (nextName >= MAX_SUFFIX_VALUE) {
+            throw new IllegalStateException("Used up all unique names");
+        }
+        TABLE_COUNTER.incrementAndGet();
+        return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
 
     protected static String generateRandomString() {

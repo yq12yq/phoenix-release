@@ -1700,27 +1700,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 			throws SQLException {
         byte[] physicalTableName = table.getPhysicalName().getBytes();
         HTableDescriptor htableDesc = this.getTableDescriptor(physicalTableName);
-        Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
-        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size()+1));
-        if (families.isEmpty()) {
-            byte[] familyName = SchemaUtil.getEmptyColumnFamily(table);
+        List<Pair<byte[],Map<String,Object>>> families = Lists.newArrayListWithExpectedSize(Math.max(1, table.getColumnFamilies().size() + 1));
+
+        // Create all column families that the parent table has
+        for (PColumnFamily family : table.getColumnFamilies()) {
+            byte[] familyName = family.getName().getBytes();
             Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
-            families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
-        } else {
-            for (PColumnFamily family : table.getColumnFamilies()) {
-                byte[] familyName = family.getName().getBytes();
-                Map<String,Object> familyProps = createPropertiesMap(htableDesc.getFamily(familyName).getValues());
-                families.add(new Pair<byte[],Map<String,Object>>(familyName, familyProps));
-            }
-            // Always create default column family, because we don't know in advance if we'll
-            // need it for an index with no covered columns.
-            families.add(new Pair<byte[],Map<String,Object>>(table.getDefaultFamilyName().getBytes(), Collections.<String,Object>emptyMap()));
+            families.add(new Pair<>(familyName, familyProps));
         }
+        // Always create default column family, because we don't know in advance if we'll
+        // need it for an index with no covered columns.
+        byte[] defaultFamilyName = table.getDefaultFamilyName() == null ?
+          QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES : table.getDefaultFamilyName().getBytes();
+        families.add(new Pair<>(defaultFamilyName, Collections.<String,Object>emptyMap()));
+
         byte[][] splits = null;
         if (table.getBucketNum() != null) {
             splits = SaltingUtil.getSalteByteSplitPoints(table.getBucketNum());
         }
 
+        // Transfer over table values into tableProps
+        // TODO: encapsulate better
+        Map<String,Object> tableProps = createPropertiesMap(htableDesc.getValues());
+        tableProps.put(PhoenixDatabaseMetaData.TRANSACTIONAL, table.isTransactional());
+        tableProps.put(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, table.isImmutableRows());
         ensureViewIndexTableCreated(physicalTableName, tableProps, families, splits, timestamp, isNamespaceMapped);
     }
 
@@ -2198,15 +2201,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             .build().buildException();
         }
     }
-    
+
     private boolean isHColumnProperty(String propName) {
         return HColumnDescriptor.getDefaultValues().containsKey(propName);
     }
 
     private boolean isHTableProperty(String propName) {
         return !isHColumnProperty(propName) && !TableProperty.isPhoenixTableProperty(propName);
-    } 
-    
+    }
+
     private HashSet<String> existingColumnFamiliesForBaseTable(PName baseTableName) throws TableNotFoundException {
         synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();
@@ -2384,7 +2387,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                                 + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                                                         .build().buildException(); }
                             }
- 
+
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
 
@@ -2420,15 +2423,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
 
                                 // If the server side schema is before MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0 then
-                                // we need to add INDEX_TYPE and INDEX_DISABLE_TIMESTAMP columns too. 
-                                // TODO: Once https://issues.apache.org/jira/browse/PHOENIX-1614 is fixed, 
-                                // we should just have a ALTER TABLE ADD IF NOT EXISTS statement with all 
-                                // the column names that have been added to SYSTEM.CATALOG since 4.0. 
+                                // we need to add INDEX_TYPE and INDEX_DISABLE_TIMESTAMP columns too.
+                                // TODO: Once https://issues.apache.org/jira/browse/PHOENIX-1614 is fixed,
+                                // we should just have a ALTER TABLE ADD IF NOT EXISTS statement with all
+                                // the column names that have been added to SYSTEM.CATALOG since 4.0.
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
                                     columnsToAdd = addColumn(columnsToAdd, PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
                                         + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName());
                                 }
-                                
+
                                 // If we have some new columns from 4.1-4.3 to add, add them now.
                                 if (!columnsToAdd.isEmpty()) {
                                     // Ugh..need to assign to another local variable to keep eclipse happy.
@@ -2437,7 +2440,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0, columnsToAdd);
                                     metaConnection = newMetaConnection;
                                 }
-                                
+
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0) {
                                     columnsToAdd = PhoenixDatabaseMetaData.BASE_COLUMN_COUNT + " "
                                             + PInteger.INSTANCE.getSqlTypeName();
@@ -2446,7 +2449,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0, columnsToAdd, false);
                                         upgradeTo4_5_0(metaConnection);
                                     } catch (ColumnAlreadyExistsException ignored) {
-                                        /* 
+                                        /*
                                          * Upgrade to 4.5 is a slightly special case. We use the fact that the column
                                          * BASE_COLUMN_COUNT is already part of the meta-data schema as the signal that
                                          * the server side upgrade has finished or is in progress.
@@ -2495,7 +2498,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2);
 									metaConnection = updateSystemCatalogTimestamp(metaConnection,
 											MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
-									
+
                                     Properties props = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
                                     props.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
                                     props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
@@ -2538,7 +2541,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
                                     // If the table time stamp is before 4.1.0 then we need to add below columns
                                     // to the SYSTEM.SEQUENCE table.
-                                    String columnsToAdd = PhoenixDatabaseMetaData.MIN_VALUE + " " + PLong.INSTANCE.getSqlTypeName() 
+                                    String columnsToAdd = PhoenixDatabaseMetaData.MIN_VALUE + " " + PLong.INSTANCE.getSqlTypeName()
                                             + ", " + PhoenixDatabaseMetaData.MAX_VALUE + " " + PLong.INSTANCE.getSqlTypeName()
                                             + ", " + PhoenixDatabaseMetaData.CYCLE_FLAG + " " + PBoolean.INSTANCE.getSqlTypeName()
                                             + ", " + PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG + " " + PBoolean.INSTANCE.getSqlTypeName();
@@ -2559,10 +2562,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                                     }
                                     nSequenceSaltBuckets = nSaltBuckets;
-                                } else { 
+                                } else {
                                     nSequenceSaltBuckets = getSaltBuckets(e);
                                 }
-                                
+
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
@@ -2592,7 +2595,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
                                 } catch (NewerSchemaAlreadyExistsException e) {}
                             }
-                            scheduleRenewLeaseTasks(); 
+                            scheduleRenewLeaseTasks();
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
                                 initializationException = (SQLException)e;
@@ -2725,7 +2728,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return metaConnection;
     }
-    
+
     /**
      * Forces update of SYSTEM.CATALOG by setting column to existing value
      * @param oldMetaConnection
