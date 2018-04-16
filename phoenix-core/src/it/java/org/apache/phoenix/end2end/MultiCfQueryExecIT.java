@@ -388,9 +388,9 @@ public class MultiCfQueryExecIT extends BaseOwnClusterClientManagedTimeIT {
     public void testBug4658() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
           Statement stmt = conn.createStatement()) {
-            String tableName = generateUniqueName();
+            String tableName = generateRandomString();
 
-            stmt.execute("CREATE TABLE " + tableName + " ("
+            createTestTable(getUrl(), "CREATE TABLE " + tableName + " ("
                 + "COL1 VARCHAR NOT NULL,"
                 + "COL2 VARCHAR NOT NULL,"
                 + "COL3 VARCHAR,"
@@ -426,6 +426,8 @@ public class MultiCfQueryExecIT extends BaseOwnClusterClientManagedTimeIT {
                 assertEquals(rs.getString("COL2"), "AAA");
                 assertFalse(rs.next());
             }
+
+            stmt.execute("DROP TABLE " + tableName);
         }
     }
 }
