@@ -116,6 +116,10 @@ public class HintNode {
       * Example: NATIVE_TIME_RANGE(1416260321) or NATIVE_TIME_RANGE(1416260321, 2416260321)
       */
      NATIVE_TIME_RANGE,
+     /**
+      * Enforces a forward scan.
+      */
+     FORWARD_SCAN
     };
 
     private final Map<Hint,String> hints;
