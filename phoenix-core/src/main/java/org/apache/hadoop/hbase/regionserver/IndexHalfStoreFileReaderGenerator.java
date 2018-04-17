@@ -67,14 +67,10 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.RepairUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
-    private static final Logger logger = LoggerFactory.getLogger(IndexHalfStoreFileReaderGenerator.class);
-
+    
     int storeFilesCount = 0;
     int compactedFilesCount = 0;
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -224,7 +220,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             if (reader instanceof IndexHalfStoreFileReader) {
                 newScanners.add(new LocalIndexStoreFileScanner(reader, reader.getScanner(
                     scan.getCacheBlocks(), scanUsePread, false), true, reader.getHFileReader()
-                        .hasMVCCInfo(), store.getSmallestReadPoint(), true));
+                        .hasMVCCInfo(), store.getSmallestReadPoint()));
             } else {
                 newScanners.add(((StoreFileScanner) scanner));
             }
@@ -382,7 +378,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             if (sf.getReader() instanceof IndexHalfStoreFileReader) {
                 keyValueScanners.add(new LocalIndexStoreFileScanner(sf.getReader(), sf.getReader()
                         .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt, false));
+                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
             } else {
                 keyValueScanners.add(new StoreFileScanner(sf.getReader(), sf.getReader()
                         .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf

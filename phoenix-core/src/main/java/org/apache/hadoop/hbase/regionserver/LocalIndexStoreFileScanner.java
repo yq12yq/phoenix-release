@@ -31,24 +31,20 @@ import org.apache.hadoop.hbase.io.hfile.HFileScanner;
 import org.apache.hadoop.hbase.regionserver.StoreFile.Reader;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.hbase.KeyValue.ROW_LENGTH_SIZE;
 
 public class LocalIndexStoreFileScanner extends StoreFileScanner{
-    private static final Logger logger = LoggerFactory.getLogger(LocalIndexStoreFileScanner.class);
+
     private IndexHalfStoreFileReader reader;
     private boolean changeBottomKeys;
-    private boolean compaction;
     public LocalIndexStoreFileScanner(Reader reader, HFileScanner hfs, boolean useMVCC,
-            boolean hasMVCC, long readPt, boolean compaction) {
+            boolean hasMVCC, long readPt) {
         super(reader, hfs, useMVCC, hasMVCC, readPt);
         this.reader = ((IndexHalfStoreFileReader)super.getReader());
         this.changeBottomKeys =
                 this.reader.getRegionInfo().getStartKey().length == 0
                         && this.reader.getSplitRow().length != this.reader.getOffset();
-        this.compaction = compaction;
     }
 
     @Override
@@ -62,8 +58,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         }
         if (next!=null && (reader.isTop() || changeBottomKeys)) {
             next = getChangedKey(next,  !reader.isTop() && changeBottomKeys);
-        }
-
+        } 
         return next;
     }
 
@@ -72,7 +67,7 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         Cell peek = super.peek();
         if (peek != null && (reader.isTop() || changeBottomKeys)) {
             peek = getChangedKey(peek, !reader.isTop() && changeBottomKeys);
-        }
+        } 
         return peek;
     }
 
@@ -210,17 +205,17 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         System.arraycopy(Bytes.toBytes(length), 0, replacedKey, 0, ROW_LENGTH_SIZE);
         System.arraycopy(reader.getRegionStartKeyInHFile(), 0, replacedKey, ROW_LENGTH_SIZE, reader.getOffset());
         System.arraycopy(keyValue.getRowArray(), keyValue.getRowOffset() + reader.getSplitRow().length,
-                replacedKey, reader.getOffset() + ROW_LENGTH_SIZE, rowLength
-                        - reader.getSplitRow().length);
+            replacedKey, reader.getOffset() + ROW_LENGTH_SIZE, rowLength
+                    - reader.getSplitRow().length);
         System.arraycopy(key, rowOffset + rowLength, replacedKey,
-                reader.getOffset() + keyValue.getRowLength() - reader.getSplitRow().length
-                        + ROW_LENGTH_SIZE, key.length - (rowOffset + rowLength));
+            reader.getOffset() + keyValue.getRowLength() - reader.getSplitRow().length
+                    + ROW_LENGTH_SIZE, key.length - (rowOffset + rowLength));
         return new KeyValue.KeyOnlyKeyValue(replacedKey);
     }
     
     /**
      * 
-     * @param cell
+     * @param kv
      * @param isSeek pass true for seek, false for reseek.
      * @return 
      * @throws IOException
@@ -228,11 +223,6 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
     public boolean seekOrReseek(Cell cell, boolean isSeek) throws IOException{
         KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
         KeyValue keyToSeek = kv;
-        boolean fromHFile = false;
-        if(!compaction) {
-                keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
-                fromHFile = true;
-        }
         if (reader.isTop()) {
             if(getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), reader.getSplitkey(), 0, reader.getSplitkey().length) < 0){
                 if(!isSeek && realSeekDone()) {
@@ -240,16 +230,14 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                 }
                 return seekOrReseekToProperKey(isSeek, keyToSeek);
             }
-            if(!fromHFile) {
-                keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
-            }
+            keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
             return seekOrReseekToProperKey(isSeek, keyToSeek);
         } else {
             if (getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), reader.getSplitkey(), 0, reader.getSplitkey().length) >= 0) {
                 close();
                 return false;
             }
-            if(!fromHFile && !isSeek && reader.getRegionInfo().getStartKey().length == 0 && reader.getSplitRow().length > reader.getRegionStartKeyInHFile().length) {
+            if(!isSeek && reader.getRegionInfo().getStartKey().length == 0 && reader.getSplitRow().length > reader.getRegionStartKeyInHFile().length) {
                 keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
             }
         }
