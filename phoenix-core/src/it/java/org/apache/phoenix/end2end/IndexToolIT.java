@@ -115,12 +115,15 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        logger.info(String.format("%%%%conn is %s", conn == null ? "null" : conn.getClass().getCanonicalName()));
+        logger.debug(String.format("%%%%conn is %s", conn == null ? "null" : conn.getClass().getCanonicalName()));
         Statement stmt = conn.createStatement();
-        logger.info(String.format("%%%%stmt is %s", stmt == null ? "null" : stmt.getClass().getCanonicalName()));
+        logger.debug(String.format("%%%%stmt is %s", stmt == null ? "null" : stmt.getClass().getCanonicalName()));
         try {
-        
-            stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s", fullTableName, tableDDLOptions));
+            String sql = String.format(
+                            "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s",
+                            fullTableName, tableDDLOptions);
+            logger.debug(sql);
+            stmt.execute(sql);
             String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", fullTableName);
             PreparedStatement stmt1 = conn.prepareStatement(upsertQuery);
             
