@@ -51,6 +51,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Tests for the {@link IndexTool}
@@ -65,7 +67,9 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(IndexToolIT.class);
+
     public IndexToolIT(boolean transactional, boolean localIndex, boolean mutable, boolean directApi) {
         this.schemaName = "S";
         this.dataTable = "T" + (transactional ? "_TXN" : "");
@@ -111,7 +115,9 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        logger.info(String.format("%%%%conn is %s", conn == null ? "null" : conn.getClass().getCanonicalName()));
         Statement stmt = conn.createStatement();
+        logger.info(String.format("%%%%stmt is %s", stmt == null ? "null" : stmt.getClass().getCanonicalName()));
         try {
         
             stmt.execute(String.format("CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) %s", fullTableName, tableDDLOptions));
