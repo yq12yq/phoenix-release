@@ -358,6 +358,9 @@ public class IndexPredicateAnalyzer {
                     residuals.add((ExprNodeDesc) obj);
                 }
             }
+            if(residuals.size() == 0) {
+                return null;
+            }
             return new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry
                     .getGenericUDFForAnd(), residuals);
         }
