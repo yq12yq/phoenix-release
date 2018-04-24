@@ -218,7 +218,7 @@ public class TableResultIterator implements ResultIterator {
                         }
                     } else {
                         if (handledHashJoinCacheNotFoundException) {
-                            this.scanIterator = ((BaseQueryPlan)plan).iterator(caches, scanGrouper, newScan);
+                            this.scanIterator = ((BaseQueryPlan)plan).iterator(caches, scanGrouper, newScan, false);
                         }else{
                             this.scanIterator = plan.iterator(scanGrouper, newScan);
                         }

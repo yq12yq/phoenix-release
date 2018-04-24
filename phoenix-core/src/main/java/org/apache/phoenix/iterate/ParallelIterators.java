@@ -58,16 +58,16 @@ public class ParallelIterators extends BaseResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     private final boolean initFirstScanOnly;
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean initFirstScanOnly)
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean initFirstScanOnly, boolean clearServerCacheOnClose)
             throws SQLException {
-        super(plan, perScanLimit, null, scanGrouper, scan, caches);
+        super(plan, perScanLimit, null, scanGrouper, scan, caches, clearServerCacheOnClose);
         this.iteratorFactory = iteratorFactory;
         this.initFirstScanOnly = initFirstScanOnly;
     }   
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean initOneScanPerRegion)
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean initOneScanPerRegion, boolean clearServerCacheOnClose)
             throws SQLException {
-        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance(), scan, caches, initOneScanPerRegion);
+        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance(), scan, caches, initOneScanPerRegion, clearServerCacheOnClose);
     }  
 
     @Override

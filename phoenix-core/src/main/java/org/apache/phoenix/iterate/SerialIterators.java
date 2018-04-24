@@ -58,9 +58,9 @@ public class SerialIterators extends BaseResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, Integer offset,
-            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches)
+            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean clearServerCachesOnClose)
             throws SQLException {
-        super(plan, perScanLimit, offset, scanGrouper, scan, caches);
+        super(plan, perScanLimit, offset, scanGrouper, scan, caches, clearServerCachesOnClose);
         // must be a offset or a limit specified or a SERIAL hint
         Preconditions.checkArgument(
                 offset != null || perScanLimit != null || plan.getStatement().getHint().hasHint(HintNode.Hint.SERIAL));

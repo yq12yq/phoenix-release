@@ -137,6 +137,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private boolean hasGuidePosts;
     private Scan scan;
     protected Map<ImmutableBytesPtr,ServerCache> caches;
+    protected boolean clearServerCacheOnClose;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -340,6 +341,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+        this(plan, perScanLimit, offset, scanGrouper, scan, caches, true);
+    }
+
+    public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean clearServerCacheOnClose) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
                 plan.getStatement().getHint(), QueryUtil.getOffsetLimit(plan.getLimit(), plan.getOffset()), offset);
         this.plan = plan;
@@ -375,6 +380,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         this.splits = ImmutableList.copyOf(splitRanges);
         // If split detected, this will be more than one, but that's unlikely
         this.allFutures = Lists.newArrayListWithExpectedSize(1);
+        this.clearServerCacheOnClose = clearServerCacheOnClose;
     }
 
     @Override
@@ -927,8 +933,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
         } finally {
-            SQLCloseables.closeAllQuietly(caches.values());
-            caches.clear();
+            if(clearServerCacheOnClose) {
+                SQLCloseables.closeAllQuietly(caches.values());
+                caches.clear();                
+            }
             if (cancelledWork) {
                 context.getConnection().getQueryServices().getExecutor().purge();
             }

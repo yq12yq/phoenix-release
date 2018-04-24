@@ -104,7 +104,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final Integer offset;
     protected final OrderBy orderBy;
     protected final GroupBy groupBy;
-    protected final ParallelIteratorFactory parallelIteratorFactory;    
+    protected final ParallelIteratorFactory parallelIteratorFactory;
     /*
      * The filter expression that contains CorrelateVariableFieldAccessExpression
      * and will have impact on the ScanRanges. It will recompiled at runtime 
@@ -219,12 +219,16 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     public final ResultIterator iterator(final Map<ImmutableBytesPtr,ServerCache> caches, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        return iterator(caches, scanGrouper, scan, true);
+    }
+
+    public final ResultIterator iterator(final Map<ImmutableBytesPtr,ServerCache> caches, ParallelScanGrouper scanGrouper, Scan scan, boolean clearServerCacheOnClose) throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return ResultIterator.EMPTY_ITERATOR;
         }
         
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
-            return newIterator(scanGrouper, scan, caches);
+            return newIterator(scanGrouper, scan, caches, clearServerCacheOnClose);
         }
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
@@ -325,8 +329,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
         	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
-        ResultIterator iterator = newIterator(scanGrouper, scan, caches);
-        iterator = caches.isEmpty() ?
+        ResultIterator iterator = newIterator(scanGrouper, scan, caches, clearServerCacheOnClose);
+        iterator = (caches.isEmpty() || !clearServerCacheOnClose) ?
                 iterator : new DelegateResultIterator(iterator) {
             @Override
             public void close() throws SQLException {
@@ -454,7 +458,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException;
+    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean clearServerCacheOnClose) throws SQLException;
     
     @Override
     public long getEstimatedSize() {

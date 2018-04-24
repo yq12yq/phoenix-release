@@ -181,7 +181,7 @@ public class AggregatePlan extends BaseQueryPlan {
     }
     
     @Override
-    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches, boolean clearServerCacheOnClose) throws SQLException {
         if (groupBy.isEmpty()) {
             UngroupedAggregateRegionObserver.serializeIntoScan(scan);
         } else {
@@ -217,8 +217,8 @@ public class AggregatePlan extends BaseQueryPlan {
             }
         }
         BaseResultIterators iterators = isSerial
-                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, caches, false);
+                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan, caches, clearServerCacheOnClose)
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, caches, false, clearServerCacheOnClose);
 
         splits = iterators.getSplits();
         scans = iterators.getScans();
