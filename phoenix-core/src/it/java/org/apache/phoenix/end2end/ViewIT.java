@@ -33,6 +33,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
@@ -530,7 +531,7 @@ public class ViewIT extends BaseViewIT {
                     "CLIENT MERGE SORT", queryPlan);
         } else {
             assertEquals(
-                    "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" + 
+                    "CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER I1 [1,100] - [2,109]\n" +
                     "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')", queryPlan);
         }
     }    
@@ -633,7 +634,7 @@ public class ViewIT extends BaseViewIT {
         ddl = "CREATE VIEW v1  AS SELECT * FROM " + fullTableName + " WHERE v1 = 1.0";
         conn.createStatement().execute(ddl);
         try {
-            ddl = "ALTER VIEW V1 ADD k3 VARCHAR NOT NULL PRIMARY KEY"; 
+            ddl = "ALTER VIEW V1 ADD k3 VARCHAR NOT NULL PRIMARY KEY";
             conn.createStatement().execute(ddl);
             fail("can only add nullable PKs via ALTER VIEW/TABLE");
         } catch (SQLException e) {
@@ -661,7 +662,7 @@ public class ViewIT extends BaseViewIT {
         plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
         assertEquals(0, plan.getOrderBy().getOrderByExpressions().size());
     }
-    
+
     private void assertPKs(ResultSet rs, String[] expectedPKs) throws SQLException {
         List<String> pkCols = newArrayListWithExpectedSize(expectedPKs.length);
         while (rs.next()) {
@@ -669,5 +670,50 @@ public class ViewIT extends BaseViewIT {
         }
         String[] actualPKs = pkCols.toArray(new String[0]);
         assertArrayEquals(expectedPKs, actualPKs);
+    }
+
+    @Test
+    public void testQueryWithSeparateConnectionForViewOnTableThatHasIndex() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Connection conn2 = DriverManager.getConnection(getUrl());
+             Statement s = conn.createStatement();
+             Statement s2 = conn2.createStatement()) {
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String indexName = generateUniqueName();
+            helpTestQueryForViewOnTableThatHasIndex(s, s2, tableName, viewName, indexName);
+        }
+    }
+
+    @Test
+    public void testQueryForViewOnTableThatHasIndex() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement s = conn.createStatement()) {
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String indexName = generateUniqueName();
+            helpTestQueryForViewOnTableThatHasIndex(s, s, tableName, viewName, indexName);
+        }
+    }
+
+    private void helpTestQueryForViewOnTableThatHasIndex(Statement s1, Statement s2, String tableName, String viewName, String indexName)
+            throws SQLException {
+        // Create a table
+        s1.execute("create table " + tableName + " (col1 varchar primary key, col2 varchar)");
+
+        // Create a view on the table
+        s1.execute("create view " + viewName + " (col3 varchar) as select * from " + tableName);
+        s1.executeQuery("select * from " + viewName);
+        // Create a index on the table
+        s1.execute("create index " + indexName + " ON " + tableName + " (col2)");
+
+        try (ResultSet rs =
+                     s2.executeQuery("explain select /*+ INDEX(" + viewName + " " + indexName
+                             + ") */ * from " + viewName + " where col2 = 'aaa'")) {
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+
+            // check if the query uses the index
+            assertTrue(explainPlan.contains(indexName));
+        }
     }
 }
