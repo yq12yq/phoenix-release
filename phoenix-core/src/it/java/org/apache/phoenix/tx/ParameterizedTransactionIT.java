@@ -325,7 +325,6 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
     
-    @Ignore
     @Test
     public void testNonTxToTxTableFailure() throws Exception {
         String nonTxTableName = generateUniqueName();
