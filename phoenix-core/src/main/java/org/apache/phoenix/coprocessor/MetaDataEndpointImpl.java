@@ -57,7 +57,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
@@ -100,7 +99,6 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -117,7 +115,6 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
-import org.apache.hadoop.hbase.ipc.RpcServer.Call;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
@@ -211,6 +208,9 @@ import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.ipc.RpcServer.Call;
+
 
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
@@ -1616,17 +1616,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     parentTableName == null ? lockKey : SchemaUtil.getTableKey(tenantIdBytes,
                         schemaName, tableName);
 
-            Get get = new Get(key);
-            get.addColumn(TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
-            get.addColumn(TABLE_FAMILY_BYTES, TABLE_NAME_BYTES);
-            get.addColumn(TABLE_FAMILY_BYTES, DATA_TABLE_NAME_BYTES);
-            Result currentResult = env.getRegion().get(get);
-            if (currentResult.rawCells().length == 0) {
-                builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
-                builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                done.run(builder.build());
-                return;
-            }
             PTableType ptableType=PTableType.fromSerializedValue(tableType);
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
             byte[] cKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
