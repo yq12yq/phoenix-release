@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.covered.Batch;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
@@ -196,10 +197,11 @@ public class IndexManagementUtil {
     public static void rethrowIndexingException(Throwable e) throws IOException {
         try {
             throw e;
-        } catch (IOException e1) {
+        } catch (IOException | FatalIndexBuildingFailureException e1) {
             LOG.info("Rethrowing " + e);
             throw e1;
-        } catch (Throwable e1) {
+        }
+        catch (Throwable e1) {
             LOG.info("Rethrowing " + e1 + " as a " + IndexBuildingFailureException.class.getSimpleName());
             throw new IndexBuildingFailureException("Failed to build index for unexpected reason!", e1);
         }
