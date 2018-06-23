@@ -17,17 +17,16 @@
  */
 package org.apache.phoenix.hive.objectinspector;
 
-import org.apache.hadoop.hive.serde2.io.DateWritable;
+import org.apache.hadoop.hive.common.type.Date;
+import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
-
-import java.sql.Date;
 
 /**
  * ObjectInspector for date type
  */
 
-public class PhoenixDateObjectInspector extends AbstractPhoenixObjectInspector<DateWritable>
+public class PhoenixDateObjectInspector extends AbstractPhoenixObjectInspector<DateWritableV2>
         implements DateObjectInspector {
 
     public PhoenixDateObjectInspector() {
@@ -36,19 +35,19 @@ public class PhoenixDateObjectInspector extends AbstractPhoenixObjectInspector<D
 
     @Override
     public Object copyObject(Object o) {
-        return o == null ? null : new Date(((Date) o).getTime());
+        return o == null ? null : Date.ofEpochMilli(((Date) o).toEpochMilli());
     }
 
     @Override
-    public DateWritable getPrimitiveWritableObject(Object o) {
-        DateWritable value = null;
+    public DateWritableV2 getPrimitiveWritableObject(Object o) {
+        DateWritableV2 value = null;
 
         if (o != null) {
             try {
-                value = new DateWritable((Date) o);
+                value = new DateWritableV2((Date) o);
             } catch (Exception e) {
                 logExceptionMessage(o, "DATE");
-                value = new DateWritable();
+                value = new DateWritableV2();
             }
         }
 
