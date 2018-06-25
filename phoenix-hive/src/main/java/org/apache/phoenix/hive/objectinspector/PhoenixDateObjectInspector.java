@@ -35,7 +35,15 @@ public class PhoenixDateObjectInspector extends AbstractPhoenixObjectInspector<D
 
     @Override
     public Object copyObject(Object o) {
-        return o == null ? null : Date.ofEpochMilli(((Date) o).toEpochMilli());
+        return o == null ? null : java.sql.Date.valueOf(o.toString());
+    }
+
+    @Override
+    public Date getPrimitiveJavaObject(Object o) {
+        if (o == null) {
+            return null;
+        }
+        return Date.valueOf(((java.sql.Date) o).toString());
     }
 
     @Override
@@ -44,7 +52,7 @@ public class PhoenixDateObjectInspector extends AbstractPhoenixObjectInspector<D
 
         if (o != null) {
             try {
-                value = new DateWritableV2((Date) o);
+                value = new DateWritableV2(getPrimitiveJavaObject(o));
             } catch (Exception e) {
                 logExceptionMessage(o, "DATE");
                 value = new DateWritableV2();
@@ -52,11 +60,6 @@ public class PhoenixDateObjectInspector extends AbstractPhoenixObjectInspector<D
         }
 
         return value;
-    }
-
-    @Override
-    public Date getPrimitiveJavaObject(Object o) {
-        return (Date) o;
     }
 
 }

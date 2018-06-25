@@ -34,13 +34,16 @@ public class PhoenixTimestampObjectInspector extends
     }
 
     @Override
-    public Timestamp getPrimitiveJavaObject(Object o) {
-        return (Timestamp) o;
+    public Object copyObject(Object o) {
+        return o == null ? null : java.sql.Timestamp.valueOf(o.toString());
     }
 
     @Override
-    public Object copyObject(Object o) {
-        return o == null ? null : Timestamp.ofEpochMilli(((Timestamp) o).toEpochMilli());
+    public Timestamp getPrimitiveJavaObject(Object o) {
+        if (o == null) {
+            return null;
+        }
+        return Timestamp.valueOf(((java.sql.Timestamp) o).toString());
     }
 
     @Override
@@ -49,7 +52,7 @@ public class PhoenixTimestampObjectInspector extends
 
         if (o != null) {
             try {
-                value = new TimestampWritableV2((Timestamp) o);
+                value = new TimestampWritableV2(getPrimitiveJavaObject(o));
             } catch (Exception e) {
                 logExceptionMessage(o, "TIMESTAMP");
             }
