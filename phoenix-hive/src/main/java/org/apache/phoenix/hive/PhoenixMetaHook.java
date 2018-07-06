@@ -48,6 +48,7 @@ import static org.apache.phoenix.hive.util.ColumnMappingUtils.getColumnMappingMa
 public class PhoenixMetaHook implements HiveMetaHook {
 
     private static final Log LOG = LogFactory.getLog(PhoenixMetaHook.class);
+    private static final String EXTERNAL_TABLE_PURGE = "external.table.purge";
 
     @Override
     public void preCreateTable(Table table) throws MetaException {
@@ -62,17 +63,16 @@ public class PhoenixMetaHook implements HiveMetaHook {
             if (TableType.EXTERNAL_TABLE.name().equals(tableType)) {
                 // Check whether phoenix table exists.
                 if (!PhoenixUtil.existTable(conn, tableName)) {
-                    // Error if phoenix table not exist.
-                    throw new MetaException("Phoenix table " + tableName + " doesn't exist");
+                    //For Hive 3.0.0 only external tables are supported. If table doesn't exist,
+                    // a new table is created
+                    PhoenixUtil.createTable(conn, createTableStatement(table));
+                    Map<String, String> tableParameterMap = table.getParameters();
+                    tableParameterMap.put(EXTERNAL_TABLE_PURGE, "TRUE");
+                    table.setParameters(tableParameterMap);
                 }
             } else if (TableType.MANAGED_TABLE.name().equals(tableType)) {
-                // Check whether phoenix table exists.
-                if (PhoenixUtil.existTable(conn, tableName)) {
-                    // Error if phoenix table already exist.
-                    throw new MetaException("Phoenix table " + tableName + " already exist.");
-                }
+                throw new MetaException("Only external table are supported for PhoenixStorageHandler");
 
-                PhoenixUtil.createTable(conn, createTableStatement(table));
             } else {
                 throw new MetaException("Unsupported table Type: " + table.getTableType());
             }
@@ -213,10 +213,9 @@ public class PhoenixMetaHook implements HiveMetaHook {
 
     private void dropTableIfExist(Table table) throws MetaException {
         try (Connection conn = PhoenixConnectionUtil.getConnection(table)) {
-            String tableType = table.getTableType();
             String tableName = PhoenixStorageHandlerUtil.getTargetTableName(table);
 
-            if (TableType.MANAGED_TABLE.name().equals(tableType)) {
+            if (isExternalTablePurge(table)) {
                 // Drop if phoenix table exist.
                 if (PhoenixUtil.existTable(conn, tableName)) {
                     PhoenixUtil.dropTable(conn, tableName);
@@ -225,5 +224,20 @@ public class PhoenixMetaHook implements HiveMetaHook {
         } catch (SQLException e) {
             throw new MetaException(e.getMessage());
         }
+    }
+
+    private  boolean isExternalTablePurge(Table table) {
+        if (table == null) {
+            return false;
+        }
+        Map<String, String> params = table.getParameters();
+        if (params == null) {
+            return false;
+        }
+        return isPropertyTrue(params, EXTERNAL_TABLE_PURGE);
+    }
+
+    private boolean isPropertyTrue(Map<String, String> tableParams, String prop) {
+        return "TRUE".equalsIgnoreCase(tableParams.get(prop));
     }
 }
