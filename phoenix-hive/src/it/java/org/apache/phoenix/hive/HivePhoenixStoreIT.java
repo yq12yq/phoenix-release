@@ -50,7 +50,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE phoenix_table(ID STRING, SALARY STRING)" + HiveTestUtil.CRLF +
+        sb.append("CREATE EXTERNAL TABLE phoenix_table(ID STRING, SALARY STRING)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF + " TBLPROPERTIES(" + HiveTestUtil.CRLF +
                 "   'phoenix.table.name'='phoenix_table'," + HiveTestUtil.CRLF +
@@ -86,7 +86,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE column_table(ID STRING, P1 STRING, p2 STRING)" + HiveTestUtil.CRLF +
+        sb.append("CREATE EXTERNAL TABLE column_table(ID STRING, P1 STRING, p2 STRING)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF + " TBLPROPERTIES(" + HiveTestUtil.CRLF +
                 "   'phoenix.table.name'='column_table'," + HiveTestUtil.CRLF +
@@ -126,7 +126,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE phoenix_datatype(ID int, description STRING, ts TIMESTAMP,  db " +
+        sb.append("CREATE EXTERNAL TABLE phoenix_datatype(ID int, description STRING, ts TIMESTAMP,  db " +
                 "DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF + " TBLPROPERTIES(" + HiveTestUtil.CRLF +
@@ -167,7 +167,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
         createFile(StringUtil.EMPTY_STRING, new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE phoenix_MultiKey(ID int, ID2 String,description STRING," +
+        sb.append("CREATE EXTERNAL TABLE phoenix_MultiKey(ID int, ID2 String,description STRING," +
                 "db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF +
@@ -211,7 +211,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile("#### A masked pattern was here ####\n10\tpart2\tfoodesc\t200.0\t2.0\t-1\t10\tpart2\tfoodesc\t200.0\t2.0\t-1\n",
                 new Path(hiveOutputDir, testName + ".out").toString());
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE joinTable1(ID int, ID2 String,description STRING," +
+        sb.append("CREATE EXTERNAL TABLE joinTable1(ID int, ID2 String,description STRING," +
                 "db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF +
@@ -222,7 +222,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 "   'phoenix.zookeeper.client.port'='" +
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id,id2');" + HiveTestUtil.CRLF);
-        sb.append("CREATE TABLE joinTable2(ID int, ID2 String,description STRING," +
+        sb.append("CREATE EXTERNAL TABLE joinTable2(ID int, ID2 String,description STRING," +
                 "db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF +
@@ -261,7 +261,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
 
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE joinTable3(ID int, ID2 String,description STRING," +
+        sb.append("CREATE EXTERNAL TABLE joinTable3(ID int, ID2 String,description STRING," +
                 "db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF +
@@ -273,7 +273,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
                 hbaseTestUtil.getZkCluster().getClientPort() + "'," + HiveTestUtil.CRLF +
                 "   'phoenix.column.mapping' = 'id:i1, id2:I2, db:db'," + HiveTestUtil.CRLF +
                 "   'phoenix.rowkeys'='id,id2');" + HiveTestUtil.CRLF);
-        sb.append("CREATE TABLE joinTable4(ID int, ID2 String,description STRING," +
+        sb.append("CREATE EXTERNAL TABLE joinTable4(ID int, ID2 String,description STRING," +
                 "db DOUBLE,fl FLOAT, us INT)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF +
@@ -319,7 +319,7 @@ public class HivePhoenixStoreIT  extends BaseHivePhoenixStoreIT {
         createFile(StringUtil.EMPTY_STRING, new Path(hiveLogDir, testName + ".out").toString());
 
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE timeStampTable(ID int,ts TIMESTAMP)" + HiveTestUtil.CRLF +
+        sb.append("CREATE EXTERNAL TABLE timeStampTable(ID int,ts TIMESTAMP)" + HiveTestUtil.CRLF +
                 " STORED BY  \"org.apache.phoenix.hive.PhoenixStorageHandler\"" + HiveTestUtil
                 .CRLF +
                 " TBLPROPERTIES(" + HiveTestUtil.CRLF +
