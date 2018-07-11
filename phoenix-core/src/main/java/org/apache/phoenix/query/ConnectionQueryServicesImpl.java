@@ -3344,7 +3344,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void addConnection(PhoenixConnection connection) throws SQLException {
-        connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
+        if (isRenewingLeasesEnabled()) {
+            connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
+        }
         if (returnSequenceValues) {
             synchronized (connectionCountLock) {
                 connectionCount++;
@@ -3812,5 +3814,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public Configuration getConfiguration() {
         return config;
+    }
+
+    @VisibleForTesting
+    public List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> getCachedConnections() {
+      return connectionQueues;
     }
 }
