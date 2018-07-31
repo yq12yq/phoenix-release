@@ -253,15 +253,26 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.schema = JDBCUtil.getSchema(url, this.info,
                 this.services.getProps().get(QueryServices.SCHEMA_ATTRIB, QueryServicesOptions.DEFAULT_SCHEMA));
         this.tenantId = tenantId;
-        this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
-        datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
-        timePattern = this.services.getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
-        timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
-        String numberPattern = this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
-        int maxSize = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-        Format dateFormat = DateUtil.getDateFormatter(datePattern);
-        Format timeFormat = DateUtil.getDateFormatter(timePattern);
-        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
+        this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info,
+                this.services.getProps());
+        datePattern = this.services.getProps().get(
+                QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
+        timePattern = this.services.getProps().get(
+                QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
+        timestampPattern = this.services.getProps().get(
+                QueryServices.TIMESTAMP_FORMAT_ATTRIB,
+                DateUtil.DEFAULT_TIMESTAMP_FORMAT);
+        String numberPattern = this.services.getProps().get(
+                QueryServices.NUMBER_FORMAT_ATTRIB,
+                NumberUtil.DEFAULT_NUMBER_FORMAT);
+        int maxSize = this.services.getProps().getInt(
+                QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        String timeZoneID = this.services.getProps().get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+                DateUtil.DEFAULT_TIME_ZONE_ID);
+        Format dateFormat = DateUtil.getDateFormatter(datePattern, timeZoneID);
+        Format timeFormat = DateUtil.getDateFormatter(timePattern, timeZoneID);
+        Format timestampFormat = DateUtil.getDateFormatter(timestampPattern, timeZoneID);
         formatters.put(PDate.INSTANCE, dateFormat);
         formatters.put(PTime.INSTANCE, timeFormat);
         formatters.put(PTimestamp.INSTANCE, timestampFormat);
