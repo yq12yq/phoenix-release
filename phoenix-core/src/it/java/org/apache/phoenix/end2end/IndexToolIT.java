@@ -48,11 +48,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Tests for the {@link IndexTool}
@@ -231,8 +231,9 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         String dataTableName = "TBL";
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
         String indexTableName = "IDX";
-        try (Connection conn =
-                DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String dataDDL =
                     "CREATE TABLE " + dataTableFullName + "(\n"
                             + "ID VARCHAR NOT NULL PRIMARY KEY,\n"
