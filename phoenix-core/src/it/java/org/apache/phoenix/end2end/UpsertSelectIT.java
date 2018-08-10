@@ -1538,6 +1538,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(5000, rs.getLong("k2"));
             assertFalse(rs.next());
+
+            conn.createStatement().execute("DROP TABLE " + tableName);
         }
     }
 
