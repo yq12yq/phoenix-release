@@ -1425,7 +1425,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
     @Test // See https://issues.apache.org/jira/browse/PHOENIX-4265
     public void testLongCodecUsedForRowTimestamp() throws Exception {
         String tableName = "testLongCodecUsedForRowTimestamp".toUpperCase();
-        String indexName = "IDX1";
+        String indexName = "IDX_" + tableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + tableName
                     + " (k1 TIMESTAMP not null, k2 bigint not null, v bigint, constraint pk primary key (k1 row_timestamp, k2)) SALT_BUCKETS = 9, IMMUTABLE_ROWS=false");
