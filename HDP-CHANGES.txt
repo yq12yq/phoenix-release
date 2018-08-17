@@ -1,0 +1,5 @@
+Changes over HDP-3.0.0
+
+  PHOENIX-4809 Only cache PhoenixConnections when lease renewal is on
+  PHOENIX-3991 ROW_TIMESTAMP on TIMESTAMP column type throws ArrayOutOfBound when upserting without providing a value.
+  PHOENIX-4825 Replace usage of HBase Base64 implementation with java.util.Base64(related to HBASE-20884)
