@@ -2910,19 +2910,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
             metaConnection = updateSystemCatalogTimestamp(metaConnection,
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
-            ConnectionQueryServicesImpl.this.removeTable(null,
-              PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
-              MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
+            metaConnection = addColumnsIfNotExists(
+                    metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 - 2,
+                    PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED + " "
+                      + PBoolean.INSTANCE.getSqlTypeName());
+            metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
+            if (getProps().getBoolean(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB,
+              QueryServicesOptions.DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)) {
+                metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
+            }
+            ConnectionQueryServicesImpl.this.removeTable(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
+                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
             clearCache();
         }
 
         if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0) {
-            metaConnection = addColumnsIfNotExists(
-              metaConnection,
-              PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-              MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 - 2,
-              PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED + " "
-                + PBoolean.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(
               metaConnection,
               PhoenixDatabaseMetaData.SYSTEM_CATALOG,
@@ -2935,16 +2939,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
               PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA + " "
                 + PBoolean.INSTANCE.getSqlTypeName());
-            metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
-            if (getProps().getBoolean(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB,
-              QueryServicesOptions.DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)) {
-                metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
-            }
             ConnectionQueryServicesImpl.this.removeTable(null,
               PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
             clearCache();
         }
+
         if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
             metaConnection = addColumnsIfNotExists(
               metaConnection,
@@ -2989,7 +2989,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
               MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0,
               PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION + " "
                 + PBoolean.INSTANCE.getSqlTypeName());
-            addParentToChildLinks(metaConnection);
         }
         if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_14_0) {
             metaConnection = addColumnsIfNotExists(
@@ -3013,6 +3012,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " SET " + 
                     TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() +"'"
                     );
+            addParentToChildLinks(metaConnection);
         }
         return metaConnection;
     }
