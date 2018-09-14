@@ -115,6 +115,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
@@ -225,7 +226,16 @@ public abstract class BaseTest {
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
             .newSingleThreadExecutor(factory);
-    
+    private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
+    private static final int MAX_SUFFIX_VALUE = 1000000;
+
+    /**
+     * Counter to track number of tables we have created. This isn't really accurate since this
+     * counter will be incremented when we call {@link #generateUniqueName()}for getting unique
+     * schema and sequence names too. But this will have to do.
+     */
+    private static final AtomicInteger TABLE_COUNTER = new AtomicInteger(0);
+
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -2077,5 +2087,14 @@ public abstract class BaseTest {
         } finally {
             conn.close();
         }
-    }  
+    }
+
+    protected static String generateUniqueName() {
+        int nextName = NAME_SUFFIX.incrementAndGet();
+        if (nextName >= MAX_SUFFIX_VALUE) {
+            throw new IllegalStateException("Used up all unique names");
+        }
+        TABLE_COUNTER.incrementAndGet();
+        return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+    }
 }
