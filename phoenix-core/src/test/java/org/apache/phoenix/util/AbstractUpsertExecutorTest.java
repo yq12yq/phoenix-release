@@ -22,9 +22,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.types.PArrayDataType;
@@ -51,6 +53,8 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
 
     protected abstract UpsertExecutor<R, F> getUpsertExecutor();
     protected abstract R createRecord(Object... columnValues) throws IOException;
+    
+    private static String TIMESTAMP_WITH_NANOS = "2006-11-03 00:00:00.001003000";
 
     @Before
     public void setUp() throws SQLException {
@@ -59,11 +63,14 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
                 new ColumnInfo("NAME", Types.VARCHAR),
                 new ColumnInfo("AGE", Types.INTEGER),
                 new ColumnInfo("VALUES", PIntegerArray.INSTANCE.getSqlType()),
-                new ColumnInfo("BEARD", Types.BOOLEAN));
+                new ColumnInfo("BEARD", Types.BOOLEAN),
+                new ColumnInfo("T", Types.TIMESTAMP));
 
         preparedStatement = mock(PreparedStatement.class);
         upsertListener = mock(UpsertExecutor.UpsertListener.class);
-        conn = DriverManager.getConnection(getUrl());
+        Properties properties = new Properties();
+        properties.setProperty("phoenix.query.dateFormatTimeZone", DateUtil.DEFAULT_TIME_ZONE_ID);
+        conn = DriverManager.getConnection(getUrl(), properties);
     }
 
     @After
@@ -74,7 +81,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute() throws Exception {
         getUpsertExecutor().execute(createRecord(123L, "NameValue", 42,
-                Arrays.asList(1, 2, 3), true));
+                Arrays.asList(1, 2, 3), true, Timestamp.valueOf(TIMESTAMP_WITH_NANOS)));
 
         verify(upsertListener).upsertDone(1L);
         verifyNoMoreInteractions(upsertListener);
@@ -84,6 +91,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(3, Integer.valueOf(42));
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.TRUE);
+        verify(preparedStatement).setObject(6, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -100,7 +108,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_TooManyFields() throws Exception {
         R recordWithTooManyFields = createRecord(123L, "NameValue", 42, Arrays.asList(1, 2, 3),
-                true, "Garbage");
+                true,  Timestamp.valueOf(TIMESTAMP_WITH_NANOS), "Garbage");
         getUpsertExecutor().execute(recordWithTooManyFields);
 
         verify(upsertListener).upsertDone(1L);
@@ -111,6 +119,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setObject(3, Integer.valueOf(42));
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.TRUE);
+        verify(preparedStatement).setObject(6, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -118,7 +127,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_NullField() throws Exception {
         getUpsertExecutor().execute(createRecord(123L, "NameValue", null,
-                Arrays.asList(1, 2, 3), false));
+                Arrays.asList(1, 2, 3), false, Timestamp.valueOf(TIMESTAMP_WITH_NANOS)));
 
         verify(upsertListener).upsertDone(1L);
         verifyNoMoreInteractions(upsertListener);
@@ -128,6 +137,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
         verify(preparedStatement).setNull(3, columnInfoList.get(2).getSqlType());
         verify(preparedStatement).setObject(4, PArrayDataType.instantiatePhoenixArray(PInteger.INSTANCE, new Object[]{1,2,3}));
         verify(preparedStatement).setObject(5, Boolean.FALSE);
+        verify(preparedStatement).setObject(6, DateUtil.parseTimestamp(TIMESTAMP_WITH_NANOS));
         verify(preparedStatement).execute();
         verifyNoMoreInteractions(preparedStatement);
     }
@@ -135,7 +145,7 @@ public abstract class AbstractUpsertExecutorTest<R, F> extends BaseConnectionles
     @Test
     public void testExecute_InvalidType() throws Exception {
         R recordWithInvalidType = createRecord(123L, "NameValue", "ThisIsNotANumber",
-                Arrays.asList(1, 2, 3), true);
+                Arrays.asList(1, 2, 3), true, Timestamp.valueOf(TIMESTAMP_WITH_NANOS));
         getUpsertExecutor().execute(recordWithInvalidType);
 
         verify(upsertListener).errorOnRecord(eq(recordWithInvalidType), any(Throwable.class));
