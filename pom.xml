@@ -119,7 +119,7 @@
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
     <junit.version>4.12</junit.version>
-    <bouncycastle.version>1.46</bouncycastle.version>
+    <bouncycastle.version>1.60</bouncycastle.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
@@ -1000,10 +1000,15 @@
         <artifactId>javax.servlet-api</artifactId>
         <version>${servlet.api.version}</version>
       </dependency>
-       <dependency>
+      <dependency>
         <groupId>com.lmax</groupId>
         <artifactId>disruptor</artifactId>
         <version>${disruptor.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk15on</artifactId>
+        <version>${bouncycastle.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
