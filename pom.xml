@@ -995,6 +995,25 @@
         <artifactId>jetty-webapp</artifactId>
         <version>${jetty.version}</version>
       </dependency>
+      <!-- Make sure we force the same Jetty version, even coming out
+           of Hadoop and Hive. We only have to override the parent-most
+           dependency, and all other transitive Jetty deps will be
+           at the version we want. -->
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-util-ajax</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-runner</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-rewrite</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
       <dependency>
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
