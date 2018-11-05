@@ -66,6 +66,7 @@ public class GuidePostsCache {
         final long maxTableStatsCacheSize = config.getLong(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
+        final boolean isStatsEnabled = config.getBoolean(QueryServices.STATS_ENABLED_ATTRIB, true);
         cache = CacheBuilder.newBuilder()
                 // Expire entries a given amount of time after they were written
                 .expireAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)
@@ -80,7 +81,7 @@ public class GuidePostsCache {
                 // Log removals at TRACE for debugging
                 .removalListener(new PhoenixStatsCacheRemovalListener())
                 // Automatically load the cache when entries are missing
-                .build(new StatsLoader());
+                .build(isStatsEnabled ? new StatsLoader() : new EmptyStatsLoader());
     }
 
     /**
@@ -125,6 +126,16 @@ public class GuidePostsCache {
                       new Object[] {Objects.hashCode(GuidePostsCache.this), key,
                       info.getEstimatedSize()});
             }
+        }
+    }
+
+    /**
+     * Empty stats loader if stats are disabled
+     */
+    protected class EmptyStatsLoader extends CacheLoader<ImmutableBytesPtr, PTableStats> {
+        @Override
+        public PTableStats load(ImmutableBytesPtr tableName) throws Exception {
+            return PTableStats.EMPTY_STATS;
         }
     }
 
