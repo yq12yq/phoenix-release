@@ -60,6 +60,7 @@ public class TableStatsCache {
         final long maxTableStatsCacheSize = config.getLong(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
+        final boolean isStatsEnabled = config.getBoolean(QueryServices.STATS_ENABLED_ATTRIB, true);
         cache = CacheBuilder.newBuilder()
                 // Expire entries a given amount of time after they were written
                 .expireAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)
@@ -74,7 +75,7 @@ public class TableStatsCache {
                 // Log removals at TRACE for debugging
                 .removalListener(new PhoenixStatsCacheRemovalListener())
                 // Automatically load the cache when entries are missing
-                .build(new StatsLoader());
+                .build(isStatsEnabled ? new StatsLoader() : new EmptyStatsLoader());
     }
 
     /**
@@ -114,6 +115,16 @@ public class TableStatsCache {
             logger.trace("Updating local TableStats cache (id={}) for {}, size={}bytes",
                   new Object[] {Objects.hashCode(TableStatsCache.this), Bytes.toString(tableName),
                   stats.getEstimatedSize()});
+        }
+    }
+
+    /**
+     * Empty stats loader if stats are disabled
+     */
+    protected class EmptyStatsLoader extends CacheLoader<ImmutableBytesPtr, PTableStats> {
+        @Override
+        public PTableStats load(ImmutableBytesPtr tableName) throws Exception {
+            return PTableStats.EMPTY_STATS;
         }
     }
 
