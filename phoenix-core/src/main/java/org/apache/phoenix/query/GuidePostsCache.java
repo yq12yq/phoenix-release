@@ -66,7 +66,9 @@ public class GuidePostsCache {
         final long maxTableStatsCacheSize = config.getLong(
                 QueryServices.STATS_MAX_CACHE_SIZE,
                 QueryServicesOptions.DEFAULT_STATS_MAX_CACHE_SIZE);
-        final boolean isStatsEnabled = config.getBoolean(QueryServices.STATS_ENABLED_ATTRIB, true);
+		final boolean isStatsEnabled = config.getBoolean(QueryServices.STATS_COLLECTION_ENABLED,
+				QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED)
+				&& config.getBoolean(QueryServices.STATS_ENABLED_ATTRIB, true);
         cache = CacheBuilder.newBuilder()
                 // Expire entries a given amount of time after they were written
                 .expireAfterWrite(statsUpdateFrequency, TimeUnit.MILLISECONDS)
@@ -132,10 +134,10 @@ public class GuidePostsCache {
     /**
      * Empty stats loader if stats are disabled
      */
-    protected class EmptyStatsLoader extends CacheLoader<ImmutableBytesPtr, PTableStats> {
+    protected class EmptyStatsLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
         @Override
-        public PTableStats load(ImmutableBytesPtr tableName) throws Exception {
-            return PTableStats.EMPTY_STATS;
+        public GuidePostsInfo load(GuidePostsKey tableName) throws Exception {
+            return GuidePostsInfo.NO_GUIDEPOST;
         }
     }
 
