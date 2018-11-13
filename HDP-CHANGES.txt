@@ -3,3 +3,18 @@ Changes over HDP-3.0.0
   PHOENIX-4809 Only cache PhoenixConnections when lease renewal is on
   PHOENIX-3991 ROW_TIMESTAMP on TIMESTAMP column type throws ArrayOutOfBound when upserting without providing a value.
   PHOENIX-4825 Replace usage of HBase Base64 implementation with java.util.Base64(related to HBASE-20884)
+
+Changes over HDP-3.0.1
+  BUG-113540 PHOENIX-5010 Provide option to disable client side caching of stats(addendum)
+  BUG-114166 PHOENIX-5010 Provide option to disable client side caching of stats.
+  BUG-113017 Align jetty dependencies with Hive
+  BUG-113017 Add missing bouncycastle dependency
+  BUG-112180 Security scan dependency cleanup
+  PHOENIX-4859 Using local index in where statement for join (only rhs table) query fails(Rajeshbabu)
+  PHOENIX-4946 Switch from HC's annotations (since removed) to JCIP annotations
+  BUG-111932 PHOENIX-4941 Handle TableExistsException when wrapped under RemoteException for SYSTEM.MUTEX table
+  BUG-111522 Backport PHOENIX-4874 to atlantic(Rajeshbabu)
+  BUG-111233 PHOENIX-4884 Update INSTR to handle literals and non-literals in either function argument
+  BUG-109362 PHOENIX-4822 Fixed Spelling.
+  BUG-109362 PHOENIX-4822 Ensure the provided timezone is used client-side (Jaanai Zhang)
+  PHOENIX-4880 Shade the rest of Phoenix dependencies in phoenix-server.jar
