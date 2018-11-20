@@ -24,21 +24,21 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.FamilyFilter;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter;
 import org.apache.phoenix.hbase.index.covered.filter.ApplyAndFilterDeletesFilter.DeleteTracker;
 import org.apache.phoenix.hbase.index.covered.filter.ColumnTrackingNextLargestTimestampFilter;
+import org.apache.phoenix.hbase.index.covered.filter.QualifierIncludesDeleteFamilyFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -90,16 +90,16 @@ public class ScannerBuilder {
     // create a filter that matches each column reference
     for (ColumnReference ref : columns) {
       Filter columnFilter =
-          new FamilyFilter(CompareOp.EQUAL, new BinaryComparator(ref.getFamily()));
+          new FamilyFilter(CompareOperator.EQUAL, new BinaryComparator(ref.getFamily()));
       // combine with a match for the qualifier, if the qualifier is a specific qualifier
       if (!Bytes.equals(ColumnReference.ALL_QUALIFIERS, ref.getQualifier())) {
         columnFilter =
-            new FilterList(columnFilter, new QualifierFilter(CompareOp.EQUAL, new BinaryComparator(
+            new FilterList(columnFilter, new QualifierIncludesDeleteFamilyFilter(CompareOperator.EQUAL, new BinaryComparator(
                 ref.getQualifier())));
       }
       columnFilters.addFilter(columnFilter);
     }
-    
+
     if(columns.isEmpty()){
         columnFilters.addFilter(new FilterBase(){
             @Override
