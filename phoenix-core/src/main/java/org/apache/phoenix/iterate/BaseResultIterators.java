@@ -628,6 +628,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
             byte[] currentKeyBytes = currentKey.copyBytes();
             // Merge bisect with guideposts for all but the last region
+            boolean intersectWithGuidePosts = guideIndex < gpsSize;
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
                 HRegionInfo regionInfo = regionLocation.getRegionInfo();
@@ -643,7 +644,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
                 }
                 try {
-                    while (guideIndex < gpsSize && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
+                    while (intersectWithGuidePosts && (guideIndex < gpsSize && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0))) {
                         Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                                 false);
                         if (newScan != null) {
@@ -658,7 +659,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         currentGuidePostBytes = currentGuidePost.copyBytes();
                         guideIndex++;
                     }
-                } catch (EOFException e) {}
+                } catch (EOFException e) {
+                    intersectWithGuidePosts = false;
+                }
                 Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
                 if(newScan != null) {
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
